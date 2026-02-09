@@ -15,8 +15,7 @@ This guide runs the **delegation** flow: the STS issues an OBO token that includ
 
 - Kubernetes cluster, **kubectl**, **helm** (v3+), **jq**, **curl**
 - **Solo Enterprise license:** Set `export AGENTGATEWAY_LICENSE_KEY="<your-license-key>"`.
-- **Shell:** Run all steps in the same shell so variables persist.
-- **No Docker build required**—Keycloak and Postgres use standard images from public registries; no custom images or Dockerfile.
+- Run all steps in the same shell so variables persist.
 
 ---
 
@@ -177,15 +176,10 @@ spec:
     targetPort: 5432
   type: ClusterIP
 EOF
-```
-
-Wait for Keycloak to be ready:
-
-```bash
 kubectl wait -n keycloak statefulset/keycloak --for=condition=Ready --timeout=300s
 ```
 
-### 1.2 Port-forward Keycloak and get admin token
+### 1.2 Port-forward Keycloak and create realm, client, user
 
 ```bash
 pkill -f "port-forward.*keycloak.*8080" 2>/dev/null || true
@@ -193,15 +187,8 @@ sleep 1
 kubectl port-forward -n keycloak svc/keycloak 8080:8080 &
 sleep 3
 export KEYCLOAK_URL="http://localhost:8080"
-
 ADMIN_TOKEN=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
   -d "username=admin" -d "password=admin" -d "grant_type=password" -d "client_id=admin-cli" | jq -r '.access_token')
-echo "Admin token obtained"
-```
-
-### 1.3 Create realm, confidential client, and user
-
-```bash
 curl -s -X POST "${KEYCLOAK_URL}/admin/realms" \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   -H "Content-Type: application/json" \
@@ -232,40 +219,24 @@ curl -s -X POST "${KEYCLOAK_URL}/admin/realms/obo-realm/users" \
     "requiredActions": [],
     "credentials": [{"type": "password", "value": "testuser", "temporary": false}]
   }'
-```
-
-### 1.4 Keycloak JWKS URL (in-cluster)
-
-```bash
 export KEYCLOAK_JWKS_URL="http://keycloak.keycloak.svc.cluster.local:8080/realms/obo-realm/protocol/openid-connect/certs"
-echo "KEYCLOAK_JWKS_URL=$KEYCLOAK_JWKS_URL"
 ```
 
 ---
 
 ## Step 2: Deploy Solo Enterprise for Agentgateway 2.1.x (with OBO token exchange)
 
-### 2.1 Gateway API CRDs
+### 2.1 Gateway API CRDs and install (token exchange enabled)
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
-```
-
-### 2.2 Install CRDs and control plane (token exchange enabled)
-
-```bash
-echo "KEYCLOAK_JWKS_URL=${KEYCLOAK_JWKS_URL:?Run step 1.4 first}"
-echo "${AGENTGATEWAY_LICENSE_KEY:?Set AGENTGATEWAY_LICENSE_KEY before running step 2.2}"
-
-helm upgrade -i --create-namespace \
-  --namespace kgateway-system \
+echo "KEYCLOAK_JWKS_URL=${KEYCLOAK_JWKS_URL:?Run step 1.2 first}"
+echo "${AGENTGATEWAY_LICENSE_KEY:?Set AGENTGATEWAY_LICENSE_KEY before running}"
+helm upgrade -i --create-namespace --namespace kgateway-system \
   --version 2.1.1 enterprise-agentgateway-crds oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds
-
-helm upgrade -i -n kgateway-system \
-  enterprise-agentgateway \
+helm upgrade -i -n kgateway-system enterprise-agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
-  --version 2.1.1 \
-  --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY \
+  --version 2.1.1 --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY \
   --set tokenExchange.enabled=true \
   --set tokenExchange.issuer="enterprise-agentgateway.kgateway-system.svc.cluster.local:7777" \
   --set tokenExchange.tokenExpiration=24h \
@@ -275,7 +246,7 @@ helm upgrade -i -n kgateway-system \
   --set controller.logLevel=debug
 ```
 
-### 2.3 Create Gateway (data plane)
+### 2.2 Create Gateway (data plane)
 
 ```bash
 kubectl apply -f - <<EOF
@@ -306,15 +277,8 @@ spec:
     port: 80
     protocol: HTTP
 EOF
-```
-
-### 2.4 Verify
-
-```bash
 kubectl get pods,gateway,svc -n kgateway-system
 ```
-
-Confirm **enterprise-agentgateway** lists port **7777** and pods are **Running**.
 
 ---
 
@@ -340,18 +304,11 @@ export ACTOR_TOKEN=$(kubectl create token sts-exchange-client -n kgateway-system
 _pl=$(echo "$ACTOR_TOKEN" | cut -d. -f2 | tr '_-' '/+'); while [ $((${#_pl} % 4)) -ne 0 ]; do _pl="${_pl}="; done; _pl=$(echo "$_pl" | base64 -d 2>/dev/null)
 export MAY_ACT_SUB=$(echo "$_pl" | jq -r '.sub')
 export MAY_ACT_ISS=$(echo "$_pl" | jq -r '.iss')
-echo "MAY_ACT_SUB=$MAY_ACT_SUB MAY_ACT_ISS=$MAY_ACT_ISS"
 ```
 
 ### 3.3 Add may_act to the subject token
 
-**Why this step is needed:** In the delegation flow, the STS will only issue an OBO token that includes an **actor** (`act` claim) if the **subject token** (the user’s JWT) contains a `may_act` claim. That claim tells the STS: “this user has authorized this specific actor to act on their behalf.” Without `may_act`, the STS would reject the request or treat it as impersonation, not delegation.
-
-**Why Keycloak:** The subject token is issued by Keycloak. By default, Keycloak does not add `may_act` to access tokens—it’s not a standard OIDC claim. So we have to configure Keycloak to put it there. We do that by adding a **protocol mapper** to the client (`agw-client`). A protocol mapper is Keycloak’s way of adding or transforming claims on tokens issued for that client.
-
-**What this step does:** We add a single **hardcoded-claim** mapper that injects `may_act` into every access token issued for `agw-client`. The value we inject is the actor identity from step 3.2: `{"sub": "<actor sub>", "iss": "<actor iss>"}`. After adding the mapper, we request a **fresh** user JWT (same user, same client); that new token will contain `may_act`, so when we send it to the STS in step 3.5, the STS will accept it and issue an OBO token with both `sub` (user) and `act` (actor).
-
-Add the mapper and fetch a fresh user JWT:
+Add a Keycloak hardcoded-claim mapper so the user token includes `may_act` (actor identity), then fetch a fresh user JWT.
 
 ```bash
 ADMIN_TOKEN=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
@@ -379,22 +336,9 @@ curl -s -X POST "${KEYCLOAK_URL}/admin/realms/obo-realm/clients/${CLIENT_UUID}/p
 export USER_JWT=$(curl -s -X POST "${KEYCLOAK_URL}/realms/obo-realm/protocol/openid-connect/token" \
   -d "username=testuser" -d "password=testuser" -d "grant_type=password" \
   -d "client_id=agw-client" -d "client_secret=agw-client-secret" | jq -r '.access_token')
-echo "Fresh USER_JWT (with may_act) length: ${#USER_JWT}"
 ```
 
-### 3.4 Display and decode the USER JWT
-
-The payload should include **`may_act`** (actor `sub` and `iss`) in addition to the user’s claims.
-
-```bash
-echo "========== USER JWT (with may_act) =========="
-echo "$USER_JWT"
-echo ""
-echo "--- USER JWT Payload ---"
-seg=$(echo "$USER_JWT" | cut -d'.' -f2 | tr '_-' '/+'); while [ $((${#seg} % 4)) -ne 0 ]; do seg="${seg}="; done; echo "$seg" | base64 -d 2>/dev/null | jq '.'
-```
-
-### 3.5 Call the STS (delegation)
+### 3.4 Call the STS (delegation)
 
 Send both `subject_token` (user JWT with `may_act`) and `actor_token` (Kubernetes SA token). The STS returns an OBO token with `sub` and `act`.
 
@@ -408,25 +352,13 @@ export STS_RESPONSE=$(curl -s -X POST "${STS_URL}/token" \
   -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
   -d "actor_token=${ACTOR_TOKEN}" \
   -d "actor_token_type=urn:ietf:params:oauth:token-type:jwt")
-
-echo "========== STS response =========="
 echo "$STS_RESPONSE" | jq '.' 2>/dev/null || echo "$STS_RESPONSE"
 ```
 
-**Expected:** HTTP 200 with `access_token`, `issued_token_type`, `token_type` (often `"N_A"` for delegation).
-
-**If you get 401 "subject token does not contain may_act claim":** Ensure step 3.3 ran and you are using the **fresh** `USER_JWT` from 3.3.
-
-### 3.6 Display and decode the OBO token
-
-The payload should include **`act`** (actor `sub` and `iss`) in addition to **`sub`** (user).
+### 3.5 Decode the OBO token (optional)
 
 ```bash
 export OBO_JWT=$(echo "$STS_RESPONSE" | jq -r '.access_token // empty')
-echo "========== OBO JWT =========="
-echo "$OBO_JWT"
-echo ""
-echo "--- OBO JWT Payload ---"
 seg=$(echo "$OBO_JWT" | cut -d'.' -f2 | tr '_-' '/+'); while [ $((${#seg} % 4)) -ne 0 ]; do seg="${seg}="; done; echo "$seg" | base64 -d 2>/dev/null | jq '.'
 ```
 
@@ -447,6 +379,3 @@ kubectl delete namespace kgateway-system
 kubectl delete namespace keycloak
 ```
 
----
-
-**Version:** 1.0 (delegation-only; based on OBO-Complete-Guide-4.md)
