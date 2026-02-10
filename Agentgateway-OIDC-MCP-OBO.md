@@ -374,20 +374,6 @@ spec:
     - path:
         type: PathPrefix
         value: /realms/oidc-realm/protocol/openid-connect/certs
-    filters:
-    - type: CORS
-      cors:
-        allowCredentials: true
-        allowHeaders:
-        - Origin
-        - Authorization
-        - Content-Type
-        - mcp-protocol-version
-        allowMethods:
-        - "*"
-        allowOrigins:
-        - "*"
-        maxAge: 86400
     backendRefs:
     - name: mcp-backend
       group: agentgateway.dev
@@ -395,7 +381,7 @@ spec:
 EOF
 ```
 
-**Expect:** Gateway, AgentgatewayBackend, and HTTPRoute in `default`. If HTTPRoute apply fails (e.g. CORS unsupported), remove the `filters` block from the second rule and re-apply. **Verify:** `kubectl get agentgatewaybackend,httproute,gateway -n default`
+**Expect:** Gateway, AgentgatewayBackend, and HTTPRoute in `default`. **Verify:** `kubectl get agentgatewaybackend,httproute,gateway -n default`
 
 ---
 
