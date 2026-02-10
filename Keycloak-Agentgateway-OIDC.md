@@ -1,6 +1,6 @@
 # Keycloak, Agentgateway, and MCP Server with OIDC
 
-Deploy **Keycloak**, **Enterprise Agentgateway**, and the **kagent-tools** MCP server; connect to MCP with a Keycloak-issued token (MCP Inspector or curl). Optional **OBO delegation** (Step 2b + Step 9): exchange a user token and an actor token for an OBO token with `sub` and `act`.
+Deploy **Keycloak**, **Enterprise Agentgateway**, and the **kagent-tools** MCP server; connect to MCP with a Keycloak-issued token (MCP Inspector or curl). Optional **OBO delegation** (Step 9): exchange a user token and an actor token for an OBO token with `sub` and `act`.
 
 ---
 
@@ -242,7 +242,7 @@ kubectl get pods,gateway,svc -n kgateway-system
 
 ## Step 3: Keycloak realm, client, user, and dynamic client registration
 
-Port-forward Keycloak, then create the OIDC realm, confidential client `agw-client`, test user, audience mapper for the MCP URL, and enable **dynamic client registration**.
+Port-forward Keycloak, then create the OIDC realm, client `agw-client`, user `testuser`, audience mapper for the MCP URL, and enable **dynamic client registration**.
 
 ```bash
 pkill -f "port-forward.*keycloak.*8080" 2>/dev/null || true
@@ -252,7 +252,6 @@ sleep 3
 
 export KEYCLOAK_URL="http://localhost:8080"
 export KEYCLOAK_ISSUER="${KEYCLOAK_URL}/realms/oidc-realm"
-export KEYCLOAK_JWKS_PATH="realms/oidc-realm/protocol/openid-connect/certs"
 
 ADMIN_TOKEN=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
   -d "username=admin" -d "password=admin" -d "grant_type=password" -d "client_id=admin-cli" | jq -r '.access_token')
@@ -310,41 +309,17 @@ allowed_templates=$(curl -s -H "Authorization: Bearer ${ADMIN_TOKEN}" \
 [ -n "$allowed_templates" ] && curl -s -X DELETE -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   "${KEYCLOAK_URL}/admin/realms/oidc-realm/components/${allowed_templates}"
 
-# For OBO token exchange (Step 2b / Step 9)
+# For OBO (Step 9)
 export KEYCLOAK_JWKS_URL="http://keycloak.keycloak.svc.cluster.local:8080/realms/oidc-realm/protocol/openid-connect/certs"
 ```
 
-Keep the Keycloak port-forward running for Step 8 and (if used) Step 9.
-
----
-
-## Step 2b: Enable token exchange for OBO (optional)
-
-Run **after Step 3** (so `KEYCLOAK_JWKS_URL` is set). Enables the STS for the OBO flow in Step 9.
-
-```bash
-echo "${KEYCLOAK_JWKS_URL:?Run Step 3 first}"
-echo "${AGENTGATEWAY_LICENSE_KEY:?Set AGENTGATEWAY_LICENSE_KEY}"
-
-helm upgrade -n kgateway-system enterprise-agentgateway \
-  oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
-  --version 2.1.1 --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY \
-  --set tokenExchange.enabled=true \
-  --set tokenExchange.issuer="enterprise-agentgateway.kgateway-system.svc.cluster.local:7777" \
-  --set tokenExchange.tokenExpiration=24h \
-  --set tokenExchange.subjectValidator.validatorType=remote \
-  --set tokenExchange.subjectValidator.remoteConfig.url="$KEYCLOAK_JWKS_URL" \
-  --set tokenExchange.actorValidator.validatorType=k8s \
-  --reuse-values
-```
-
-Wait for pods to roll out.
+Keep the Keycloak port-forward running for Step 8 and, if you use OBO, Step 9.
 
 ---
 
 ## Step 4: Deploy MCP server (kagent-tools)
 
-Deploy **[KAgent Tools](https://github.com/kagent-dev/tools)** via Helm (Streamable HTTP on port 8084, path `/mcp`). Patch the Service with `appProtocol: kgateway.dev/mcp` for MCP proxying.
+Deploy **[KAgent Tools](https://github.com/kagent-dev/tools)** via Helm (Streamable HTTP on port 8084, path `/mcp`). Patch the Service with `appProtocol: kgateway.dev/mcp` so the gateway can proxy MCP.
 
 ```bash
 helm upgrade -i -n default kagent-tools oci://ghcr.io/kagent-dev/tools/helm/kagent-tools --version 0.0.13
@@ -465,13 +440,13 @@ spec:
 EOF
 ```
 
-Verify: `kubectl get agentgatewaybackend,httproute,gateway -n default`
+**Verify:** `kubectl get agentgatewaybackend,httproute,gateway -n default`
 
 ---
 
 ## Step 6: MCP auth policy (Keycloak)
 
-Attach an **EnterpriseAgentgatewayPolicy** to the **AgentgatewayBackend** with MCP auth and Keycloak (OAuth discovery, JWKS, JWT validation). Use the **in-cluster** Keycloak URL for `issuer`; set **resource** and **audiences** to `http://localhost:8888/mcp`. Set **mode: Strict** to require a Bearer token (default Optional allows unauthenticated access).
+Attach an **EnterpriseAgentgatewayPolicy** to the MCP backend with Keycloak (issuer, JWKS, JWT validation). Set resource and audiences to `http://localhost:8888/mcp` and **mode: Strict** so unauthenticated access is rejected.
 
 ```bash
 export MCP_RESOURCE_URL="http://localhost:8888/mcp"
@@ -512,53 +487,40 @@ EOF
 
 ## Step 7: Port-forward and verify
 
-Port-forward the gateway: `http://localhost:8888`.
+Port-forward the gateway to `http://localhost:8888`. Expect 401/406 on `/mcp` without a token and 200 on the well-known URL.
 
 ```bash
 pkill -f "port-forward.*enterprise-agentgateway" 2>/dev/null || true
 sleep 1
 kubectl port-forward -n default svc/enterprise-agentgateway 8888:80 &
 sleep 2
-```
-
-Checks (expect 401/406 for `/mcp` without token, 200 for well-known):
-
-```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8888/mcp
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8888/.well-known/oauth-protected-resource/mcp
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8888/.well-known/oauth-authorization-server/mcp
 ```
 
 ---
 
 ## Step 8: Connect to MCP and list tools
 
-Get a token from inside the cluster (Step 3 set `aud` for the MCP URL), then connect with **MCP Inspector** or the curl alternative and list tools.
+Get a token (Step 3 sets `aud` for the MCP URL), then connect with **MCP Inspector** or curl and list tools. Ensure the gateway port-forward on 8888 is active (Step 7).
 
-1. **Get a token** (ensure the gateway port-forward is active on 8888):
-   ```bash
-   RAW=$(kubectl run -n default mcp-token --rm -i --restart=Never --image=curlimages/curl -- \
-     curl -s -X POST "http://keycloak.keycloak.svc.cluster.local:8080/realms/oidc-realm/protocol/openid-connect/token" \
-     -d "username=testuser" -d "password=testuser" -d "grant_type=password" \
-     -d "client_id=agw-client" -d "client_secret=agw-client-secret" 2>/dev/null)
-   TOKEN=$(echo "$RAW" | sed 's/pod "mcp-token" deleted.*//' | jq -r '.access_token')
-   ```
-   (Optional: `curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Accept: text/event-stream" http://localhost:8888/mcp` → **422** = token accepted.)
+1. **Get a token:**
 
-2. **Run MCP Inspector** and connect in the UI with the token:
-   ```bash
-   npx @modelcontextprotocol/inspector
-   ```
-   In the browser tab that opens, configure the connection in the UI:
-   - **Transport**: choose **Streamable HTTP**.
-   - **URL**: enter `http://localhost:8888/mcp`.
-   - **Headers**: add **Name** `Authorization`, **Value** `Bearer <token>` (run `echo "$TOKEN"` in the step 1 shell and copy the JWT).
-   - Click **Connect**.
-   After connecting, open the **Tools** tab and click **List Tools**. You should see tool names from kagent-tools (e.g. `argo_*`, `k8s_*`, `helm_*`, `shell`).
+```bash
+RAW=$(kubectl run -n default mcp-token --rm -i --restart=Never --image=curlimages/curl -- \
+  curl -s -X POST "http://keycloak.keycloak.svc.cluster.local:8080/realms/oidc-realm/protocol/openid-connect/token" \
+  -d "username=testuser" -d "password=testuser" -d "grant_type=password" \
+  -d "client_id=agw-client" -d "client_secret=agw-client-secret" 2>/dev/null)
+TOKEN=$(echo "$RAW" | sed 's/pod "mcp-token" deleted.*//' | jq -r '.access_token')
+```
 
-### Step 8 curl alternative (no MCP Inspector)
+(Optional: `curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Accept: text/event-stream" http://localhost:8888/mcp` → **422** = token accepted.)
 
-With `TOKEN` from step 1, run:
+2. **MCP Inspector:** run `npx @modelcontextprotocol/inspector`. In the UI: **Transport** → Streamable HTTP, **URL** → `http://localhost:8888/mcp`, **Headers** → add `Authorization: Bearer <token>` (paste `$TOKEN`). Connect, then open **Tools** → **List Tools** to see kagent-tools (e.g. `argo_*`, `k8s_*`, `helm_*`, `shell`).
+
+### curl alternative (no MCP Inspector)
+
+With `TOKEN` from above, run:
 
 ```bash
 MCP_URL="http://localhost:8888/mcp"
@@ -579,9 +541,28 @@ echo "$TOOLS_RESP" | sed 's/^data: //' | jq -r '.result.tools[]?.name // .error.
 
 ## Step 9: OBO delegation (optional)
 
-Requires Step 2b and Keycloak port-forward; Kubernetes 1.24+ for `kubectl create token`. Exchange user JWT (`subject_token`) and a Kubernetes SA token (`actor_token`) at the STS for an OBO token with `sub` and `act`. The user token must include `may_act` (Keycloak mapper in 9.3).
+Requires Step 3 (for `KEYCLOAK_JWKS_URL`), Keycloak port-forward, and Kubernetes 1.24+ (`kubectl create token`). Exchange a user JWT and a Kubernetes SA token at the STS for an OBO token with `sub` and `act`. The user token must include `may_act` (added in 9.4).
 
-### 9.1 Port-forward the STS
+### 9.1 Enable token exchange (STS)
+
+```bash
+echo "${KEYCLOAK_JWKS_URL:?Run Step 3 first}"
+echo "${AGENTGATEWAY_LICENSE_KEY:?Set AGENTGATEWAY_LICENSE_KEY}"
+
+helm upgrade -n kgateway-system enterprise-agentgateway \
+  oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
+  --version 2.1.1 --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY \
+  --set tokenExchange.enabled=true \
+  --set tokenExchange.issuer="enterprise-agentgateway.kgateway-system.svc.cluster.local:7777" \
+  --set tokenExchange.tokenExpiration=24h \
+  --set tokenExchange.subjectValidator.validatorType=remote \
+  --set tokenExchange.subjectValidator.remoteConfig.url="$KEYCLOAK_JWKS_URL" \
+  --set tokenExchange.actorValidator.validatorType=k8s \
+  --reuse-values
+kubectl rollout status deployment -n kgateway-system -l app.kubernetes.io/instance=enterprise-agentgateway --timeout=120s
+```
+
+### 9.2 Port-forward the STS
 
 ```bash
 pkill -f "port-forward.*7777" 2>/dev/null || true
@@ -591,9 +572,9 @@ sleep 2
 export STS_URL="http://localhost:7777"
 ```
 
-### 9.2 Create actor token and derive may_act
+### 9.3 Create actor token and derive may_act
 
-Create a service account, get its token, and decode the payload for `sub` and `iss` (for `may_act`).
+Create a service account, get its token, and decode the JWT payload for `sub` and `iss` (used in `may_act`).
 
 ```bash
 kubectl create serviceaccount sts-exchange-client -n kgateway-system 2>/dev/null || true
@@ -603,7 +584,7 @@ export MAY_ACT_SUB=$(echo "$_pl" | jq -r '.sub')
 export MAY_ACT_ISS=$(echo "$_pl" | jq -r '.iss')
 ```
 
-### 9.3 Add may_act to the user token
+### 9.4 Add may_act to the user token
 
 Add a hardcoded-claim mapper to `agw-client` so the user access token includes `may_act` for the actor.
 
@@ -632,9 +613,9 @@ curl -s -X POST "${KEYCLOAK_URL}/admin/realms/oidc-realm/clients/${CLIENT_UUID}/
   -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "Content-Type: application/json" -d "$MAPPER_JSON"
 ```
 
-### 9.4 Get user JWT and call STS
+### 9.5 Get user JWT and call STS
 
-Fetch a fresh user token (includes `may_act`) and exchange it with the actor token for an OBO token.
+Fetch a fresh user token (with `may_act`) and exchange it with the actor token at the STS.
 
 ```bash
 export USER_JWT=$(curl -s -X POST "${KEYCLOAK_URL}/realms/oidc-realm/protocol/openid-connect/token" \
@@ -653,18 +634,20 @@ export STS_RESPONSE=$(curl -s -X POST "${STS_URL}/token" \
 echo "$STS_RESPONSE" | jq '.' 2>/dev/null || echo "$STS_RESPONSE"
 ```
 
-### 9.5 Decode the OBO token (optional)
+### 9.6 Decode the OBO token (optional)
 
 ```bash
 export OBO_JWT=$(echo "$STS_RESPONSE" | jq -r '.access_token // empty')
 seg=$(echo "$OBO_JWT" | cut -d'.' -f2 | tr '_-' '/+'); while [ $((${#seg} % 4)) -ne 0 ]; do seg="${seg}="; done; echo "$seg" | base64 -d 2>/dev/null | jq '.'
 ```
 
-You should see `sub` (user) and `act` (actor, e.g. Kubernetes SA). Use the OBO token for downstream authorization and audit.
+The decoded payload shows `sub` (user) and `act` (actor). Use the OBO token for downstream auth and audit.
 
 ---
 
 ## Cleanup
+
+Remove all resources created by this guide:
 
 ```bash
 pkill -f "port-forward.*keycloak" 2>/dev/null || true

@@ -2,9 +2,7 @@
 
 ## Pre-requisites
 
-- Kubernetes cluster, **kubectl**, **helm** (v3+), **jq**, **curl**
-- **Solo Enterprise license:** Set `export AGENTGATEWAY_LICENSE_KEY="<your-license-key>"`.
-- Run all steps in the same shell so variables persist.
+[Lab 001](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/001-set-up-enterprise-agentgateway.md) from the [Enterprise Agentgateway Workshop](https://github.com/solo-io/fe-enterprise-agentgateway-workshop) completed. Kubernetes 1.30+, Gateway API CRDs, Enterprise Agentgateway, `kubectl`, `helm`, `jq`, `curl`.
 
 ---
 
@@ -163,72 +161,15 @@ spec:
     targetPort: 5432
   type: ClusterIP
 EOF
+```
+
+```bash
 kubectl wait -n keycloak statefulset/keycloak --for=condition=Ready --timeout=420s
 ```
 
 ---
 
-## Step 2: Install Enterprise Agentgateway
-
-### Gateway API CRDs
-
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
-```
-
-### Install CRDs and control plane
-
-```bash
-echo "${AGENTGATEWAY_LICENSE_KEY:?Set AGENTGATEWAY_LICENSE_KEY before running}"
-helm upgrade -i --create-namespace --namespace kgateway-system \
-  --version 2.1.1 enterprise-agentgateway-crds oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds
-helm upgrade -i -n kgateway-system enterprise-agentgateway \
-  oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
-  --version 2.1.1 --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY
-```
-
-### Create Gateway (data plane)
-
-```bash
-kubectl apply -f - <<EOF
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayParameters
-metadata:
-  name: agentgateway-debug
-  namespace: kgateway-system
-spec:
-  logging:
-    level: debug
-    format: text
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: agentgateway
-  namespace: kgateway-system
-spec:
-  gatewayClassName: enterprise-agentgateway
-  infrastructure:
-    parametersRef:
-      group: enterpriseagentgateway.solo.io
-      kind: EnterpriseAgentgatewayParameters
-      name: agentgateway-debug
-  listeners:
-  - name: http
-    port: 80
-    protocol: HTTP
-EOF
-```
-
-### Verify
-
-```bash
-kubectl get pods,gateway,svc -n kgateway-system
-```
-
----
-
-## Step 3: Port-forward Keycloak and create realm, client, and user
+## Step 2: Port-forward Keycloak and create realm, client, and user
 
 ```bash
 pkill -f "port-forward.*keycloak.*8080" 2>/dev/null || true
@@ -236,6 +177,9 @@ sleep 1
 kubectl port-forward -n keycloak svc/keycloak 8080:8080 &
 sleep 3
 export KEYCLOAK_URL="http://localhost:8080"
+```
+
+```bash
 ADMIN_TOKEN=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
   -d "username=admin" -d "password=admin" -d "grant_type=password" -d "client_id=admin-cli" | jq -r '.access_token')
 
@@ -271,12 +215,15 @@ curl -s -X POST "${KEYCLOAK_URL}/admin/realms/oidc-realm/users" \
   }'
 ```
 
+Use `Host: keycloak.keycloak.svc.cluster.local:8080` when requesting a token in Step 5 so the JWT `iss` matches the policy.
+
 ---
 
-## Step 4: Deploy Gateway, HTTPRoute, and backend
+## Step 3: Deploy Gateway, HTTPRoute, and backend
 
 ```bash
 kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f -
+
 kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Service
@@ -313,6 +260,9 @@ spec:
         ports:
         - containerPort: 8080
 EOF
+```
+
+```bash
 kubectl apply -f - <<'EOF'
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayParameters
@@ -343,7 +293,11 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
----
+EOF
+```
+
+```bash
+kubectl apply -f - <<'EOF'
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -364,7 +318,7 @@ EOF
 
 ---
 
-## Step 5: Attach JWT authentication
+## Step 4: Attach JWT authentication
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -396,7 +350,16 @@ EOF
 
 ---
 
-## Step 6: Obtain a token from Keycloak
+## Step 5: Obtain a token from Keycloak
+
+If the token request fails with "invalid client credentials", get the client secret first:
+
+```bash
+ADMIN_TOKEN=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+  -d "username=admin" -d "password=admin" -d "grant_type=password" -d "client_id=admin-cli" | jq -r '.access_token')
+CLIENT_UUID=$(curl -s -H "Authorization: Bearer ${ADMIN_TOKEN}" "${KEYCLOAK_URL}/admin/realms/oidc-realm/clients?clientId=agentgateway-client" | jq -r '.[0].id')
+CLIENT_SECRET=$(curl -s -H "Authorization: Bearer ${ADMIN_TOKEN}" "${KEYCLOAK_URL}/admin/realms/oidc-realm/clients/${CLIENT_UUID}/client-secret" | jq -r '.value')
+```
 
 ```bash
 export USER_JWT=$(curl -s -X POST "${KEYCLOAK_URL}/realms/oidc-realm/protocol/openid-connect/token" \
@@ -412,7 +375,7 @@ _b=$(echo "$USER_JWT" | cut -d. -f2 | tr '_-' '/+'); while [ $((${#_b} % 4)) -ne
 
 ---
 
-## Step 7: Call the protected route
+## Step 6: Call the protected route
 
 ```bash
 pkill -f "port-forward.*8888" 2>/dev/null || true
@@ -421,25 +384,28 @@ kubectl port-forward -n default svc/enterprise-agentgateway 8888:80 &
 sleep 2
 ```
 
-### Without token (expect 401)
+If the Gateway service is in `enterprise-agentgateway` namespace: `kubectl port-forward -n enterprise-agentgateway svc/enterprise-agentgateway 8888:80 &`
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" -H "Host: oidc.example.com" http://localhost:8888/
-```
-
-### With token (expect 200)
-
-```bash
+curl -s -o /dev/null -w "%{http_code}" -H "Host: oidc.example.com" http://localhost:8888/
 curl -s -w "\nHTTP_CODE:%{http_code}" -H "Host: oidc.example.com" -H "Authorization: Bearer ${USER_JWT}" http://localhost:8888/
 ```
 
 ---
 
-## Step 8: Validate JWT payload (optional)
+## Step 7: Validate JWT payload (optional)
 
 ```bash
 _b=$(echo "$USER_JWT" | cut -d. -f2 | tr '_-' '/+'); while [ $((${#_b} % 4)) -ne 0 ]; do _b="${_b}="; done; echo "$_b" | base64 -d 2>/dev/null | jq '.'
 ```
+
+---
+
+## Troubleshooting
+
+- **401 "no bearer token found"** — Use `Authorization: Bearer <token>`.
+- **401 "token uses the unknown key"** — Ensure token `iss` matches policy issuer (use `Host: keycloak.keycloak.svc.cluster.local:8080` in Step 5). Wait 30–60s after applying the policy for JWKS to load. Verify Keycloak is reachable from the cluster.
+- **Token `iss` is localhost** — Get a new token with `-H "Host: keycloak.keycloak.svc.cluster.local:8080"`.
 
 ---
 
@@ -455,11 +421,6 @@ kubectl delete service echo-backend -n default
 kubectl delete gateway enterprise-agentgateway -n default
 kubectl delete enterpriseagentgatewayparameters agentgateway-oidc-params -n default
 kubectl delete namespace keycloak
-kubectl delete gateway agentgateway -n kgateway-system
-kubectl delete enterpriseagentgatewayparameters agentgateway-debug -n kgateway-system 2>/dev/null || true
-helm uninstall enterprise-agentgateway -n kgateway-system
-helm uninstall enterprise-agentgateway-crds -n kgateway-system
-kubectl delete namespace kgateway-system
 ```
 
 ---
