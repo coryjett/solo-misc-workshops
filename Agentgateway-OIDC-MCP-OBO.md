@@ -1,5 +1,7 @@
 # MCP Server with OBO Token (Keycloak + Agentgateway)
 
+![OBO Flow](images/OBO%20Flow.png)
+
 This guide is the **OBO path only**: MCP is protected by a single policy that trusts the STS issuer; you call MCP with an **OBO token** (Step 9). Steps 1–3: Keycloak + realm, Agentgateway with STS. Steps 4–6: MCP backend, Gateway/Route, unauthenticated check. Step 7: STS policy and STS port-forward. Step 8: Verify. Step 9: OBO token and call MCP.
 
 ---
