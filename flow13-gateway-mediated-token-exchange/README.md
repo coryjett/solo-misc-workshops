@@ -725,24 +725,7 @@ curl -s -o /dev/null -w "Keycloak JWT:  HTTP %{http_code} (expect 200)\n" \
 
 The client sends a **Keycloak JWT** -- but the MCP server never sees it. Agent Gateway automatically exchanges it at the STS and forwards the **STS-signed JWT** instead. This is completely transparent to the client.
 
-### 7.3 Prove the exchange -- check MCP server logs
-
-```bash
-kubectl logs -n default -l app=mcp-website-fetcher --tail=20 | grep -A 5 "INCOMING TOKEN"
-```
-
-**Expected output:**
-
-```
-INCOMING TOKEN ON MCP SERVER:
-  iss: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
-  sub: faa04387-...
-  act: "N/A"
-```
-
-The client sent a Keycloak JWT (`iss: keycloak.../flow13-realm`) but the MCP server received an STS JWT (`iss: enterprise-agentgateway...:7777`). The `sub` (user identity) is preserved.
-
-### 7.4 Prove the exchange -- call the echo_token tool
+### 7.3 Prove the exchange -- call the echo_token tool
 
 ```bash
 # Get a fresh token (Keycloak tokens expire in 5 min)
@@ -790,7 +773,9 @@ curl -s --max-time 15 -X POST "$MCP_URL" \
 
 The `echo_token` tool confirms: the MCP server received a token from the **STS issuer**, not Keycloak. The gateway exchanged it automatically.
 
-### 7.5 Connect with MCP Inspector (optional)
+> **Bonus:** You can also verify server-side via `kubectl logs -n default -l app=mcp-website-fetcher --tail=20 | grep -A 5 "INCOMING TOKEN"` — the MCP server logs every incoming token's `iss`, `sub`, and `act` claims.
+
+### 7.4 Connect with MCP Inspector (optional)
 
 ```bash
 npx @modelcontextprotocol/inspector@latest
