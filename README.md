@@ -6,28 +6,10 @@ Workshops, walkthroughs, and reference materials for Solo.io products.
 
 ### Agent Gateway — Token Flow Diagrams
 
-Visual guide covering all authentication and token exchange patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/).
+Visual guide covering all 15 authentication and token exchange patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/) — OIDC, OBO delegation/impersonation, elicitation, passthrough, static secrets, claim-based mapping, API key, basic auth, ext auth, MCP OAuth + DCR, RBAC, and gateway-mediated token exchange.
 
-- **[Token Flow Diagrams](token-flow-diagrams/)** — 15 sequence diagrams + decision flowchart
-  - [Markdown guide with Mermaid diagrams](token-flow-diagrams/agent-gateway-token-flows.md)
-  - [PDF with linked TOC](token-flow-diagrams/Agent-Gateway-Token-Flows.pdf)
-
-| Flow | Description |
-|------|-------------|
-| 1 | Standard OIDC Authentication |
-| 2a | OBO Delegation (dual identity — user + agent) |
-| 2b | OBO Impersonation (token swap — user only) |
-| 3 | Elicitation (out-of-band credential gathering) |
-| 4 | Double OAuth (downstream + upstream in one flow) |
-| 5 | Passthrough Token |
-| 6 | Static Secret Injection |
-| 7 | Claim-Based Token Mapping (CEL) |
-| 8 | API Key Auth |
-| 9 | Basic Auth (RFC 7617) |
-| 10 | BYO External Auth (gRPC) |
-| 11 | MCP OAuth + Dynamic Client Registration |
-| 12 | RBAC Tool-Level Access Control (CEL) |
-| 13 | Gateway-Mediated OIDC + Token Exchange |
+- **[Markdown guide with Mermaid diagrams](token-flow-diagrams/agent-gateway-token-flows.md)**
+- **[PDF with linked TOC + reference docs](token-flow-diagrams/Agent-Gateway-Token-Flows.pdf)**
 
 ### Agent Gateway — OBO Walkthroughs
 
