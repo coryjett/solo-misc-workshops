@@ -21,7 +21,7 @@ Agent Gateway handles OIDC authentication, then **automatically** exchanges the 
                                     |
 +--------+     2. Bearer JWT  +-----v-----------+     4. STS JWT    +------------+
 | Client |-------------------->  Agent Gateway   |------------------>  MCP Server |
-|        |                    |   (Proxy)        |                   | (Fetcher)  |
+|        |                    |   (Proxy)        |                   |            |
 +--------+                    |                  |                   +------------+
                               |  Validates JWT   |
                               |  Exchanges at    |
@@ -308,7 +308,9 @@ helm upgrade -i -n agentgateway-system enterprise-agentgateway \
   --set tokenExchange.tokenExpiration=24h \
   --set tokenExchange.subjectValidator.validatorType=remote \
   --set tokenExchange.subjectValidator.remoteConfig.url="$KEYCLOAK_JWKS_URL" \
-  --set tokenExchange.actorValidator.validatorType=k8s
+  --set tokenExchange.actorValidator.validatorType=k8s \
+  --set tokenExchange.apiValidator.validatorType=remote \
+  --set tokenExchange.apiValidator.remoteConfig.url="$KEYCLOAK_JWKS_URL"
 
 kubectl rollout status deployment -n agentgateway-system -l app.kubernetes.io/instance=enterprise-agentgateway --timeout=120s
 ```
@@ -327,15 +329,108 @@ kubectl get svc enterprise-agentgateway -n agentgateway-system
 | `tokenExchange.tokenExpiration` | Lifetime of exchanged tokens |
 | `tokenExchange.subjectValidator.remoteConfig.url` | Keycloak JWKS endpoint -- STS validates the user JWT against this |
 | `tokenExchange.actorValidator.validatorType: k8s` | STS validates actor tokens as Kubernetes service account JWTs |
+| `tokenExchange.apiValidator.remoteConfig.url` | JWKS endpoint for authenticating API calls to the STS |
 
 ---
 
 ## Step 4: Deploy MCP server
 
-Deploy the [mcp-website-fetcher](https://github.com/peterj/mcp-website-fetcher) as an SSE-based MCP server. This server exposes a `fetch` tool that retrieves web page content.
+Deploy a token-logging MCP server that decodes and logs the JWT it receives. This lets us prove which token (Keycloak vs STS) actually reaches the MCP server by checking `kubectl logs`.
 
 ```bash
 kubectl apply -n default -f - <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-server-script
+  namespace: default
+data:
+  server.py: |
+    """Minimal MCP server that logs the Authorization header (decoded JWT issuer)."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json, sys, base64
+
+    def decode_jwt_payload(token):
+        try:
+            parts = token.split('.')
+            if len(parts) != 3:
+                return None
+            payload = parts[1]
+            padding = 4 - len(payload) % 4
+            if padding != 4:
+                payload += '=' * padding
+            return json.loads(base64.urlsafe_b64decode(payload))
+        except Exception as e:
+            return {"error": str(e)}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            auth = self.headers.get('Authorization', '')
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+
+            if auth.startswith('Bearer '):
+                claims = decode_jwt_payload(auth[7:])
+                if claims:
+                    sys.stderr.write(f"\n{'='*60}\n")
+                    sys.stderr.write(f"INCOMING TOKEN ON MCP SERVER:\n")
+                    sys.stderr.write(f"  iss: {claims.get('iss', 'N/A')}\n")
+                    sys.stderr.write(f"  sub: {claims.get('sub', 'N/A')}\n")
+                    sys.stderr.write(f"  act: {json.dumps(claims.get('act', 'N/A'))}\n")
+                    sys.stderr.write(f"{'='*60}\n\n")
+                    sys.stderr.flush()
+            else:
+                sys.stderr.write(f"No Bearer token in Authorization header\n")
+                sys.stderr.flush()
+
+            try:
+                req = json.loads(body)
+            except:
+                req = {}
+
+            method = req.get('method', '')
+            req_id = req.get('id')
+
+            if method == 'initialize':
+                resp = {"jsonrpc": "2.0", "id": req_id, "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {"listChanged": False}},
+                    "serverInfo": {"name": "token-logger-mcp", "version": "1.0"}
+                }}
+            elif method == 'notifications/initialized':
+                self.send_response(200)
+                self.end_headers()
+                return
+            elif method == 'tools/list':
+                resp = {"jsonrpc": "2.0", "id": req_id, "result": {"tools": [{
+                    "name": "echo_token",
+                    "description": "Returns the JWT issuer that reached this MCP server",
+                    "inputSchema": {"type": "object", "properties": {}}
+                }]}}
+            elif method == 'tools/call':
+                claims = decode_jwt_payload(auth[7:]) if auth.startswith('Bearer ') else {}
+                resp = {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": json.dumps({
+                    "token_issuer": claims.get('iss', 'unknown'),
+                    "token_sub": claims.get('sub', 'unknown'),
+                    "token_act": claims.get('act'),
+                    "message": "This is the token that reached the MCP server"
+                }, indent=2)}]}}
+            else:
+                resp = {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Unknown method: {method}"}}
+
+            body_bytes = json.dumps(resp).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body_bytes)))
+            self.end_headers()
+            self.wfile.write(body_bytes)
+
+    if __name__ == '__main__':
+        server = HTTPServer(('', 80), Handler)
+        sys.stderr.write("Token-logging MCP server started on port 80\n")
+        sys.stderr.flush()
+        server.serve_forever()
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -353,9 +448,20 @@ spec:
     spec:
       containers:
       - name: fetcher
-        image: ghcr.io/peterj/mcp-website-fetcher:main
+        image: python:3.12-slim
+        command: ["python", "/app/server.py"]
         ports:
         - containerPort: 80
+        volumeMounts:
+        - name: script
+          mountPath: /app
+      volumes:
+      - name: script
+        configMap:
+          name: mcp-server-script
+          items:
+          - key: server.py
+            path: server.py
 ---
 apiVersion: v1
 kind: Service
@@ -382,9 +488,11 @@ kubectl wait deployment/mcp-website-fetcher -n default --for=condition=Available
 
 ## Step 5: Create Gateway, Backend, HTTPRoute, and policies
 
-Create the Gateway, an `AgentgatewayBackend` pointing to the MCP server, an HTTPRoute with OAuth discovery paths + Keycloak proxy paths, and an MCP authentication policy with **gateway-mediated token exchange**.
+Create the Gateway with `EnterpriseAgentgatewayParameters` (configures the data plane's STS connection), an `AgentgatewayBackend` pointing to the MCP server, an HTTPRoute with OAuth discovery paths + Keycloak proxy paths, and an MCP authentication policy with **gateway-mediated token exchange**.
 
-The key configuration is `backend.tokenExchange.mode: ExchangeOnly` -- this tells Agent Gateway to **automatically** exchange the client's Keycloak JWT at the built-in STS before forwarding to the MCP server. The client never calls the STS directly.
+The key configurations are:
+- **`EnterpriseAgentgatewayParameters`** with `STS_URI` and `STS_AUTH_TOKEN` -- tells the data plane where the STS is and how to authenticate to it
+- **`backend.tokenExchange.mode: ExchangeOnly`** -- tells Agent Gateway to automatically exchange the client's Keycloak JWT at the STS before forwarding to the MCP server
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -404,6 +512,19 @@ spec:
     kind: Service
     name: keycloak
 ---
+# Data plane parameters: STS endpoint and auth token for token exchange
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: flow13-params
+  namespace: default
+spec:
+  env:
+  - name: STS_URI
+    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/token
+  - name: STS_AUTH_TOKEN
+    value: /var/run/secrets/xds-tokens/xds-token
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -411,6 +532,11 @@ metadata:
   namespace: default
 spec:
   gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: flow13-params
   listeners:
   - name: http
     port: 80
@@ -431,7 +557,8 @@ spec:
       static:
         host: mcp-website-fetcher.default.svc.cluster.local
         port: 80
-        protocol: SSE
+        protocol: StreamableHTTP
+        path: /mcp
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -539,12 +666,6 @@ kubectl get enterpriseagentgatewaypolicy -n default
 # mcp-auth-policy   True       True
 ```
 
-The `tokenExchange.mode: ExchangeOnly` field is the critical piece -- it tells Agent Gateway to:
-1. Take the incoming bearer token (Keycloak JWT)
-2. Send it to the built-in STS as `subject_token`
-3. Replace the `Authorization` header with the STS-issued JWT
-4. Forward the exchanged token to the MCP backend
-
 ---
 
 ## Step 6: Port-forward and verify OAuth discovery
@@ -604,9 +725,72 @@ curl -s -o /dev/null -w "Keycloak JWT:  HTTP %{http_code} (expect 200)\n" \
 
 The client sends a **Keycloak JWT** -- but the MCP server never sees it. Agent Gateway automatically exchanges it at the STS and forwards the **STS-signed JWT** instead. This is completely transparent to the client.
 
-### 7.3 Connect with MCP Inspector
+### 7.3 Prove the exchange -- check MCP server logs
 
-Launch MCP Inspector:
+```bash
+kubectl logs -n default -l app=mcp-website-fetcher --tail=20 | grep -A 5 "INCOMING TOKEN"
+```
+
+**Expected output:**
+
+```
+INCOMING TOKEN ON MCP SERVER:
+  iss: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
+  sub: faa04387-...
+  act: "N/A"
+```
+
+The client sent a Keycloak JWT (`iss: keycloak.../flow13-realm`) but the MCP server received an STS JWT (`iss: enterprise-agentgateway...:7777`). The `sub` (user identity) is preserved.
+
+### 7.4 Prove the exchange -- call the echo_token tool
+
+```bash
+# Get a fresh token (Keycloak tokens expire in 5 min)
+export USER_JWT=$(curl -s -X POST "${KEYCLOAK_URL}/realms/flow13-realm/protocol/openid-connect/token" \
+  -H "Host: keycloak.keycloak.svc.cluster.local:8080" \
+  -d "username=testuser" -d "password=testuser" -d "grant_type=password" \
+  -d "client_id=agw-client" -d "client_secret=agw-client-secret" | jq -r '.access_token')
+
+MCP_URL="http://localhost:8888/mcp"
+HDR="Authorization: Bearer ${USER_JWT}"
+
+# Initialize and get session
+INIT=$(curl -s -i --max-time 15 -X POST "$MCP_URL" \
+  -H "$HDR" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+SID=$(echo "$INIT" | grep -i "^mcp-session-id:" | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r')
+
+# List tools
+echo "=== Tools ==="
+curl -s --max-time 15 -X POST "$MCP_URL" \
+  -H "$HDR" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: ${SID}" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":2}' | sed 's/^data: //' | jq '.result.tools[].name' 2>/dev/null
+
+# Call echo_token -- returns the token that actually reached the MCP server
+echo ""
+echo "=== Token that reached the MCP server ==="
+curl -s --max-time 15 -X POST "$MCP_URL" \
+  -H "$HDR" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: ${SID}" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"echo_token","arguments":{}},"id":3}' \
+  | sed 's/^data: //' | jq -r '.result.content[0].text' 2>/dev/null | jq .
+```
+
+**Expected output:**
+
+```json
+{
+  "token_issuer": "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777",
+  "token_sub": "faa04387-...",
+  "token_act": null,
+  "message": "This is the token that reached the MCP server"
+}
+```
+
+The `echo_token` tool confirms: the MCP server received a token from the **STS issuer**, not Keycloak. The gateway exchanged it automatically.
+
+### 7.5 Connect with MCP Inspector (optional)
 
 ```bash
 npx @modelcontextprotocol/inspector@latest
@@ -618,143 +802,8 @@ In the MCP Inspector UI:
 2. Set **URL** to `http://localhost:8888/mcp`
 3. Under **Headers**, add: `Authorization` = `Bearer <paste $USER_JWT>`
 4. Click **Connect**
-5. Go to **Tools** tab -> **List Tools** -> you should see the `fetch` tool
-6. Call the `fetch` tool with `url: "https://example.com"` to verify it works
-
-MCP Inspector sends the Keycloak JWT, but Agent Gateway transparently exchanges it before the request reaches the MCP server.
-
----
-
-## Step 8: Prove the STS token reaches the MCP server
-
-This is the critical validation step. We switch the MCP auth policy to trust **only the STS issuer** and prove that:
-
-1. The same Keycloak JWT **still works** (because AGW exchanges it to an STS JWT before the MCP auth policy validates it)
-2. Without token exchange, the same Keycloak JWT would be **rejected**
-
-### 8.1 Switch to STS-only trust (keep token exchange)
-
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayPolicy
-metadata:
-  name: mcp-auth-policy
-  namespace: default
-spec:
-  targetRefs:
-  - group: agentgateway.dev
-    kind: AgentgatewayBackend
-    name: mcp-backend
-  backend:
-    mcp:
-      authentication:
-        issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
-        jwks:
-          backendRef:
-            name: enterprise-agentgateway
-            kind: Service
-            namespace: agentgateway-system
-            port: 7777
-          jwksPath: .well-known/jwks.json
-        mode: Strict
-        provider: Keycloak
-        resourceMetadata:
-          resourceMetadata:
-            resource: http://localhost:8888/mcp
-            scopesSupported:
-            - email
-            - openid
-            bearerMethodsSupported:
-            - header
-    tokenExchange:
-      mode: ExchangeOnly
-EOF
-
-sleep 10
-kubectl get enterpriseagentgatewaypolicy -n default
-# Verify: ACCEPTED=True, ATTACHED=True
-```
-
-### 8.2 Test: Keycloak JWT still works (exchange is active)
-
-```bash
-# Same Keycloak JWT -> should still be 200
-# AGW exchanges it to STS JWT before the MCP auth policy validates
-curl -s -o /dev/null -w "Keycloak JWT (exchange active):  HTTP %{http_code} (expect 200)\n" \
-  -X POST http://localhost:8888/mcp \
-  -H "Authorization: Bearer ${USER_JWT}" \
-  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
-```
-
-**Expected:** HTTP 200 -- the Keycloak JWT is exchanged for an STS JWT, which passes the STS-only auth policy.
-
-### 8.3 Remove token exchange (STS-only trust, no exchange)
-
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayPolicy
-metadata:
-  name: mcp-auth-policy
-  namespace: default
-spec:
-  targetRefs:
-  - group: agentgateway.dev
-    kind: AgentgatewayBackend
-    name: mcp-backend
-  backend:
-    mcp:
-      authentication:
-        issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
-        jwks:
-          backendRef:
-            name: enterprise-agentgateway
-            kind: Service
-            namespace: agentgateway-system
-            port: 7777
-          jwksPath: .well-known/jwks.json
-        mode: Strict
-        provider: Keycloak
-        resourceMetadata:
-          resourceMetadata:
-            resource: http://localhost:8888/mcp
-            scopesSupported:
-            - email
-            - openid
-            bearerMethodsSupported:
-            - header
-EOF
-
-sleep 10
-```
-
-### 8.4 Test: Same Keycloak JWT now fails (no exchange)
-
-```bash
-# Same Keycloak JWT -> 401 (no exchange, wrong issuer for STS-only policy)
-curl -s -o /dev/null -w "Keycloak JWT (no exchange):      HTTP %{http_code} (expect 401)\n" \
-  -X POST http://localhost:8888/mcp \
-  -H "Authorization: Bearer ${USER_JWT}" \
-  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
-```
-
-**Expected:** HTTP 401 -- the same Keycloak JWT is now rejected because:
-- Token exchange is disabled (no `tokenExchange` in the policy)
-- The raw Keycloak JWT is forwarded to MCP auth
-- MCP auth expects the STS issuer but sees the Keycloak issuer -> **rejected**
-
-### Summary of proof
-
-| Policy Config | Token Exchange | Client Sends | MCP Server Sees | Result |
-|---|---|---|---|---|
-| Keycloak trust + exchange | Active | Keycloak JWT | STS JWT | 200 |
-| **STS trust + exchange** | **Active** | **Keycloak JWT** | **STS JWT** | **200** |
-| STS trust, no exchange | Disabled | Keycloak JWT | Keycloak JWT | **401** |
-
-The middle row is the proof: with `tokenExchange.mode: ExchangeOnly`, the client sends a Keycloak JWT but the MCP server receives an STS JWT. When exchange is removed (bottom row), the same Keycloak JWT fails -- proving the exchange was transparently converting the token.
+5. Go to **Tools** tab -> **List Tools** -> you should see the `echo_token` tool
+6. Call `echo_token` -- the response shows the STS issuer, proving the exchange happened
 
 ---
 
@@ -764,10 +813,10 @@ The middle row is the proof: with `tokenExchange.mode: ExchangeOnly`, the client
 +--------+                 +-------------------+                 +------------+
 | Client |  Keycloak JWT   |   Agent Gateway   |   STS JWT       | MCP Server |
 |        |---------------->|                   |---------------->|            |
-|        |                 |  1. Validate JWT   |                 |  Trusts    |
-|        |                 |  2. Exchange at    |                 |  only STS  |
-|        |                 |     built-in STS   |                 |  issuer    |
-|        |                 |  3. Forward STS    |                 |            |
+|        |                 |  1. Validate JWT   |                 | Logs token |
+|        |                 |  2. Exchange at    |                 | issuer:    |
+|        |                 |     built-in STS   |                 |  STS :7777 |
+|        |                 |  3. Forward STS    |                 | (not KC!)  |
 |        |<----------------|     JWT only       |<----------------|            |
 +--------+                 +-------------------+                 +------------+
                                     |
@@ -780,11 +829,11 @@ The middle row is the proof: with `tokenExchange.mode: ExchangeOnly`, the client
 **Key takeaways:**
 
 1. **The client never calls the STS** -- Agent Gateway mediates the exchange transparently via `backend.tokenExchange.mode: ExchangeOnly`
-2. **The original IdP token never reaches the MCP server** -- it's replaced by the STS-signed JWT
+2. **The original IdP token never reaches the MCP server** -- it's replaced by the STS-signed JWT (proven by `kubectl logs` and the `echo_token` tool)
 3. **The MCP server trusts only the STS issuer** -- it doesn't need to know about Keycloak
 4. **The STS is built into Agent Gateway** -- no external token exchange service required
 5. **The token exchange is RFC 8693 compliant** -- standard `urn:ietf:params:oauth:grant-type:token-exchange` grant type
-6. **Configuration is declarative** -- a single `tokenExchange` field on the `EnterpriseAgentgatewayPolicy` enables the entire flow
+6. **Configuration is declarative** -- `EnterpriseAgentgatewayParameters` (STS_URI) + `tokenExchange` field on the `EnterpriseAgentgatewayPolicy` enables the entire flow
 
 ---
 
@@ -795,9 +844,11 @@ pkill -f "port-forward.*keycloak" 2>/dev/null || true
 pkill -f "port-forward.*flow13" 2>/dev/null || true
 
 kubectl delete enterpriseagentgatewaypolicy mcp-auth-policy -n default
+kubectl delete enterpriseagentgatewayparameters flow13-params -n default
 kubectl delete httproute mcp-route -n default
 kubectl delete agentgatewaybackend mcp-backend -n default
 kubectl delete gateway flow13-gateway -n default
+kubectl delete configmap mcp-server-script -n default
 kubectl delete deployment mcp-website-fetcher -n default
 kubectl delete service mcp-website-fetcher -n default
 kubectl delete referencegrant allow-default-to-keycloak -n keycloak 2>/dev/null || true
