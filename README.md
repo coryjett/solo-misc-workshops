@@ -4,7 +4,7 @@ Workshops, walkthroughs, and reference materials for Solo.io products.
 
 ## Contents
 
-### Agent Gateway — Token Flow Diagrams
+### Agent Gateway — Authentication Flows
 
 Visual guide covering all 15 authentication and token exchange patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/) — OIDC, OBO delegation/impersonation, elicitation, passthrough, static secrets, claim-based mapping, API key, basic auth, ext auth, MCP OAuth + DCR, RBAC, and gateway-mediated token exchange.
 
