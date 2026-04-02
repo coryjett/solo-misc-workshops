@@ -24,6 +24,10 @@ Step-by-step guides for setting up On-Behalf-Of token exchange with Keycloak and
 - **[OIDC MCP Server](Agentgateway-OIDC-MCP.md)** — OIDC auth for MCP tool access
 - **[OIDC MCP + OBO](Agentgateway-OIDC-MCP-OBO.md)** — OIDC auth with OBO token exchange for MCP
 
+### Agent Gateway — Gateway-Mediated Token Exchange
+
+- **[Flow 13: Gateway-Mediated OIDC + Token Exchange with MCP](flow13-gateway-mediated-token-exchange/Flow13-Gateway-Mediated-Token-Exchange.md)** — End-to-end workshop: Keycloak OIDC auth, AGW built-in STS (RFC 8693) token exchange with `may_act` delegation, MCP server with STS-only trust policy, MCP Inspector integration. Proves the STS-exchanged token (with `sub` + `act`) is what reaches the MCP server.
+
 ### Agent Gateway — MCP Authentication
 
 - **[MCP Authentication API](agentgateway-enterprise/MCP-Authentication.md)** — How agentgateway adapts MCP OAuth traffic for authorization servers (Keycloak well-known endpoint rewriting, token validation, client registration proxying)
