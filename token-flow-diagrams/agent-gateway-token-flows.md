@@ -406,6 +406,45 @@ sequenceDiagram
 
 ---
 
+## Flow 13: Gateway-Mediated OIDC + Token Exchange
+
+Agent Gateway handles both OIDC authentication and token exchange transparently. The user authenticates at the gateway, which exchanges the IdP token for an AGW-signed token before forwarding to the agent. The agent never sees the original IdP token — it trusts only the AGW issuer as a single trust root.
+
+> **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) · [Set up JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/)
+> **API:** [Helm tokenExchange values](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AGW as Agent Gateway<br/>(Proxy + STS)
+    participant IdP as OIDC Provider
+    participant Agent as Agent / MCP Server
+
+    Note over User,Agent: Phase 1: OIDC Authentication (at the Gateway)
+    User->>AGW: Request (no token)
+    AGW-->>User: 302 Redirect to IdP /authorize<br/>(client_id, redirect_uri, scope, state)
+    User->>IdP: Login prompt
+    IdP->>User: Credentials
+    User->>IdP: Submit credentials
+    IdP-->>AGW: 302 Callback with authorization code
+    AGW->>IdP: POST /token (code, client_secret)
+    IdP-->>AGW: User JWT (access_token + id_token)
+
+    Note over User,Agent: Phase 2: Token Exchange (at the Gateway)
+    AGW->>AGW: STS: Validate user JWT (JWKS)<br/>Exchange for AGW-signed token
+    AGW->>AGW: New OBO token issued<br/>(sub=user, iss=agentgateway)
+
+    Note over User,Agent: Phase 3: Forward to Agent
+    AGW->>Agent: Request + Authorization: Bearer <AGW token><br/>(original IdP token never forwarded)
+    Agent->>Agent: Validate token (trusts AGW issuer only)
+    Agent-->>AGW: Response
+    AGW-->>User: Result
+
+    Note over AGW: Agent never sees the original IdP token.<br/>Single trust root: AGW issuer.<br/>Works with any OIDC provider.
+```
+
+---
+
 ## Decision Flowchart: How Should This Request Be Authenticated?
 
 > **Docs:** [Security Overview](https://docs.solo.io/agentgateway/2.2.x/security/) · [OBO & Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/) · [External Auth](https://docs.solo.io/agentgateway/2.2.x/security/extauth/) · [MCP Auth](https://docs.solo.io/agentgateway/2.2.x/mcp/auth/about/)
@@ -424,14 +463,18 @@ flowchart TD
     Q2 -->|"MCP client connecting<br/>to MCP server"| Q_MCP{"Client type?"}
 
     %% Login methods
-    Q_LOGIN -->|"OIDC / OAuth"| F1["Flow 1: OIDC Auth"]
+    Q_LOGIN -->|"OIDC / OAuth"| Q_OIDC{"Where does token<br/>exchange happen?"}
     Q_LOGIN -->|"Username / password"| F9["Flow 9: Basic Auth"]
     Q_LOGIN -->|"Pre-shared key"| F8["Flow 8: API Key Auth"]
     Q_LOGIN -->|"Custom / enterprise IdP"| F10["Flow 10: BYO Ext Auth"]
 
+    %% OIDC sub-paths
+    Q_OIDC -->|"Client/app handles OIDC,<br/>passes JWT to gateway"| F1["Flow 1: OIDC Auth"]
+    Q_OIDC -->|"Gateway handles OIDC +<br/>exchanges token before agent"| F13["Flow 13: Gateway-Mediated<br/>OIDC + Token Exchange"]
+
     %% OBO paths
     Q_OBO -->|"Yes, dual identity<br/>(audit + fine-grained policy)"| F2a["Flow 2a: OBO Delegation"]
-    Q_OBO -->|"No, act as the user<br/>(downstream sees user only)"| F2b["Flow 2b: Token Propagation"]
+    Q_OBO -->|"No, act as the user<br/>(downstream sees user only)"| F2b["Flow 2b: OBO Impersonation"]
 
     %% Upstream credential
     Q_UPSTREAM -->|"Static, shared<br/>across all users"| F6["Flow 6: Static Secret"]
@@ -449,6 +492,7 @@ flowchart TD
     F1 --> Q_RBAC{"Need per-tool<br/>access control?"}
     F2a --> Q_RBAC
     F11 --> Q_RBAC
+    F13 --> Q_RBAC
     Q_RBAC -->|Yes| F12["Flow 12: RBAC Tool Access"]
     Q_RBAC -->|No| Done(["Done"])
 
@@ -456,4 +500,5 @@ flowchart TD
     style F2b fill:#fef3c7,stroke:#d97706
     style F12 fill:#f3e8ff,stroke:#7c3aed
     style F11 fill:#ecfdf5,stroke:#059669
+    style F13 fill:#fef0c7,stroke:#d97706
 ```
