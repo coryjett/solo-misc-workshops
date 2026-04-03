@@ -766,15 +766,20 @@ spec:
 
 ---
 
-#### Example 2: Built-in STS + Agent-Initiated Exchange (Delegation)
+#### Example 2: Built-in STS + Agent-Initiated Exchange
 
-Same STS, but the agent calls it directly to include its own identity. Requires the `agentsts-adk` SDK or direct HTTP calls.
+Same STS, but the agent calls it directly. This supports **both** delegation and impersonation — the difference is whether the agent includes its K8s SA token as the `actor_token`:
+
+- **With `actor_token`** → delegation: OBO JWT has `sub` (user) + `act` (agent). Requires `may_act` claim in the user's IdP JWT.
+- **Without `actor_token`** → impersonation: OBO JWT has `sub` (user) only. Useful when the agent wants control over exchange (custom scopes, audience) without needing an `act` claim.
+
+Requires the `agentsts-adk` SDK or direct HTTP calls.
 
 **Step 1 — Helm values (same as Example 1).**
 
 **Step 2 — No `EnterpriseAgentgatewayParameters` needed.** The agent calls the STS directly — it doesn't go through the proxy for the exchange. The agent discovers the STS via the well-known endpoint.
 
-**Step 3 — Agent code (Python with `agentsts-adk`):**
+**Step 3a — Agent code for delegation (Python with `agentsts-adk`):**
 
 ```python
 from agentsts.adk import ADKSTSIntegration, ADKTokenPropagationPlugin
@@ -788,7 +793,28 @@ plugin = ADKTokenPropagationPlugin(sts_integration=sts)
 plugin.add_to_agent(my_agent)
 ```
 
-**Step 4 — Downstream policy validates both `sub` and `act`:**
+**Step 3b — Agent code for impersonation (omit actor token):**
+
+```python
+sts = ADKSTSIntegration(
+    well_known_uri="http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/.well-known/oauth-authorization-server",
+    fetch_actor_token=lambda: None,    # No actor token → impersonation
+)
+```
+
+Or via direct HTTP (no SDK):
+
+```bash
+curl -X POST http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/oauth2/token \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+  -d "subject_token=<user-jwt>" \
+  -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt"
+  # No actor_token parameter → impersonation
+```
+
+**Step 4 — Downstream policy:**
+
+For **delegation**, validate both `sub` and `act`:
 
 ```yaml
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
@@ -819,7 +845,33 @@ spec:
           claims.act.sub == "system:serviceaccount:default:chat-agent"
 ```
 
-**Note:** No `tokenExchange.mode` is set on this policy — the proxy is not performing the exchange. The agent handles it directly and sends the OBO JWT in the request.
+For **impersonation** (agent omits actor token), the policy is simpler — no RBAC on `act` since there is no agent identity:
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-impersonation-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+        jwks:
+          backendRef:
+            name: enterprise-agentgateway
+            namespace: agentgateway-system
+            port: 7777
+          jwksPath: .well-known/jwks.json
+```
+
+**Note:** No `tokenExchange.mode` is set on either policy — the proxy is not performing the exchange. The agent handles it directly and sends the OBO JWT in the request.
 
 ---
 
@@ -997,12 +1049,17 @@ When `mode` is omitted (or set to `TOKEN_EXCHANGE_MODE_UNSPECIFIED`), the gatewa
 
 #### Summary: What to deploy for each scenario
 
-| Scenario | Helm `tokenExchange` | `EnterpriseAgentgatewayParameters` | `EnterpriseAgentgatewayPolicy` |
-|---|---|---|---|
-| **Built-in STS + gateway-mediated** | `enabled: true` + validators | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with STS issuer |
-| **Built-in STS + agent-initiated** | `enabled: true` + validators | Not needed (agent calls STS directly) | `mcp.authentication` with STS issuer (no `tokenExchange` on policy) |
-| **External STS + gateway-mediated** | Not needed | `STS_URI` pointing to external STS → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with external issuer |
-| **Elicitation + exchange** | `enabled: true` + `elicitation.secretName` | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange: {}` (no mode = both) |
+| Scenario | Result | Helm `tokenExchange` | `EnterpriseAgentgatewayParameters` | `EnterpriseAgentgatewayPolicy` |
+|---|---|---|---|---|
+| **Built-in STS + gateway-mediated** | Impersonation (always) | `enabled: true` + validators | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with STS issuer |
+| **Built-in STS + agent-initiated** | Delegation or impersonation | `enabled: true` + validators | Not needed (agent calls STS directly) | `mcp.authentication` with STS issuer + optional `rbac` on `act` (no `tokenExchange` on policy) |
+| **External STS + gateway-mediated** | Impersonation (always) | Not needed | `STS_URI` pointing to external STS → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with external issuer |
+| **External STS + agent-initiated** | Depends on external STS | Not needed | Not needed (agent calls external STS directly) | `mcp.authentication` with external STS issuer (no `tokenExchange` on policy) |
+| **Elicitation + exchange** | Impersonation + credential gathering | `enabled: true` + `elicitation.secretName` | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange: {}` (no mode = both) |
+
+**Notes:**
+- **Agent-initiated** supports both delegation (include `actor_token` → `act` claim in OBO JWT) and impersonation (omit `actor_token` → no `act` claim). The infrastructure deployment is identical — the difference is in the agent code.
+- **External STS + agent-initiated** requires no AGW-specific configuration. The agent calls the external STS directly, and AGW only validates the resulting OBO token on the downstream policy. The external STS controls whether delegation is supported.
 
 ---
 
