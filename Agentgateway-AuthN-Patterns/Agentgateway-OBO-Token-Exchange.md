@@ -261,31 +261,58 @@ User ──► Agent ──► AGW STS ──► Downstream
 
 ---
 
-## MCP vs Non-MCP Downstreams
+## Gateway-Mediated vs Agent-Initiated Exchange
 
-The STS itself is **backend-agnostic** — it generates the same JWT regardless of whether the downstream is an MCP server, LLM provider, or HTTP API. The difference is in how the data plane proxy triggers the exchange.
+The STS itself is **backend-agnostic** — it generates the same JWT regardless of whether the downstream is an MCP server, LLM provider, or HTTP API. The real question is **who calls the STS**, and that depends on whether you need delegation:
 
-### MCP Downstreams
+| Need delegation (`act` claim)? | Who calls the STS | Your agent changes |
+|---|---|---|
+| **No** — downstream only needs user identity | Data plane proxy (automatic) | None — configure `ExchangeOnly` on the policy |
+| **Yes** — downstream policies reference agent identity | Agent calls STS directly | Agent must be configured with STS URL + K8s SA token |
 
-For MCP backends, token exchange is configured via `EnterpriseAgentgatewayPolicy` with `tokenExchange.mode` on the backend section. The data plane proxy automatically exchanges the client's JWT at the STS before forwarding to the MCP server.
+### Gateway-Mediated Exchange (ExchangeOnly)
+
+The simplest path. The **proxy** automatically exchanges the client's JWT at the STS before forwarding to the backend — your agent sends the user's IdP JWT and the proxy swaps it for an OBO token transparently. No agent code changes required.
+
+**This works for both MCP and non-MCP backends** (LLM, HTTP, A2A). The only limitation is that the proxy does not send an `actor_token`, so the resulting OBO JWT is always **impersonation-style** (no `act` claim).
 
 ```yaml
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
-  name: mcp-obo-policy
+  name: obo-policy
   namespace: agentgateway-system
 spec:
   targetRefs:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: mcp
+    name: mcp          # works the same for non-MCP routes
   backend:
     tokenExchange:
       mode: ExchangeOnly    # or ElicitationOnly, or omit for both
 ```
 
-**MCP authentication** on the backend validates the OBO token against the **STS issuer** (not the original IdP):
+The proxy is **auto-configured** with the STS connection via `EnterpriseAgentgatewayParameters`:
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: agw-params
+  namespace: agentgateway-system
+spec:
+  env:
+  - name: STS_URI
+    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/token
+  - name: STS_AUTH_TOKEN
+    value: /var/run/secrets/sts-tokens/sts-token
+```
+
+The Gateway references this via `infrastructure.parametersRef`, and the control plane injects the env vars into the proxy pod automatically:
+- **`STS_URI`** — the STS `/token` endpoint URL
+- **`STS_AUTH_TOKEN`** — path to a token file the proxy uses to authenticate its own calls to the STS (validated by the API Validator). Falls back to `/var/run/secrets/sts-tokens/sts-token` if not set.
+
+**For MCP backends**, the downstream MCP authentication policy validates the OBO token against the **STS issuer** (not the original IdP):
 
 ```yaml
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
@@ -312,14 +339,9 @@ spec:
       mode: ExchangeOnly
 ```
 
-**Key behavior:** The MCP server never sees the original IdP token. It receives only the STS-signed OBO JWT. CEL-based RBAC policies on MCP tools can reference both `sub` (user) and `act.sub` (agent) from the OBO token for fine-grained access control.
-
-### Non-MCP Downstreams (LLM / HTTP)
-
-For non-MCP backends (LLM providers, HTTP APIs, agent-to-agent), the token exchange is performed by the **agent itself** using the `agentsts-adk` Python package or a direct call to the STS `/token` endpoint. The data plane proxy does not automatically trigger the exchange — the agent is responsible for calling the STS and using the resulting OBO token.
+**For non-MCP backends**, use a JWT authentication policy on the route's `traffic` section instead:
 
 ```yaml
-# JWT policy on a non-MCP route validates OBO tokens from the STS
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
@@ -339,6 +361,14 @@ spec:
           inline: '<STS JWKS>'
 ```
 
+**Key behavior:** The downstream never sees the original IdP token — it receives only the STS-signed OBO JWT. For MCP backends, CEL-based RBAC policies on MCP tools can reference `sub` (user) from the OBO token for access control.
+
+### Agent-Initiated Exchange (Delegation)
+
+When your downstream policies need to know **which agent** made the call (not just which user), the agent must call the STS directly. This is the only way to get an OBO token with both `sub` (user) and `act` (agent) claims — because the agent must provide its own K8s SA token as the `actor_token`.
+
+This works for **any backend type** (MCP, LLM, HTTP, A2A).
+
 #### How the Agent Discovers the STS
 
 There is no automatic STS discovery for agent-initiated exchange — the agent must be explicitly configured with the STS endpoint. The STS runs on the control plane service at port `7777`, so within the cluster the endpoint is:
@@ -355,52 +385,20 @@ Common configuration patterns:
 | **K8s DNS** | Agent resolves the control plane service name directly (same cluster) |
 | **SDK config** | `agentsts-adk` Python package configured with the STS URL at initialization |
 
-The agent also needs its own **K8s service account token** (for delegation) or the **user's JWT** (for impersonation). The K8s SA token is typically available at the default mount path (`/var/run/secrets/kubernetes.io/serviceaccount/token`) or generated via `kubectl create token`.
-
-### Gateway-Mediated Exchange (ExchangeOnly)
-
-A third option exists where the **gateway itself** performs the exchange transparently — the client sends its IdP JWT, and the proxy automatically exchanges it at the STS before forwarding to the backend. This works for both MCP and non-MCP routes via the `ExchangeOnly` mode on `EnterpriseAgentgatewayPolicy`:
-
-```yaml
-backend:
-  tokenExchange:
-    mode: ExchangeOnly
-```
-
-In this mode, the data plane proxy is **auto-configured** with the STS connection via `EnterpriseAgentgatewayParameters` (unlike agent-initiated exchange, where the agent must be explicitly configured):
-
-```yaml
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayParameters
-metadata:
-  name: agw-params
-  namespace: agentgateway-system
-spec:
-  env:
-  - name: STS_URI
-    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/token
-  - name: STS_AUTH_TOKEN
-    value: /var/run/secrets/sts-tokens/sts-token
-```
-
-The Gateway references this via `infrastructure.parametersRef`, and the control plane injects the env vars into the proxy pod automatically:
-- **`STS_URI`** — the STS `/token` endpoint URL
-- **`STS_AUTH_TOKEN`** — path to a token file the proxy uses to authenticate its own calls to the STS (validated by the API Validator). Falls back to `/var/run/secrets/sts-tokens/sts-token` if not set.
-
-**Important:** Gateway-mediated exchange is always **impersonation-style**. The proxy sends only `subject_token` and `resource` to the STS — it does **not** send an `actor_token`. This means the resulting OBO JWT will have a `sub` claim (user) but **no `act` claim** (agent). If you need delegation (dual identity with `act`), the agent must call the STS directly with both the subject token and its own K8s SA token as the actor token.
-
-The client never calls the STS directly. This is the simplest integration path and works well when the gateway owns the trust boundary and downstream services don't need to know which agent made the call.
+The agent needs two tokens to perform the exchange:
+1. **Subject token** — the user's IdP JWT (passed to the agent by the client or extracted from the inbound request)
+2. **Actor token** — the agent's own K8s service account token, typically available at `/var/run/secrets/kubernetes.io/serviceaccount/token` or generated via `kubectl create token`
 
 ### Comparison
 
 | Aspect | Gateway-Mediated (`ExchangeOnly`) | Agent-Initiated |
 |---|---|---|
 | Who calls the STS? | Data plane proxy (automatic) | Agent application (explicit) |
-| Client awareness | None — transparent | Agent must integrate STS SDK (`agentsts-adk`) |
-| Token in flight to backend | OBO JWT only | OBO JWT only |
-| Backend type | MCP or non-MCP | Any (LLM, HTTP, A2A) |
-| Delegation support? | **No** — always impersonation (no `act` claim) | **Yes** — include actor token for delegation |
-| Agent SDK required? | No | Yes |
+| Agent code changes? | **None** — transparent to the agent | Must configure STS URL + call STS API |
+| Backend type | MCP or non-MCP | Any (MCP, LLM, HTTP, A2A) |
+| Delegation (`act` claim)? | **No** — always impersonation | **Yes** — include actor token |
+| STS discovery | Auto-configured via `EnterpriseAgentgatewayParameters` | Agent must be explicitly configured (env var, SDK) |
+| When to use | Downstream only needs user identity | Downstream policies reference agent identity |
 
 ---
 
