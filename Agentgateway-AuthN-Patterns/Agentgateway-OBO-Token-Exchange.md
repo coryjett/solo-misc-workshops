@@ -6,42 +6,23 @@
 
 ---
 
-## Glossary
-
-| Term | JWT Claim | What It Means |
-|---|---|---|
-| **OBO (On-Behalf-Of)** | — | A pattern where a service (the agent) acts on behalf of a user. The resulting token proves both "who the user is" and optionally "which agent is acting for them." |
-| **STS (Security Token Service)** | — | A server that exchanges one token for another. You give it a user's JWT, and it gives you back a new JWT signed by the STS. AGW has one built in at port `7777`. |
-| **Subject Token** | — | The user's original JWT from the identity provider (Keycloak, Okta, Auth0, etc.). This is the token being exchanged — it represents "who the user is." The `sub` (subject) claim in the OBO token comes from this token. |
-| **Actor Token** | — | The agent's identity token — a Kubernetes service account JWT. Automatically mounted by K8s into every pod at `/var/run/secrets/kubernetes.io/serviceaccount/token`. This represents "which agent is making the call." Only used in delegation. |
-| **Subject** | `sub` | The user's identity — carried from the subject token into the OBO token. Example: `"sub": "user-123"`. |
-| **Actor** | `act` | Nested object identifying the agent that is acting on behalf of the user. Only present in delegation tokens. Example: `"act": { "sub": "system:serviceaccount:ns:sa" }`. |
-| **Issuer** | `iss` | Who signed the token. In OBO tokens, this is the STS (e.g. `"iss": "enterprise-agentgateway.agentgateway-system.svc.cluster.local"`), not the original IdP. Downstream services trust this issuer. |
-| **Audience** | `aud` | Who the token is intended for. Set by the `resource` parameter during exchange. Example: `"aud": "mcp-server.default.svc.cluster.local"`. Downstream services should verify this matches their own identity. |
-| **May Act** | `may_act` | A claim in the user's JWT that explicitly authorizes a specific agent to perform delegation. Without it, the STS rejects delegation requests. Example: `"may_act": { "sub": "system:serviceaccount:ns:sa" }`. |
-| **Scope** | `scope` | Space-delimited permissions in the OBO token. Can be downscoped during exchange (request fewer than the original token granted). Example: `"scope": "read:data write:data"`. |
-| **Delegation** | `sub` + `act` | An exchange that preserves both identities. The OBO token contains `sub` (user) + `act` (agent). Downstream can enforce policies on both. |
-| **Impersonation** | `sub` only | An exchange that preserves only the user's identity. The OBO token contains `sub` (user) with no `act` claim. The agent is invisible to downstream. |
-| **OBO Token** | — | The new JWT issued by the STS after exchange. Signed by the STS (not the original IdP). This is what the downstream service receives. |
-| **Gateway-Mediated** | — | The proxy (data plane) calls the STS automatically — your agent doesn't need to know the STS exists. Always produces impersonation tokens. |
-| **Agent-Initiated** | — | The agent calls the STS directly. Required for delegation (dual identity). |
-
 ## Table of Contents
 
-1. [Glossary](#glossary)
-2. [Why Token Exchange?](#why-token-exchange)
-3. [Overview](#overview)
-4. [How the STS Works](#how-the-sts-works)
-5. [Delegation (Dual Identity)](#delegation-dual-identity)
-6. [Impersonation (Token Swap)](#impersonation-token-swap)
-7. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
+1. [Why Token Exchange?](#why-token-exchange)
+2. [Overview](#overview)
+3. [How the STS Works](#how-the-sts-works)
+4. [Delegation (Dual Identity)](#delegation-dual-identity)
+5. [Impersonation (Token Swap)](#impersonation-token-swap)
+6. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
    - [Gateway-Mediated Exchange (ExchangeOnly)](#gateway-mediated-exchange-exchangeonly)
    - [Agent-Initiated Exchange (Delegation)](#agent-initiated-exchange-delegation)
    - [How the Agent Discovers the STS](#how-the-agent-discovers-the-sts)
-8. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
-9. [STS Configuration](#sts-configuration)
-10. [Downstream Policy Enforcement](#downstream-policy-enforcement)
-11. [End-to-End Walkthrough](#end-to-end-walkthrough)
+7. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
+8. [STS Configuration](#sts-configuration)
+   - [Deployment Examples](#deployment-examples)
+9. [Downstream Policy Enforcement](#downstream-policy-enforcement)
+10. [End-to-End Walkthrough](#end-to-end-walkthrough)
+11. [Glossary](#glossary)
 12. [Reference](#reference)
 
 ---
@@ -623,28 +604,6 @@ The OBO token is a **clean JWT from the STS trust domain** with only the standar
 
 ## STS Configuration
 
-### Helm Values
-
-```yaml
-tokenExchange:
-  enabled: true                          # Enable the built-in STS
-  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
-  tokenExpiration: 24h                   # OBO token TTL
-
-  subjectValidator:                      # Validates the user's JWT
-    validatorType: remote                # remote | k8s | static
-    remoteConfig:
-      url: "https://keycloak.example.com/realms/my-realm/protocol/openid-connect/certs"
-
-  actorValidator:                        # Validates the agent's identity
-    validatorType: k8s                   # K8s TokenReview API
-
-  apiValidator:                          # Validates calls TO the STS itself
-    validatorType: remote                # Prevents unauthorized STS access
-    remoteConfig:
-      url: "https://keycloak.example.com/realms/my-realm/protocol/openid-connect/certs"
-```
-
 ### Three STS Validators
 
 | Validator | Purpose | Common Type | What It Validates |
@@ -659,9 +618,391 @@ tokenExchange:
 - **`k8s`** — The STS does **not** validate the token locally. Instead, it sends the token to the Kubernetes API server via `POST /apis/authentication.k8s.io/v1/tokenreviews`. K8s verifies the token signature, checks expiration, confirms the service account exists, and returns the validated identity (`sub`, `iss`). The STS then uses that identity for the `act` claim. No additional config needed — the STS uses its own in-cluster credentials to call the K8s API.
 - **`static`** — Validates against a static JWKS loaded from a file or inline.
 
-### Data Plane Environment Variables
+### Deployment Examples
 
-When `tokenExchange.enabled: true` and gateway-mediated exchange is configured, the control plane injects `STS_URI` and `STS_AUTH_TOKEN` into the proxy pod via `EnterpriseAgentgatewayParameters`. See [Gateway-Mediated Exchange (ExchangeOnly)](#gateway-mediated-exchange-exchangeonly) for the full YAML and details.
+Every token exchange deployment requires **three things**: (1) the STS itself (Helm values), (2) the proxy-to-STS connection (Gateway + Parameters), and (3) the per-route policy (EnterpriseAgentgatewayPolicy). Below are complete, copy-pasteable examples for each scenario.
+
+---
+
+#### Example 1: Built-in STS + Gateway-Mediated Exchange (Impersonation)
+
+The simplest setup. The built-in STS runs on the control plane, and the proxy swaps tokens automatically. No agent code changes needed.
+
+**Step 1 — Enable the built-in STS (Helm values):**
+
+```yaml
+# values.yaml for enterprise-agentgateway Helm chart
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+
+  subjectValidator:                      # Validates the user's IdP JWT
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+
+  actorValidator:                        # Validates agent K8s SA tokens (delegation only)
+    validatorType: k8s
+
+  apiValidator:                          # Validates the proxy's auth to the STS
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+```
+
+**Step 2 — Tell the proxy where the STS is (Gateway + Parameters):**
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: agw-params
+  namespace: default
+spec:
+  env:
+  - name: STS_URI
+    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/oauth2/token
+  - name: STS_AUTH_TOKEN
+    value: /var/run/secrets/xds-tokens/xds-token    # proxy's own auth token file
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+  namespace: default
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:                                   # Links to the Parameters above
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: agw-params
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+```
+
+The controller reads `EnterpriseAgentgatewayParameters` (referenced by `infrastructure.parametersRef` on the Gateway) and injects `STS_URI` and `STS_AUTH_TOKEN` as env vars into the proxy pod it spawns.
+
+**Step 3 — Route traffic to the MCP backend:**
+
+```yaml
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: mcp-backend
+  namespace: default
+spec:
+  mcp:
+    targets:
+    - name: my-mcp-server
+      static:
+        host: mcp-server.default.svc.cluster.local
+        path: /mcp
+        port: 80
+        protocol: StreamableHTTP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: my-gateway
+    namespace: default
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /mcp
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: mcp-backend
+```
+
+**Step 4 — Enable token exchange + downstream auth on the route:**
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-obo-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    mcp:
+      authentication:                                # Downstream validates OBO tokens
+        mode: Strict
+        issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+        audiences:
+        - "service/default/mcp-server.default.svc.cluster.local:80"
+        jwks:
+          backendRef:
+            name: enterprise-agentgateway
+            namespace: agentgateway-system
+            port: 7777
+          jwksPath: .well-known/jwks.json
+    tokenExchange:
+      mode: ExchangeOnly                             # Gateway-mediated (impersonation)
+```
+
+**What happens at runtime:**
+1. Client sends request with IdP JWT → proxy intercepts
+2. Proxy calls built-in STS at `STS_URI` with `subject_token` + `resource` (no `actor_token`)
+3. STS validates IdP JWT (subject validator), issues OBO JWT with `sub` only
+4. Proxy replaces the Authorization header with the OBO JWT
+5. MCP backend validates the OBO JWT against the STS issuer and JWKS
+
+---
+
+#### Example 2: Built-in STS + Agent-Initiated Exchange (Delegation)
+
+Same STS, but the agent calls it directly to include its own identity. Requires the `agentsts-adk` SDK or direct HTTP calls.
+
+**Step 1 — Helm values (same as Example 1).**
+
+**Step 2 — No `EnterpriseAgentgatewayParameters` needed.** The agent calls the STS directly — it doesn't go through the proxy for the exchange. The agent discovers the STS via the well-known endpoint.
+
+**Step 3 — Agent code (Python with `agentsts-adk`):**
+
+```python
+from agentsts.adk import ADKSTSIntegration, ADKTokenPropagationPlugin
+
+sts = ADKSTSIntegration(
+    well_known_uri="http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/.well-known/oauth-authorization-server",
+    # Actor token auto-read from /var/run/secrets/kubernetes.io/serviceaccount/token
+)
+
+plugin = ADKTokenPropagationPlugin(sts_integration=sts)
+plugin.add_to_agent(my_agent)
+```
+
+**Step 4 — Downstream policy validates both `sub` and `act`:**
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-delegation-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+        jwks:
+          backendRef:
+            name: enterprise-agentgateway
+            namespace: agentgateway-system
+            port: 7777
+          jwksPath: .well-known/jwks.json
+      rbac:                                          # Per-agent tool access control
+      - tool: "query_database"
+        celExpression: >-
+          claims.act != null &&
+          claims.act.sub == "system:serviceaccount:default:chat-agent"
+```
+
+**Note:** No `tokenExchange.mode` is set on this policy — the proxy is not performing the exchange. The agent handles it directly and sends the OBO JWT in the request.
+
+---
+
+#### Example 3: Built-in STS + Non-MCP Backend (LLM / HTTP API)
+
+Token exchange works the same for non-MCP backends. The difference is how the downstream validates the OBO token — use `traffic.jwtAuthentication` instead of `backend.mcp.authentication`.
+
+**Steps 1-2 — Same as Example 1** (Helm values + Gateway + Parameters).
+
+**Step 3 — Route to a non-MCP backend:**
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - name: my-api-service
+      port: 8080
+```
+
+**Step 4 — Policy with JWT auth on the traffic section:**
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: api-obo-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: api-route
+  traffic:
+    jwtAuthentication:                               # Validates OBO token on non-MCP route
+      mode: Strict
+      providers:
+      - issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+        jwks:
+          backendRef:
+            name: enterprise-agentgateway
+            namespace: agentgateway-system
+            port: 7777
+          jwksPath: .well-known/jwks.json
+  backend:
+    tokenExchange:
+      mode: ExchangeOnly
+```
+
+---
+
+#### Example 4: External STS
+
+Instead of the built-in STS, you point the proxy at an external RFC 8693-compliant STS (e.g., a corporate STS, a cloud provider's token exchange endpoint).
+
+**Step 1 — No `tokenExchange` in Helm values** (the built-in STS is not used).
+
+**Step 2 — Point the proxy at the external STS:**
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: external-sts-params
+  namespace: default
+spec:
+  env:
+  - name: STS_URI
+    value: https://sts.example.com/oauth2/token       # Your external STS endpoint
+  - name: STS_AUTH_TOKEN
+    value: /var/run/secrets/sts-tokens/sts-token       # Auth token for the external STS
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+  namespace: default
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: external-sts-params
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+```
+
+**Step 3 — Policy is the same**, but downstream validates against the **external STS issuer** and JWKS:
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-external-sts-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "https://sts.example.com"              # External STS issuer
+        jwks:
+          url: "https://sts.example.com/.well-known/jwks.json"
+    tokenExchange:
+      mode: ExchangeOnly
+```
+
+---
+
+#### Example 5: Elicitation + Exchange (Double OAuth)
+
+When the upstream API requires separate OAuth credentials that may not exist yet. The gateway first elicits the credentials (user completes an OAuth flow), then exchanges the token on subsequent requests.
+
+**Step 1 — Helm values include an elicitation secret:**
+
+```yaml
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+  elicitation:
+    secretName: "elicitation-oauth-secret"             # K8s secret with OAuth client credentials
+  subjectValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+  actorValidator:
+    validatorType: k8s
+  apiValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+```
+
+**Step 2 — Policy with default mode (both elicitation and exchange):**
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: double-oauth-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    tokenExchange: {}                                  # No mode = both elicitation + exchange
+```
+
+When `mode` is omitted (or set to `TOKEN_EXCHANGE_MODE_UNSPECIFIED`), the gateway does both: elicit credentials if missing, then exchange the token on every request.
+
+---
+
+#### Summary: What to deploy for each scenario
+
+| Scenario | Helm `tokenExchange` | `EnterpriseAgentgatewayParameters` | `EnterpriseAgentgatewayPolicy` |
+|---|---|---|---|
+| **Built-in STS + gateway-mediated** | `enabled: true` + validators | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with STS issuer |
+| **Built-in STS + agent-initiated** | `enabled: true` + validators | Not needed (agent calls STS directly) | `mcp.authentication` with STS issuer (no `tokenExchange` on policy) |
+| **External STS + gateway-mediated** | Not needed | `STS_URI` pointing to external STS → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with external issuer |
+| **Elicitation + exchange** | `enabled: true` + `elicitation.secretName` | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange: {}` (no mode = both) |
 
 ---
 
@@ -950,6 +1291,28 @@ sequenceDiagram
 ```
 
 **Result:** Full audit trail, per-agent policies, and Alice's identity preserved. The trade-off: the agent needs to know about the STS and integrate with the SDK.
+
+---
+
+## Glossary
+
+| Term | JWT Claim | What It Means |
+|---|---|---|
+| **OBO (On-Behalf-Of)** | — | A pattern where a service (the agent) acts on behalf of a user. The resulting token proves both "who the user is" and optionally "which agent is acting for them." |
+| **STS (Security Token Service)** | — | A server that exchanges one token for another. You give it a user's JWT, and it gives you back a new JWT signed by the STS. AGW has one built in at port `7777`. |
+| **Subject Token** | — | The user's original JWT from the identity provider (Keycloak, Okta, Auth0, etc.). This is the token being exchanged — it represents "who the user is." The `sub` (subject) claim in the OBO token comes from this token. |
+| **Actor Token** | — | The agent's identity token — a Kubernetes service account JWT. Automatically mounted by K8s into every pod at `/var/run/secrets/kubernetes.io/serviceaccount/token`. This represents "which agent is making the call." Only used in delegation. |
+| **Subject** | `sub` | The user's identity — carried from the subject token into the OBO token. Example: `"sub": "user-123"`. |
+| **Actor** | `act` | Nested object identifying the agent that is acting on behalf of the user. Only present in delegation tokens. Example: `"act": { "sub": "system:serviceaccount:ns:sa" }`. |
+| **Issuer** | `iss` | Who signed the token. In OBO tokens, this is the STS (e.g. `"iss": "enterprise-agentgateway.agentgateway-system.svc.cluster.local"`), not the original IdP. Downstream services trust this issuer. |
+| **Audience** | `aud` | Who the token is intended for. Set by the `resource` parameter during exchange. Example: `"aud": "mcp-server.default.svc.cluster.local"`. Downstream services should verify this matches their own identity. |
+| **May Act** | `may_act` | A claim in the user's JWT that explicitly authorizes a specific agent to perform delegation. Without it, the STS rejects delegation requests. Example: `"may_act": { "sub": "system:serviceaccount:ns:sa" }`. |
+| **Scope** | `scope` | Space-delimited permissions in the OBO token. Can be downscoped during exchange (request fewer than the original token granted). Example: `"scope": "read:data write:data"`. |
+| **Delegation** | `sub` + `act` | An exchange that preserves both identities. The OBO token contains `sub` (user) + `act` (agent). Downstream can enforce policies on both. |
+| **Impersonation** | `sub` only | An exchange that preserves only the user's identity. The OBO token contains `sub` (user) with no `act` claim. The agent is invisible to downstream. |
+| **OBO Token** | — | The new JWT issued by the STS after exchange. Signed by the STS (not the original IdP). This is what the downstream service receives. |
+| **Gateway-Mediated** | — | The proxy (data plane) calls the STS automatically — your agent doesn't need to know the STS exists. Always produces impersonation tokens. |
+| **Agent-Initiated** | — | The agent calls the STS directly. Required for delegation (dual identity). |
 
 ---
 
