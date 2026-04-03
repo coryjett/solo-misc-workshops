@@ -739,36 +739,93 @@ Now that you understand the building blocks, here's a concrete scenario showing 
 
 Alice's agent routes through Agent Gateway. The gateway handles everything — Alice's agent doesn't know the STS exists.
 
+```mermaid
+sequenceDiagram
+    participant U as User (Alice)
+    participant A as Agent
+    participant P as AGW Proxy
+    participant S as AGW Built-in STS
+    participant IdP as OIDC Provider<br/>(Keycloak)
+    participant M as MCP Server
+
+    Note over U,IdP: Phase 1: User Authentication
+    U->>IdP: Login (Authorization Code Flow)
+    IdP-->>U: JWT (sub=alice, scope=openid profile,<br/>realm_access, session_state)
+
+    Note over U,M: Phase 2: Request + Gateway-Mediated Exchange
+    U->>A: Request with JWT
+    A->>P: Authorization: Bearer <alice's JWT>
+    Note right of P: Reads STS_URI + STS_AUTH_TOKEN<br/>from env (injected by<br/>EnterpriseAgentgatewayParameters)
+    P->>S: POST /oauth2/token<br/>subject_token=<alice's JWT><br/>resource=service/default/mcp-backend...<br/>(no actor_token)
+    Note right of S: API Validator: verify proxy auth ✓<br/>Subject Validator: fetch IdP JWKS,<br/>verify signature, issuer, exp ✓<br/>Extract sub=alice, scope=openid profile<br/>No actor_token → impersonation mode
+    S-->>P: OBO JWT (iss=STS, sub=alice,<br/>aud=mcp-backend, no act claim)
+
+    Note over P,M: Phase 3: Forward to Downstream
+    P->>M: Authorization: Bearer <OBO JWT><br/>(original IdP JWT replaced)
+    Note right of M: Fetch STS JWKS from /.well-known/jwks.json<br/>Verify signature ✓, iss=STS ✓, aud=self ✓<br/>sub=alice → apply permissions
+    M-->>A: Response
+    A-->>U: Result
 ```
-1. Alice logs into the chat app → gets a Keycloak JWT
-   Token contains: sub="alice", scope="openid profile", realm_access={...}
+
+```
+1. Alice logs into the chat app
+   → Browser redirects to Keycloak (Authorization Code Flow)
+   → Alice authenticates (username/password, SSO, etc.)
+   → Keycloak issues a JWT:
+     {
+       "iss": "https://keycloak.example.com/realms/my-realm",
+       "sub": "alice",
+       "scope": "openid profile",
+       "realm_access": { "roles": ["user"] },   ← IdP-specific (will NOT leak downstream)
+       "session_state": "abc123",                ← IdP-specific (will NOT leak downstream)
+       "exp": 1712192400
+     }
 
 2. Alice's agent sends a request to the MCP server via Agent Gateway
    Authorization: Bearer <alice's-keycloak-jwt>
 
-3. Agent Gateway intercepts the request (ExchangeOnly mode)
+3. Agent Gateway proxy intercepts the request (ExchangeOnly mode is configured)
+   → Proxy reads STS_URI from its environment (injected by EnterpriseAgentgatewayParameters)
+   → Proxy reads STS_AUTH_TOKEN from the mounted file (/var/run/secrets/sts-tokens/sts-token)
    → Proxy extracts Alice's JWT from the Authorization header
-   → Proxy calls the STS: POST /oauth2/token
-     - subject_token = alice's Keycloak JWT
-     - resource = "service/default/mcp-backend.default.svc.cluster.local:8080"
-   → STS validates Alice's JWT against Keycloak's JWKS
-   → STS issues a new OBO JWT:
+   → Proxy calls the STS:
+     POST http://enterprise-agentgateway:7777/oauth2/token
+     Authorization: Bearer <sts-auth-token>         ← proxy's own auth to the STS
+     Content-Type: application/x-www-form-urlencoded
+
+     grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+     &subject_token=<alice's-keycloak-jwt>
+     &subject_token_type=urn:ietf:params:oauth:token-type:jwt
+     &resource=service/default/mcp-backend.default.svc.cluster.local:8080
+     (no actor_token — gateway-mediated never sends one)
+
+4. STS processes the exchange
+   → API Validator: validates the proxy's auth token (remote JWKS or k8s) ✓
+   → Subject Validator: fetches Keycloak's JWKS from the configured remote URL
+   → Subject Validator: verifies Alice's JWT signature, issuer, expiration ✓
+   → Subject Validator: extracts sub="alice", scope="openid profile"
+   → No actor_token provided → impersonation mode (no act claim)
+   → STS signs a new OBO JWT with its own private key:
      {
-       "iss": "enterprise-agentgateway....:7777",  ← STS issuer (not Keycloak)
-       "sub": "alice",                              ← Alice's identity preserved
-       "aud": "service/default/mcp-backend...",     ← scoped to this backend
-       "scope": "openid profile",                   ← scopes preserved
-       "exp": 1712275200                            ← 24h from now
+       "iss": "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777",
+       "sub": "alice",                              ← preserved from Alice's JWT
+       "aud": "service/default/mcp-backend.default.svc.cluster.local:8080",
+       "scope": "openid profile",                   ← preserved from Alice's JWT
+       "exp": 1712275200,                            ← 24h from now (STS-configured TTL)
+       "iat": 1712188800
      }
-     No "act" claim — the agent is invisible.
+     No "act" — the agent is invisible.
+     No "realm_access", "session_state" — IdP claims are stripped.
 
-4. Agent Gateway forwards the request to the MCP server
+5. Agent Gateway forwards the request to the MCP server
    Authorization: Bearer <sts-signed-obo-jwt>
-   (Alice's original Keycloak JWT is gone — MCP server never sees it)
+   (Alice's original Keycloak JWT is replaced — MCP server never sees it)
 
-5. MCP server validates the OBO JWT
-   → Checks issuer = STS ✓ (only needs to trust one issuer)
-   → Checks aud matches its own identity ✓
+6. MCP server validates the OBO JWT
+   → Fetches STS public keys from /.well-known/jwks.json
+   → Verifies signature against STS JWKS ✓
+   → Checks iss = STS issuer ✓ (only needs to trust this one issuer)
+   → Checks aud = "service/default/mcp-backend..." matches its own identity ✓
    → Reads sub = "alice" → applies Alice's permissions
    → Returns data to Alice's agent
 ```
@@ -779,46 +836,120 @@ Alice's agent routes through Agent Gateway. The gateway handles everything — A
 
 Same setup, but now the organization wants audit trails showing which agent accessed data on behalf of which user. The agent calls the STS directly.
 
+```mermaid
+sequenceDiagram
+    participant U as User (Alice)
+    participant A as Agent Pod<br/>(chat-agent)
+    participant S as AGW Built-in STS
+    participant K as K8s API Server
+    participant IdP as OIDC Provider<br/>(Keycloak)
+    participant M as MCP Server
+
+    Note over U,IdP: Phase 1: User Authentication
+    U->>IdP: Login (Authorization Code Flow)
+    IdP-->>U: JWT (sub=alice, may_act={sub=chat-agent SA})
+
+    Note over A,S: Phase 2: STS Discovery + Token Exchange
+    U->>A: Request with JWT
+    Note right of A: Read SA token from<br/>/var/run/secrets/kubernetes.io/<br/>serviceaccount/token<br/>(auto-mounted by K8s)
+    A->>S: GET /.well-known/oauth-authorization-server
+    S-->>A: { token_endpoint: ".../oauth2/token" }
+    A->>S: POST /oauth2/token<br/>subject_token=<alice's JWT><br/>actor_token=<K8s SA JWT>
+
+    Note over S,K: Phase 3: STS Validation
+    Note right of S: Subject Validator (remote/JWKS):<br/>Fetch IdP JWKS, verify signature ✓<br/>Extract sub=alice, may_act ✓
+    S->>K: POST /apis/authentication.k8s.io/<br/>v1/tokenreviews<br/>{ spec: { token: <SA JWT> } }
+    K-->>S: Authenticated ✓<br/>sub=system:serviceaccount:default:chat-agent<br/>iss=https://kubernetes.default.svc.cluster.local
+    Note right of S: Cross-validate:<br/>may_act.sub == actor.sub ✓<br/>may_act.iss == actor.iss ✓
+
+    S-->>A: OBO JWT (iss=STS, sub=alice,<br/>act={sub=chat-agent}, aud=mcp-backend)
+    Note right of A: SDK caches OBO token<br/>(respects exp with 5s buffer)
+
+    Note over A,M: Phase 4: Forward to Downstream
+    A->>M: Authorization: Bearer <OBO JWT>
+    Note right of M: Fetch STS JWKS ✓<br/>Verify signature ✓, iss=STS ✓, aud=self ✓<br/>sub=alice → user permissions ✓<br/>act.sub=chat-agent → agent allowed ✓<br/>Audit: alice via chat-agent
+    M-->>A: Response
+    A-->>U: Result
+```
+
 ```
 1. Alice logs in → gets a Keycloak JWT (same as before)
-   This time, Alice's token also contains:
+   This time, the Keycloak admin has added a hardcoded claim mapper, so
+   Alice's token also contains:
    "may_act": {
      "sub": "system:serviceaccount:default:chat-agent",
      "iss": "https://kubernetes.default.svc.cluster.local"
    }
-   (Added by Keycloak admin — authorizes the chat-agent to act for Alice)
+   (This authorizes the chat-agent service account to act on Alice's behalf)
 
-2. The chat-agent receives Alice's request and her JWT
+2. The chat-agent pod receives Alice's request and her JWT
+   → The agent's K8s service account token is already mounted in the pod
+     at /var/run/secrets/kubernetes.io/serviceaccount/token (auto-mounted by K8s)
+   → The agentsts-adk SDK reads this file automatically
 
-3. The chat-agent calls the STS directly (not via the proxy):
+3. The SDK discovers the STS
+   → Fetches http://enterprise-agentgateway:7777/.well-known/oauth-authorization-server
+   → Reads the token_endpoint from the response: ".../oauth2/token"
+
+4. The SDK calls the STS directly (not via the proxy):
    POST http://enterprise-agentgateway:7777/oauth2/token
-     - subject_token = Alice's Keycloak JWT (with may_act)
-     - actor_token = chat-agent's own K8s service account JWT
-   → STS validates Alice's JWT (JWKS) ✓
-   → STS validates the agent's K8s SA token (TokenReview) ✓
-   → STS checks: does may_act.sub match actor.sub? ✓
-   → STS issues an OBO JWT:
+   Content-Type: application/x-www-form-urlencoded
+
+   grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+   &subject_token=<alice's-keycloak-jwt>
+   &subject_token_type=urn:ietf:params:oauth:token-type:jwt
+   &actor_token=<chat-agent's-k8s-sa-jwt>           ← read from mounted file
+   &actor_token_type=urn:ietf:params:oauth:token-type:jwt
+
+5. STS processes the exchange
+   → Subject Validator (remote/JWKS):
+     → Fetches Keycloak's JWKS
+     → Verifies Alice's JWT signature, issuer, expiration ✓
+     → Extracts sub="alice", scope="openid profile"
+     → Extracts may_act claim ✓
+   → Actor Validator (k8s):
+     → Sends the SA token to K8s API server:
+       POST /apis/authentication.k8s.io/v1/tokenreviews
+       { "spec": { "token": "<chat-agent's-k8s-sa-jwt>" } }
+     → K8s verifies the SA token signature, checks expiration,
+       confirms the service account exists ✓
+     → K8s returns: sub="system:serviceaccount:default:chat-agent",
+       iss="https://kubernetes.default.svc.cluster.local"
+   → Cross-validation:
+     → may_act.sub == actor.sub? "system:serviceaccount:default:chat-agent" ✓
+     → may_act.iss == actor.iss? "https://kubernetes.default.svc.cluster.local" ✓
+   → STS signs a new OBO JWT:
      {
-       "iss": "enterprise-agentgateway....:7777",
+       "iss": "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777",
        "sub": "alice",
-       "act": {                                      ← agent identity included
+       "act": {
          "sub": "system:serviceaccount:default:chat-agent",
          "iss": "https://kubernetes.default.svc.cluster.local"
        },
-       "aud": "service/default/mcp-backend...",
-       "scope": "openid profile"
+       "aud": "service/default/mcp-backend.default.svc.cluster.local:8080",
+       "scope": "openid profile",
+       "exp": 1712275200,
+       "iat": 1712188800
      }
 
-4. The chat-agent sends the OBO JWT to the MCP server
+6. The SDK caches the OBO token (respects exp with 5s buffer)
+   → Injects it as Authorization: Bearer on outbound MCP tool calls
+
+7. The chat-agent sends the request to the MCP server
    Authorization: Bearer <sts-signed-obo-jwt-with-act>
 
-5. MCP server validates the OBO JWT
+8. MCP server validates the OBO JWT
+   → Fetches STS public keys from /.well-known/jwks.json
+   → Verifies signature ✓
+   → Checks iss = STS issuer ✓
+   → Checks aud matches its own identity ✓
    → sub = "alice" → applies Alice's permissions ✓
-   → act.sub = "chat-agent" → checks agent is allowed to call this tool ✓
+   → act.sub = "system:serviceaccount:default:chat-agent"
+     → CEL RBAC: checks agent is allowed to call this tool ✓
    → Audit log: "alice via chat-agent called query_database"
 ```
 
-**Result:** Full audit trail, per-agent policies, and Alice's identity preserved. The trade-off: the agent needs to know about the STS and integrate with it.
+**Result:** Full audit trail, per-agent policies, and Alice's identity preserved. The trade-off: the agent needs to know about the STS and integrate with the SDK.
 
 ---
 
