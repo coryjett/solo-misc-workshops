@@ -92,11 +92,12 @@ User authenticates via OIDC provider (Authorization Code Flow), receives a beare
 
 ---
 
-## Double OAuth Flow (OIDC Bearer → Upstream Token Exchange)
+## Double OAuth Flow (OIDC + Elicitation)
 
-User authenticates via OIDC (gets bearer JWT), then that token is exchanged for a different upstream token (could be opaque). Combines downstream and upstream OAuth in a single automated flow.
+Two sequential user-facing OAuth flows orchestrated by the gateway. First, the user authenticates via OIDC (downstream) to get a bearer JWT. Then, when the gateway needs to call an upstream API requiring separate OAuth credentials, it triggers an elicitation — the user completes a second OAuth flow (upstream) via the Solo Enterprise UI to authorize access. The STS stores the upstream token, and subsequent requests are forwarded with both the downstream JWT (for gateway auth) and the injected upstream token (for API access).
 
-> **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) · [Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/elicitations/)
+> **Docs:** [About OBO & Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/about/) · [Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/elicitations/)
+> **API:** [TokenExchangeMode](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#tokenexchangemode)
 
 ![Double OAuth Flow](images/4-double-oauth.png)
 
@@ -104,12 +105,22 @@ User authenticates via OIDC (gets bearer JWT), then that token is exchanged for 
 
 ## Gateway-Mediated OIDC + Token Exchange
 
-Agent Gateway handles OIDC authentication, then exchanges the IdP token with an external RFC 8693 Security Token Service (STS) before forwarding to the agent. The agent never sees the original IdP token — it trusts only the STS issuer. Decouples the IdP from downstream services and works with any compliant STS.
+Agent Gateway handles OIDC authentication, then automatically exchanges the IdP token via RFC 8693 before forwarding to the agent. The agent never sees the original IdP token — it trusts only the STS issuer. The client never calls the STS directly; the gateway handles the exchange transparently.
 
 > **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) · [Set up JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/)
 > **API:** [Helm tokenExchange values](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/)
 
-![Gateway-Mediated Token Exchange](images/13-gateway-mediated.png)
+### Variant A: Built-in STS
+
+Uses AGW's built-in token exchange server. Configured via `ExchangeOnly` mode. Issues JWT with `sub` (user) + `act` (agent).
+
+![Built-in STS](images/13-gateway-mediated-builtin.png)
+
+### Variant B: External STS
+
+Uses an external RFC 8693-compliant STS. Decouples the IdP from downstream services.
+
+![External STS](images/13-gateway-mediated-external.png)
 
 ---
 
