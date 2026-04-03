@@ -34,5 +34,6 @@ sequenceDiagram
     API-->>AGW: Response
     AGW-->>User: Result
 ```
+![Diagram](../images/3-elicitation.png)
 
 Back to [Auth Patterns overview](../README.md)

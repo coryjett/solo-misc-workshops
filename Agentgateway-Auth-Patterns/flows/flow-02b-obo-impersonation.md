@@ -23,5 +23,6 @@ sequenceDiagram
 
     Note over STS: OBO token is a NEW JWT signed by AGW.<br/>Original IdP token is replaced.<br/>Downstream trusts AGW issuer, not original IdP.
 ```
+![Diagram](../images/2b-obo-impersonation.png)
 
 Back to [Auth Patterns overview](../README.md)

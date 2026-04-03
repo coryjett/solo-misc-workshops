@@ -22,5 +22,6 @@ sequenceDiagram
 
     Note over AGW,K8s: Configured via AgentgatewayBackend:<br/>policies.auth.secretRef or policies.auth.key
 ```
+![Diagram](../images/6-static-secret.png)
 
 Back to [Auth Patterns overview](../README.md)

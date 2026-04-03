@@ -36,5 +36,6 @@ sequenceDiagram
 
     Note over AGW: Agent never sees the original IdP token.<br/>Token exchange via external RFC 8693 STS.<br/>Works with any OIDC provider + any compliant STS.
 ```
+![Diagram](../images/13-gateway-mediated.png)
 
 Back to [Auth Patterns overview](../README.md)

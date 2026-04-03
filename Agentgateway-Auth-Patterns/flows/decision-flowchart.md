@@ -55,5 +55,6 @@ flowchart TD
     style F11 fill:#ecfdf5,stroke:#059669
     style F13 fill:#fef0c7,stroke:#d97706
 ```
+![Diagram](../images/decision-flowchart.png)
 
 Back to [Auth Patterns overview](../README.md)

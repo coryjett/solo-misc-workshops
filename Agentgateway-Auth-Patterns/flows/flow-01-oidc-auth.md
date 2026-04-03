@@ -20,5 +20,6 @@ sequenceDiagram
     IdP-->>App: Bearer JWT (access_token + id_token)
     App-->>User: Session created
 ```
+![Diagram](../images/1-oidc-auth.png)
 
 Back to [Auth Patterns overview](../README.md)

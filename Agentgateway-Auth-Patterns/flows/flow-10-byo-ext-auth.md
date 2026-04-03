@@ -28,5 +28,6 @@ sequenceDiagram
 
     Note over AGW,ExtAuth: Configured via EnterpriseAgentgatewayPolicy:<br/>traffic.extAuth with gRPC service reference
 ```
+![Diagram](../images/10-byo-ext-auth.png)
 
 Back to [Auth Patterns overview](../README.md)

@@ -34,5 +34,6 @@ sequenceDiagram
 
     Note over AGW: Configured via EnterpriseAgentgatewayPolicy:<br/>traffic.rbac with CEL expressions per tool
 ```
+![Diagram](../images/12-rbac-tool-access.png)
 
 Back to [Auth Patterns overview](../README.md)

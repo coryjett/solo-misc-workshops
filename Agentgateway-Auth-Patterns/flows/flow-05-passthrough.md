@@ -18,5 +18,6 @@ sequenceDiagram
     Backend-->>AGW: Response
     AGW-->>Client: Response
 ```
+![Diagram](../images/5-passthrough.png)
 
 Back to [Auth Patterns overview](../README.md)

@@ -27,5 +27,6 @@ sequenceDiagram
 
     Note over AGW,K8s: Configured via EnterpriseAgentgatewayPolicy:<br/>traffic.basicAuth with K8s secretRef
 ```
+![Diagram](../images/9-basic-auth.png)
 
 Back to [Auth Patterns overview](../README.md)

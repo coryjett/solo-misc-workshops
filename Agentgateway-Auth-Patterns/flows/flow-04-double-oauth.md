@@ -33,5 +33,6 @@ sequenceDiagram
     Client->>Elicit: POST /elicitations/oauth2/token<br/>(subject_token=K8s SA, resource)
     Elicit-->>Client: upstream-token (opaque)
 ```
+![Diagram](../images/4-double-oauth.png)
 
 Back to [Auth Patterns overview](../README.md)

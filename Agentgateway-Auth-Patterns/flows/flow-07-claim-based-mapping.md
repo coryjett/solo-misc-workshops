@@ -23,5 +23,6 @@ sequenceDiagram
     Note over AGW: traffic.jwtAuthentication (validate)
     Note over AGW: traffic.transformation.request.set (map claim -> token)
 ```
+![Diagram](../images/7-claim-based-mapping.png)
 
 Back to [Auth Patterns overview](../README.md)

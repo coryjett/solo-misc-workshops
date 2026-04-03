@@ -28,5 +28,6 @@ sequenceDiagram
     MCPClient->>AGW: POST /token<br/>(code, client_id, code_verifier)
     AGW-->>MCPClient: Access token (Bearer JWT)
 ```
+![Diagram](../images/11-mcp-oauth.png)
 
 Back to [Auth Patterns overview](../README.md)

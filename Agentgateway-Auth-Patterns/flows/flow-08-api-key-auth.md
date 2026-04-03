@@ -24,5 +24,6 @@ sequenceDiagram
         AGW-->>Client: 401 Unauthorized
     end
 ```
+![Diagram](../images/8-api-key-auth.png)
 
 Back to [Auth Patterns overview](../README.md)

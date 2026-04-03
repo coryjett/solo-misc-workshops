@@ -23,5 +23,6 @@ sequenceDiagram
 
     Note over STS: OBO token is a NEW JWT signed by AGW.<br/>Original IdP token is replaced.<br/>sub: user-123, act.sub: agent-k8s-sa
 ```
+![Diagram](../images/2a-obo-delegation.png)
 
 Back to [Auth Patterns overview](../README.md)
