@@ -19,8 +19,7 @@
 6. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
 7. [STS Configuration](#sts-configuration)
 8. [Downstream Policy Enforcement](#downstream-policy-enforcement)
-9. [Microsoft Entra ID (Azure AD) OBO](#microsoft-entra-id-azure-ad-obo)
-10. [Reference](#reference)
+9. [Reference](#reference)
 
 ---
 
@@ -681,30 +680,6 @@ User "alice" (sub: f47ac10b-...)
 
 ---
 
-## Microsoft Entra ID (Azure AD) OBO
-
-Agent Gateway also supports **Microsoft Entra ID OBO** as an alternative to the built-in STS. This uses Azure AD's native `urn:ietf:params:oauth:grant-type:jwt-bearer` grant type instead of RFC 8693.
-
-Configured via `EnterpriseAgentgatewayPolicy`:
-
-```yaml
-backend:
-  tokenExchange:
-    entra:
-      tenantId: "<azure-ad-tenant-id>"
-      secretName: "entra-client-secret"    # K8s Secret with client_id, client_secret, scope
-```
-
-The token endpoint is derived automatically: `https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token`
-
-Parameters sent:
-- `grant_type`: `urn:ietf:params:oauth:grant-type:jwt-bearer`
-- `assertion`: the incoming access token
-- `requested_token_use`: `on_behalf_of`
-- `client_id`, `client_secret`, `scope`: from the referenced K8s Secret
-
----
-
 ## Reference
 
 - [About OBO & Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/about/)
@@ -714,5 +689,6 @@ Parameters sent:
 - [Enterprise API — TokenExchangeCfg](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#tokenexchangecfg)
 - [Helm Values](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/)
 - [RFC 8693 — OAuth 2.0 Token Exchange](https://datatracker.ietf.org/doc/html/rfc8693)
+- [Microsoft Entra ID OBO](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) — AGW also supports Azure AD's native `jwt-bearer` grant as an alternative to the built-in STS
 - [Setting up A2A OAuth User Delegation (Blog)](https://www.solo.io/blog/setting-up-a2a-oauth-user-delegation)
 - [MCP Authorization Patterns for Upstream API Calls (Blog)](https://www.solo.io/blog/mcp-authorization-patterns)
