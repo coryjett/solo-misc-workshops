@@ -812,7 +812,28 @@ Same STS, but the agent calls it directly. This supports **both** delegation and
 
 Requires the `agentsts-adk` SDK or direct HTTP calls.
 
-**Step 1 — Helm values (same as Example 1).**
+**Step 1 — Enable the built-in STS (Helm values):**
+
+```yaml
+# values.yaml for enterprise-agentgateway Helm chart
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+
+  subjectValidator:                      # Validates the user's IdP JWT
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+
+  actorValidator:                        # Validates agent K8s SA tokens (delegation only)
+    validatorType: k8s
+
+  apiValidator:                          # Validates the proxy's auth to the STS
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+```
 
 **Step 2 — No `EnterpriseAgentgatewayParameters` needed.** The agent calls the STS directly — it doesn't go through the proxy for the exchange. The agent discovers the STS via the well-known endpoint.
 
@@ -919,7 +940,64 @@ spec:
 
 Token exchange works the same for non-MCP backends. The difference is how the downstream validates the OBO token — use `traffic.jwtAuthentication` instead of `backend.mcp.authentication`.
 
-**Steps 1-2 — Same as Example 1** (Helm values + Gateway + Parameters).
+**Step 1 — Enable the built-in STS (Helm values):**
+
+```yaml
+# values.yaml for enterprise-agentgateway Helm chart
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+
+  subjectValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+
+  actorValidator:
+    validatorType: k8s
+
+  apiValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs"
+```
+
+**Step 2 — Tell the proxy where the STS is (Gateway + Parameters):**
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: agw-params
+  namespace: default
+spec:
+  env:
+  - name: STS_URI
+    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/oauth2/token
+  - name: STS_AUTH_TOKEN
+    value: /var/run/secrets/xds-tokens/xds-token
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+  namespace: default
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: agw-params
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+```
 
 **Step 3 — Route to a non-MCP backend:**
 
