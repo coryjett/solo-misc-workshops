@@ -12,6 +12,7 @@ All patterns documented in **[agentgateway-auth-patterns.md](agentgateway-auth-p
 | | **[Basic Auth (RFC 7617)](flows/flow-09-basic-auth.md)** | Username/password with APR1-hashed credentials in K8s secrets |
 | | **[BYO External Auth](flows/flow-10-byo-ext-auth.md)** | Delegate auth to your own gRPC ext auth service (LDAP, SAML, MFA, etc.) |
 | | **[MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md)** | Dynamic Client Registration for MCP clients (Claude Code, VS Code) + OAuth flow |
+| | **[Mutual TLS (mTLS)](flows/flow-mtls.md)** | Client certificate authentication via TLS handshake — validated against trusted CA root |
 | | **[Passthrough Token](flows/flow-05-passthrough.md)** | Gateway forwards client's existing token as-is — no validation or exchange |
 | | **[Standard OIDC Authentication](flows/flow-01-oidc-auth.md)** | Authorization Code Flow → bearer JWT for all requests |
 | **Token Exchange** | **[Double OAuth Flow](flows/flow-04-double-oauth.md)** | OIDC bearer + upstream token exchange in a single automated flow |
