@@ -354,12 +354,12 @@ spec:
   - name: STS_URI
     value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/oauth2/token
   - name: STS_AUTH_TOKEN
-    value: /var/run/secrets/sts-tokens/sts-token
+    value: /var/run/secrets/xds-tokens/xds-token
 ```
 
 The Gateway references this via `infrastructure.parametersRef`, and the control plane injects the env vars into the proxy pod automatically:
 - **`STS_URI`** — the STS `/oauth2/token` endpoint URL
-- **`STS_AUTH_TOKEN`** — path to a token file the proxy uses to authenticate its own calls to the STS (validated by the API Validator). Falls back to `/var/run/secrets/sts-tokens/sts-token` if not set.
+- **`STS_AUTH_TOKEN`** — path to a token file the proxy uses to authenticate its own calls to the STS (validated by the API Validator). Falls back to `/var/run/secrets/sts-tokens/sts-token` if the file exists, otherwise disabled.
 
 **For MCP backends**, the downstream MCP authentication policy validates the OBO token against the **STS issuer** (not the original IdP):
 
@@ -490,9 +490,9 @@ The plugin hooks into Google ADK's `before_run_callback` — before each agent r
 | Who calls the STS? | Data plane proxy (automatic) | Agent application (explicit) |
 | Agent code changes? | **None** — transparent to the agent | Must initialize SDK with `well_known_uri` or call STS `/oauth2/token` directly |
 | Backend type | MCP or non-MCP | Any (MCP, LLM, HTTP, A2A) |
-| Delegation (`act` claim)? | **No** — always impersonation | **Yes** — include actor token |
+| Delegation (`act` claim)? | **No** — always impersonation (proxy never sends actor token) | **Optional** — include actor token for delegation, omit for impersonation |
 | STS discovery | Auto-configured via `EnterpriseAgentgatewayParameters` | SDK fetches `/.well-known/oauth-authorization-server` → `token_endpoint` |
-| When to use | Downstream only needs user identity | Downstream policies reference agent identity |
+| When to use | Downstream only needs user identity; zero agent code changes | Agent needs control over exchange (delegation for audit trails, or impersonation with custom scopes/audience) |
 
 ---
 
@@ -1127,7 +1127,7 @@ sequenceDiagram
 
 3. Agent Gateway proxy intercepts the request (ExchangeOnly mode is configured)
    → Proxy reads STS_URI from its environment (injected by EnterpriseAgentgatewayParameters)
-   → Proxy reads STS_AUTH_TOKEN from the mounted file (/var/run/secrets/sts-tokens/sts-token)
+   → Proxy reads STS_AUTH_TOKEN from the mounted file (/var/run/secrets/xds-tokens/xds-token)
    → Proxy extracts Alice's JWT from the Authorization header
    → Proxy calls the STS:
      POST http://enterprise-agentgateway:7777/oauth2/token
