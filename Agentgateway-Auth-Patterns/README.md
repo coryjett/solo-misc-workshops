@@ -4,7 +4,7 @@ Comprehensive authorization audit of all authentication and authorization patter
 
 ## Formats
 
-- **[Markdown with Mermaid diagrams](agent-gateway-token-flows.md)** — source of truth, viewable on GitHub with rendered sequence diagrams
+- **[Markdown with diagrams](agent-gateway-token-flows.md)** — source of truth, viewable on GitHub with rendered diagrams
 - **[PDF with linked TOC](Agent-Gateway-Token-Flows.pdf)** — printable version with rendered diagrams, styled headers, and clickable table of contents
 
 ## Auth Patterns
@@ -27,16 +27,6 @@ Comprehensive authorization audit of all authentication and authorization patter
 | 13 | **[Gateway-Mediated Token Exchange](flows/flow-13-gateway-mediated-exchange.md)** | Token Exchange | AGW automatically exchanges client JWT at built-in STS before forwarding — client never calls STS |
 
 Plus a **[Decision Flowchart](flows/decision-flowchart.md)** to help choose the right pattern for a given scenario.
-
-## Regenerating the PDF
-
-Requires Node.js 18+ and Puppeteer:
-
-```bash
-cd Agentgateway-Auth-Patterns
-npm install --no-save puppeteer
-node generate-pdf.js
-```
 
 ## Reference
 
