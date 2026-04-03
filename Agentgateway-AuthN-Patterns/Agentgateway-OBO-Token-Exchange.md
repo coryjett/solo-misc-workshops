@@ -622,6 +622,21 @@ The OBO token is a **clean JWT from the STS trust domain** with only the standar
 
 Every token exchange deployment requires **three things**: (1) the STS itself (Helm values), (2) the proxy-to-STS connection (Gateway + Parameters), and (3) the per-route policy (EnterpriseAgentgatewayPolicy). Below are complete, copy-pasteable examples for each scenario.
 
+#### Summary: What to deploy for each scenario
+
+| Scenario | Result | Helm `tokenExchange` | `EnterpriseAgentgatewayParameters` | `EnterpriseAgentgatewayPolicy` |
+|---|---|---|---|---|
+| [**Built-in STS + gateway-mediated**](#example-1-built-in-sts--gateway-mediated-exchange-impersonation) | Impersonation (always) | `enabled: true` + validators | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with STS issuer |
+| [**Built-in STS + agent-initiated**](#example-2-built-in-sts--agent-initiated-exchange) | Delegation or impersonation | `enabled: true` + validators | Not needed (agent calls STS directly) | `mcp.authentication` with STS issuer + optional `rbac` on `act` (no `tokenExchange` on policy) |
+| [**Built-in STS + non-MCP backend**](#example-3-built-in-sts--non-mcp-backend-llm--http-api) | Impersonation (always) | `enabled: true` + validators | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `traffic.jwtAuthentication` with STS issuer |
+| [**External STS**](#example-4-external-sts) | Impersonation (always) | Not needed | `STS_URI` pointing to external STS → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with external issuer |
+| **External STS + agent-initiated** | Depends on external STS | Not needed | Not needed (agent calls external STS directly) | `mcp.authentication` with external STS issuer (no `tokenExchange` on policy) |
+| [**Elicitation + exchange**](#example-5-elicitation--exchange-double-oauth) | Impersonation + credential gathering | `enabled: true` + `elicitation.secretName` | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange: {}` (no mode = both) |
+
+**Notes:**
+- **Agent-initiated** supports both delegation (include `actor_token` → `act` claim in OBO JWT) and impersonation (omit `actor_token` → no `act` claim). The infrastructure deployment is identical — the difference is in the agent code.
+- **External STS + agent-initiated** requires no AGW-specific configuration. The agent calls the external STS directly, and AGW only validates the resulting OBO token on the downstream policy. The external STS controls whether delegation is supported.
+
 ---
 
 #### Example 1: Built-in STS + Gateway-Mediated Exchange (Impersonation)
@@ -1044,22 +1059,6 @@ spec:
 ```
 
 When `mode` is omitted (or set to `TOKEN_EXCHANGE_MODE_UNSPECIFIED`), the gateway does both: elicit credentials if missing, then exchange the token on every request.
-
----
-
-#### Summary: What to deploy for each scenario
-
-| Scenario | Result | Helm `tokenExchange` | `EnterpriseAgentgatewayParameters` | `EnterpriseAgentgatewayPolicy` |
-|---|---|---|---|---|
-| **Built-in STS + gateway-mediated** | Impersonation (always) | `enabled: true` + validators | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with STS issuer |
-| **Built-in STS + agent-initiated** | Delegation or impersonation | `enabled: true` + validators | Not needed (agent calls STS directly) | `mcp.authentication` with STS issuer + optional `rbac` on `act` (no `tokenExchange` on policy) |
-| **External STS + gateway-mediated** | Impersonation (always) | Not needed | `STS_URI` pointing to external STS → Gateway `parametersRef` | `tokenExchange.mode: ExchangeOnly` + `mcp.authentication` with external issuer |
-| **External STS + agent-initiated** | Depends on external STS | Not needed | Not needed (agent calls external STS directly) | `mcp.authentication` with external STS issuer (no `tokenExchange` on policy) |
-| **Elicitation + exchange** | Impersonation + credential gathering | `enabled: true` + `elicitation.secretName` | `STS_URI` + `STS_AUTH_TOKEN` → Gateway `parametersRef` | `tokenExchange: {}` (no mode = both) |
-
-**Notes:**
-- **Agent-initiated** supports both delegation (include `actor_token` → `act` claim in OBO JWT) and impersonation (omit `actor_token` → no `act` claim). The infrastructure deployment is identical — the difference is in the agent code.
-- **External STS + agent-initiated** requires no AGW-specific configuration. The agent calls the external STS directly, and AGW only validates the resulting OBO token on the downstream policy. The external STS controls whether delegation is supported.
 
 ---
 
