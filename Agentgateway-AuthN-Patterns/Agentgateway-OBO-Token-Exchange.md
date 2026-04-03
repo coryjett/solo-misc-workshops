@@ -10,6 +10,7 @@
 
 1. [Why Token Exchange?](#why-token-exchange)
 2. [Overview](#overview)
+   - [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-inbound-auth)
 3. [How the STS Works](#how-the-sts-works)
 4. [Delegation (Dual Identity)](#delegation-dual-identity)
 5. [Impersonation (Token Swap)](#impersonation-token-swap)
@@ -67,6 +68,54 @@ The STS supports two exchange modes that differ in whether the **agent's identit
 | **Impersonation** | Not provided | Absent | Downstream sees only the user, agent is transparent |
 
 Both modes work identically across MCP and non-MCP (LLM, HTTP) downstreams — the STS generates the same JWT structure regardless of backend type. The difference is in who calls the STS — the proxy (gateway-mediated) or the agent (agent-initiated).
+
+### How Token Exchange Relates to Inbound Auth
+
+Token exchange is **not** an authentication method — it's a **post-authentication layer** that transforms an already-authenticated token before it reaches the downstream service. You still need an inbound auth method to authenticate the client to the gateway in the first place.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Agent Gateway                                    │
+│                                                                         │
+│  ┌──────────────┐      ┌──────────────────┐      ┌──────────────────┐  │
+│  │ 1. Inbound   │      │ 2. Token         │      │ 3. Downstream    │  │
+│  │    Auth       │ ──►  │    Exchange      │ ──►  │    Validation    │  │
+│  │              │      │    (optional)     │      │                  │  │
+│  │ JWT Auth     │      │ STS swaps IdP    │      │ MCP backend      │  │
+│  │ MCP OAuth    │      │ JWT → OBO JWT    │      │ validates OBO    │  │
+│  │ API Key      │      │                  │      │ JWT from STS     │  │
+│  │ mTLS         │      │                  │      │ issuer           │  │
+│  └──────────────┘      └──────────────────┘      └──────────────────┘  │
+│                                                                         │
+│  "How does the         "What happens to          "What does the        │
+│   client prove          the token inside           backend trust?"      │
+│   who it is?"           the gateway?"                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+| Layer | What it does | Examples | Configured via |
+|---|---|---|---|
+| **Inbound auth** | Authenticates the client to the gateway | [JWT Auth](flows/flow-01-oidc-auth.md), [MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md), [API Key](flows/flow-08-api-key-auth.md), [mTLS](flows/flow-mtls.md) | `JWTAuthentication`, MCP OAuth config, API key policy |
+| **Token exchange** | Transforms the authenticated token into an OBO JWT | Gateway-mediated (`ExchangeOnly`), agent-initiated | Helm `tokenExchange` + `EnterpriseAgentgatewayPolicy` |
+| **Downstream validation** | Backend verifies the exchanged token | MCP backend validates OBO JWT | `mcp.authentication` or `traffic.jwtAuthentication` (STS issuer) |
+
+**Key points:**
+
+- **Token exchange does not replace inbound auth.** The client still authenticates via JWT, MCP OAuth, or another method. Token exchange happens *after* authentication, inside the gateway.
+- **Without token exchange**, the downstream receives the original IdP token and must trust that IdP directly.
+- **With token exchange**, the downstream receives an OBO JWT from the STS and only needs to trust the STS issuer — regardless of which IdP the client used.
+- **The `subjectValidator`** in the STS Helm config validates the IdP JWT during the exchange. If you also have inbound JWT auth configured, the token is validated twice (once by the auth policy, once by the STS). This is redundant but not harmful.
+
+**Example: MCP OAuth + DCR with token exchange**
+
+1. MCP client (Claude Code, VS Code) discovers the gateway, registers via DCR, completes OAuth → gets IdP JWT
+2. Client sends MCP request with IdP JWT → gateway
+3. Gateway proxy intercepts, calls STS with IdP JWT as `subject_token`
+4. STS validates IdP JWT (`subjectValidator`), issues OBO JWT
+5. Proxy forwards request with OBO JWT → MCP backend
+6. MCP backend validates OBO JWT against STS issuer (`mcp.authentication`)
+
+The MCP OAuth + DCR flow handles step 1 (how the client gets the token). Token exchange handles steps 3-5 (what happens to that token inside the gateway). They work together.
 
 ---
 
@@ -662,6 +711,8 @@ Every token exchange deployment requires **three things**: (1) the STS itself (H
 
 The simplest setup. The built-in STS runs on the control plane, and the proxy swaps tokens automatically. No agent code changes needed.
 
+> **Note:** This example shows the token exchange configuration only. You still need an [inbound auth method](#how-token-exchange-relates-to-inbound-auth) (JWT Auth, MCP OAuth + DCR, API Key, etc.) to authenticate clients to the gateway. Token exchange transforms the authenticated token before forwarding it downstream.
+
 **Step 1 — Enable the built-in STS (Helm values):**
 
 ```yaml
@@ -812,6 +863,8 @@ Same STS, but the agent calls it directly. This supports **both** delegation and
 
 Requires the `agentsts-adk` SDK or direct HTTP calls.
 
+> **Note:** This example shows the token exchange configuration only. You still need an [inbound auth method](#how-token-exchange-relates-to-inbound-auth) (JWT Auth, MCP OAuth + DCR, API Key, etc.) to authenticate clients to the gateway. The agent receives the authenticated user JWT and then exchanges it with the STS.
+
 **Step 1 — Enable the built-in STS (Helm values):**
 
 ```yaml
@@ -939,6 +992,8 @@ spec:
 <summary><strong><a id="example-3-built-in-sts--non-mcp-backend-llm--http-api"></a>Example 3: Built-in STS + Non-MCP Backend (LLM / HTTP API)</strong></summary>
 
 Token exchange works the same for non-MCP backends. The difference is how the downstream validates the OBO token — use `traffic.jwtAuthentication` instead of `backend.mcp.authentication`.
+
+> **Note:** This example shows the token exchange configuration only. You still need an [inbound auth method](#how-token-exchange-relates-to-inbound-auth) (JWT Auth, MCP OAuth + DCR, API Key, etc.) to authenticate clients to the gateway. Token exchange transforms the authenticated token before forwarding it downstream.
 
 **Step 1 — Enable the built-in STS (Helm values):**
 
