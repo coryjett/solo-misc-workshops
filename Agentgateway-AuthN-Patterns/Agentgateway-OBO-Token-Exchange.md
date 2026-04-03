@@ -658,7 +658,7 @@ Every token exchange deployment requires **three things**: (1) the STS itself (H
 ---
 
 <details>
-<summary><strong>Example 1: Built-in STS + Gateway-Mediated Exchange (Impersonation)</strong></summary>
+<summary><strong><a id="example-1-built-in-sts--gateway-mediated-exchange-impersonation"></a>Example 1: Built-in STS + Gateway-Mediated Exchange (Impersonation)</strong></summary>
 
 The simplest setup. The built-in STS runs on the control plane, and the proxy swaps tokens automatically. No agent code changes needed.
 
@@ -803,7 +803,7 @@ spec:
 ---
 
 <details>
-<summary><strong>Example 2: Built-in STS + Agent-Initiated Exchange</strong></summary>
+<summary><strong><a id="example-2-built-in-sts--agent-initiated-exchange"></a>Example 2: Built-in STS + Agent-Initiated Exchange</strong></summary>
 
 Same STS, but the agent calls it directly. This supports **both** delegation and impersonation — the difference is whether the agent includes its K8s SA token as the `actor_token`:
 
@@ -915,7 +915,7 @@ spec:
 ---
 
 <details>
-<summary><strong>Example 3: Built-in STS + Non-MCP Backend (LLM / HTTP API)</strong></summary>
+<summary><strong><a id="example-3-built-in-sts--non-mcp-backend-llm--http-api"></a>Example 3: Built-in STS + Non-MCP Backend (LLM / HTTP API)</strong></summary>
 
 Token exchange works the same for non-MCP backends. The difference is how the downstream validates the OBO token — use `traffic.jwtAuthentication` instead of `backend.mcp.authentication`.
 
@@ -976,7 +976,7 @@ spec:
 ---
 
 <details>
-<summary><strong>Example 4: External STS</strong></summary>
+<summary><strong><a id="example-4-external-sts"></a>Example 4: External STS</strong></summary>
 
 Instead of the built-in STS, you point the proxy at an external RFC 8693-compliant STS (e.g., a corporate STS, a cloud provider's token exchange endpoint).
 
@@ -1047,7 +1047,7 @@ spec:
 ---
 
 <details>
-<summary><strong>Example 5: Elicitation + Exchange (Double OAuth)</strong></summary>
+<summary><strong><a id="example-5-elicitation--exchange-double-oauth"></a>Example 5: Elicitation + Exchange (Double OAuth)</strong></summary>
 
 When the upstream API requires separate OAuth credentials that may not exist yet. The gateway first elicits the credentials (user completes an OAuth flow), then exchanges the token on subsequent requests.
 
