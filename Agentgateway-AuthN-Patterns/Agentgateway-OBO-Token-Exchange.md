@@ -339,6 +339,24 @@ spec:
           inline: '<STS JWKS>'
 ```
 
+#### How the Agent Discovers the STS
+
+There is no automatic STS discovery for agent-initiated exchange — the agent must be explicitly configured with the STS endpoint. The STS runs on the control plane service at port `7777`, so within the cluster the endpoint is:
+
+```
+http://enterprise-agentgateway.<namespace>.svc.cluster.local:7777/token
+```
+
+Common configuration patterns:
+
+| Method | Example |
+|---|---|
+| **Environment variable** | `STS_URL=http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777` injected into the agent's Pod spec |
+| **K8s DNS** | Agent resolves the control plane service name directly (same cluster) |
+| **SDK config** | `agentsts-adk` Python package configured with the STS URL at initialization |
+
+The agent also needs its own **K8s service account token** (for delegation) or the **user's JWT** (for impersonation). The K8s SA token is typically available at the default mount path (`/var/run/secrets/kubernetes.io/serviceaccount/token`) or generated via `kubectl create token`.
+
 ### Gateway-Mediated Exchange (ExchangeOnly)
 
 A third option exists where the **gateway itself** performs the exchange transparently — the client sends its IdP JWT, and the proxy automatically exchanges it at the STS before forwarding to the backend. This works for both MCP and non-MCP routes via the `ExchangeOnly` mode on `EnterpriseAgentgatewayPolicy`:
@@ -349,9 +367,25 @@ backend:
     mode: ExchangeOnly
 ```
 
-In this mode, the data plane proxy uses:
-- `STS_URI` — the STS endpoint URL (auto-configured from Helm)
-- `STS_AUTH_TOKEN` — a token to authenticate the proxy's own calls to the STS (validated by the API Validator)
+In this mode, the data plane proxy is **auto-configured** with the STS connection via `EnterpriseAgentgatewayParameters` (unlike agent-initiated exchange, where the agent must be explicitly configured):
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: agw-params
+  namespace: agentgateway-system
+spec:
+  env:
+  - name: STS_URI
+    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/token
+  - name: STS_AUTH_TOKEN
+    value: /var/run/secrets/sts-tokens/sts-token
+```
+
+The Gateway references this via `infrastructure.parametersRef`, and the control plane injects the env vars into the proxy pod automatically:
+- **`STS_URI`** — the STS `/token` endpoint URL
+- **`STS_AUTH_TOKEN`** — path to a token file the proxy uses to authenticate its own calls to the STS (validated by the API Validator). Falls back to `/var/run/secrets/sts-tokens/sts-token` if not set.
 
 **Important:** Gateway-mediated exchange is always **impersonation-style**. The proxy sends only `subject_token` and `resource` to the STS — it does **not** send an `actor_token`. This means the resulting OBO JWT will have a `sub` claim (user) but **no `act` claim** (agent). If you need delegation (dual identity with `act`), the agent must call the STS directly with both the subject token and its own K8s SA token as the actor token.
 
@@ -516,14 +550,7 @@ tokenExchange:
 
 ### Data Plane Environment Variables
 
-When `tokenExchange.enabled: true`, the control plane automatically configures the data plane proxy with:
-
-| Env Var | Description |
-|---|---|
-| `STS_URI` | The STS endpoint URL (e.g., `http://enterprise-agentgateway:7777/token`) |
-| `STS_AUTH_TOKEN` | A token the proxy uses to authenticate its own calls to the STS (validated by the API Validator) |
-
-These are set automatically via `EnterpriseAgentgatewayParameters` — no manual configuration needed.
+When `tokenExchange.enabled: true` and gateway-mediated exchange is configured, the control plane injects `STS_URI` and `STS_AUTH_TOKEN` into the proxy pod via `EnterpriseAgentgatewayParameters`. See [Gateway-Mediated Exchange (ExchangeOnly)](#gateway-mediated-exchange-exchangeonly) for the full YAML and details.
 
 ---
 
