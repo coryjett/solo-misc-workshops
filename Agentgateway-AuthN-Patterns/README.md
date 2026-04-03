@@ -25,6 +25,10 @@ All patterns documented in **[agentgateway-auth-patterns.md](agentgateway-auth-p
 
 Plus a **[Decision Flowchart](flows/decision-flowchart.md)** to help choose the right pattern for a given scenario.
 
+## Deep Dives
+
+- **[OBO Token Exchange](Agentgateway-OBO-Token-Exchange.md)** — How the built-in STS works, delegation vs impersonation, gateway-mediated vs agent-initiated exchange, `agentsts-adk` SDK integration, audience/scopes/claim generation, and downstream policy enforcement
+
 ## Reference
 
 - [Agent Gateway Docs](https://docs.solo.io/agentgateway/2.2.x/)
