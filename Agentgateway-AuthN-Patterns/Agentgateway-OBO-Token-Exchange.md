@@ -195,7 +195,8 @@ The `may_act` claim in the user's JWT is the authorization mechanism that preven
 }
 ```
 
-**How to add `may_act` to your IdP tokens:**
+<details>
+<summary><strong>How to add <code>may_act</code> to your IdP tokens (Keycloak example)</strong></summary>
 
 In Keycloak, use a `hardcoded-claim` protocol mapper. First, extract the agent's K8s SA token identity:
 
@@ -227,7 +228,10 @@ Then create the mapper in Keycloak (via API or admin console):
 }
 ```
 
-### Validation Flow (Delegation)
+</details>
+
+<details>
+<summary><strong>Validation Flow (Delegation) — detailed diagram</strong></summary>
 
 ```
 Subject Token                          Actor Token
@@ -263,6 +267,8 @@ Subject Token                          Actor Token
           │ sub + act       │
           └─────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -430,7 +436,8 @@ The agent discovers the STS token endpoint via **OAuth Authorization Server Meta
 http://enterprise-agentgateway.<namespace>.svc.cluster.local:7777/.well-known/oauth-authorization-server
 ```
 
-**Example response** (from a live AGW STS):
+<details>
+<summary><strong>Example response</strong> (from a live AGW STS)</summary>
 
 ```json
 {
@@ -453,6 +460,8 @@ http://enterprise-agentgateway.<namespace>.svc.cluster.local:7777/.well-known/oa
 ```
 
 The SDK reads `token_endpoint` from this response to know where to send exchange requests. Note the token endpoint path is `/oauth2/token` (not `/token`). The `token_endpoint` value omits the scheme — the SDK automatically prepends it from the `well_known_uri`.
+
+</details>
 
 The STS also exposes its **JWKS** (public signing keys) at `/.well-known/jwks.json` — downstream services use this to validate OBO token signatures.
 
@@ -536,7 +545,10 @@ If the `aud` claim in the OBO token doesn't match any configured audience, the r
 
 ### How Scopes Are Handled (Token Downscoping)
 
-The STS handles scopes according to RFC 8693 Section 2.1 — it can **preserve** or **narrow** the scopes from the original subject token, but never **expand** them.
+The STS handles scopes according to RFC 8693 Section 2.1 — it can **preserve** or **narrow** the scopes from the original subject token, but never **expand** them. By default (no `scope` parameter), scopes are preserved as-is.
+
+<details>
+<summary><strong>Downscoping details and examples</strong></summary>
 
 #### Default Behavior (No `scope` Parameter)
 
@@ -581,6 +593,8 @@ The scope handling is identical regardless of backend type. However, in practice
 
 - **MCP backends** — Scopes are less commonly used because MCP tool access is typically controlled by CEL-based RBAC (referencing `sub`, `act`, `groups` claims) rather than OAuth scopes
 - **Non-MCP backends** — Scopes are more relevant because traditional APIs (REST, GraphQL) often use scope-based authorization (e.g., `read:users`, `write:orders`)
+
+</details>
 
 ### Claim Generation Summary
 
@@ -643,7 +657,8 @@ Every token exchange deployment requires **three things**: (1) the STS itself (H
 
 ---
 
-#### Example 1: Built-in STS + Gateway-Mediated Exchange (Impersonation)
+<details>
+<summary><strong>Example 1: Built-in STS + Gateway-Mediated Exchange (Impersonation)</strong></summary>
 
 The simplest setup. The built-in STS runs on the control plane, and the proxy swaps tokens automatically. No agent code changes needed.
 
@@ -783,9 +798,12 @@ spec:
 4. Proxy replaces the Authorization header with the OBO JWT
 5. MCP backend validates the OBO JWT against the STS issuer and JWKS
 
+</details>
+
 ---
 
-#### Example 2: Built-in STS + Agent-Initiated Exchange
+<details>
+<summary><strong>Example 2: Built-in STS + Agent-Initiated Exchange</strong></summary>
 
 Same STS, but the agent calls it directly. This supports **both** delegation and impersonation — the difference is whether the agent includes its K8s SA token as the `actor_token`:
 
@@ -892,9 +910,12 @@ spec:
 
 **Note:** No `tokenExchange.mode` is set on either policy — the proxy is not performing the exchange. The agent handles it directly and sends the OBO JWT in the request.
 
+</details>
+
 ---
 
-#### Example 3: Built-in STS + Non-MCP Backend (LLM / HTTP API)
+<details>
+<summary><strong>Example 3: Built-in STS + Non-MCP Backend (LLM / HTTP API)</strong></summary>
 
 Token exchange works the same for non-MCP backends. The difference is how the downstream validates the OBO token — use `traffic.jwtAuthentication` instead of `backend.mcp.authentication`.
 
@@ -950,9 +971,12 @@ spec:
       mode: ExchangeOnly
 ```
 
+</details>
+
 ---
 
-#### Example 4: External STS
+<details>
+<summary><strong>Example 4: External STS</strong></summary>
 
 Instead of the built-in STS, you point the proxy at an external RFC 8693-compliant STS (e.g., a corporate STS, a cloud provider's token exchange endpoint).
 
@@ -1018,9 +1042,12 @@ spec:
       mode: ExchangeOnly
 ```
 
+</details>
+
 ---
 
-#### Example 5: Elicitation + Exchange (Double OAuth)
+<details>
+<summary><strong>Example 5: Elicitation + Exchange (Double OAuth)</strong></summary>
 
 When the upstream API requires separate OAuth credentials that may not exist yet. The gateway first elicits the credentials (user completes an OAuth flow), then exchanges the token on subsequent requests.
 
@@ -1063,6 +1090,8 @@ spec:
 ```
 
 When `mode` is omitted (or set to `TOKEN_EXCHANGE_MODE_UNSPECIFIED`), the gateway does both: elicit credentials if missing, then exchange the token on every request.
+
+</details>
 
 ---
 
@@ -1168,6 +1197,9 @@ sequenceDiagram
     A-->>U: Result
 ```
 
+<details>
+<summary><strong>Step-by-step details</strong></summary>
+
 ```
 1. Alice logs into the chat app
    → Browser redirects to Keycloak (Authorization Code Flow)
@@ -1233,6 +1265,8 @@ sequenceDiagram
 
 **Result:** Alice's identity flows through cleanly, the MCP server trusts one issuer, and no IdP-specific claims leaked. But there's no record of which agent made the call.
 
+</details>
+
 ### Scenario: Agent-Initiated (Delegation)
 
 Same setup, but now the organization wants audit trails showing which agent accessed data on behalf of which user. The agent calls the STS directly.
@@ -1272,6 +1306,9 @@ sequenceDiagram
     M-->>A: Response
     A-->>U: Result
 ```
+
+<details>
+<summary><strong>Step-by-step details</strong></summary>
 
 ```
 1. Alice logs in → gets a Keycloak JWT (same as before)
@@ -1351,6 +1388,8 @@ sequenceDiagram
 ```
 
 **Result:** Full audit trail, per-agent policies, and Alice's identity preserved. The trade-off: the agent needs to know about the STS and integrate with the SDK.
+
+</details>
 
 ---
 
