@@ -268,7 +268,7 @@ The STS itself is **backend-agnostic** — it generates the same JWT regardless 
 | Need delegation (`act` claim)? | Who calls the STS | Your agent changes |
 |---|---|---|
 | **No** — downstream only needs user identity | Data plane proxy (automatic) | None — configure `ExchangeOnly` on the policy |
-| **Yes** — downstream policies reference agent identity | Agent calls STS directly | Agent must be configured with STS URL + K8s SA token |
+| **Yes** — downstream policies reference agent identity | Agent calls STS directly | Agent must be initialized with STS `well_known_uri` |
 
 ### Gateway-Mediated Exchange (ExchangeOnly)
 
@@ -432,17 +432,17 @@ plugin.add_to_agent(my_agent)
 
 The plugin hooks into Google ADK's `before_run_callback` — before each agent run, it extracts the user's JWT from the session, exchanges it at the STS (with the actor token for delegation), caches the OBO token, and injects it as an `Authorization: Bearer` header on outbound MCP tool calls. Token caching respects JWT `exp` claims with a 5-second buffer.
 
-**Without the SDK**, you can call the STS directly via HTTP — the only requirement is knowing the well-known URI or token endpoint. No env var is needed if the agent hardcodes or is configured with the STS service name (reachable via K8s DNS within the cluster).
+**Without the SDK**, you can call the STS directly via HTTP. Fetch `/.well-known/oauth-authorization-server` to discover the `token_endpoint`, or call `/oauth2/token` directly if you already know the STS address. The STS is reachable within the cluster via K8s DNS at `enterprise-agentgateway.<namespace>.svc.cluster.local:7777`.
 
 ### Comparison
 
 | Aspect | Gateway-Mediated (`ExchangeOnly`) | Agent-Initiated |
 |---|---|---|
 | Who calls the STS? | Data plane proxy (automatic) | Agent application (explicit) |
-| Agent code changes? | **None** — transparent to the agent | Must configure STS URL + call STS API |
+| Agent code changes? | **None** — transparent to the agent | Must initialize SDK with `well_known_uri` or call STS `/oauth2/token` directly |
 | Backend type | MCP or non-MCP | Any (MCP, LLM, HTTP, A2A) |
 | Delegation (`act` claim)? | **No** — always impersonation | **Yes** — include actor token |
-| STS discovery | Auto-configured via `EnterpriseAgentgatewayParameters` | Agent configured with `well_known_uri` (SDK) or token endpoint URL |
+| STS discovery | Auto-configured via `EnterpriseAgentgatewayParameters` | SDK fetches `/.well-known/oauth-authorization-server` → `token_endpoint` |
 | When to use | Downstream only needs user identity | Downstream policies reference agent identity |
 
 ---
