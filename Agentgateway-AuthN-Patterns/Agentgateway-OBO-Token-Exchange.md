@@ -15,7 +15,7 @@
 5. [Impersonation (Token Swap)](#impersonation-token-swap)
 6. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
    - [Gateway-Mediated Exchange (ExchangeOnly)](#gateway-mediated-exchange-exchangeonly)
-   - [Agent-Initiated Exchange (Delegation)](#agent-initiated-exchange-delegation)
+   - [Agent-Initiated Exchange](#agent-initiated-exchange)
    - [How the Agent Discovers the STS](#how-the-agent-discovers-the-sts)
 7. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
 8. [STS Configuration](#sts-configuration)
@@ -314,10 +314,11 @@ User ──► Agent ──► AGW STS ──► Downstream
 
 The STS itself is **backend-agnostic** — it generates the same JWT regardless of whether the downstream is an MCP server, LLM provider, or HTTP API. The real question is **who calls the STS**, and that depends on whether you need delegation:
 
-| Need delegation (`act` claim)? | Who calls the STS | Your agent changes |
+| Scenario | Who calls the STS | Your agent changes |
 |---|---|---|
-| **No** — downstream only needs user identity | Data plane proxy (automatic) | None — configure `ExchangeOnly` on the policy |
-| **Yes** — downstream policies reference agent identity | Agent calls STS directly | Agent must be initialized with STS `well_known_uri` |
+| Downstream only needs user identity, zero code changes | Data plane proxy (automatic) | None — configure `ExchangeOnly` on the policy |
+| Need delegation (`act` claim) for audit trails or per-agent policies | Agent calls STS directly | Agent must be initialized with STS `well_known_uri` |
+| Need agent control over exchange (custom scopes, audience) without delegation | Agent calls STS directly (omit actor token) | Agent must be initialized with STS `well_known_uri` |
 
 ### Gateway-Mediated Exchange (ExchangeOnly)
 
@@ -412,9 +413,12 @@ spec:
 
 **Key behavior:** The downstream never sees the original IdP token — it receives only the STS-signed OBO JWT. For MCP backends, CEL-based RBAC policies on MCP tools can reference `sub` (user) from the OBO token for access control.
 
-### Agent-Initiated Exchange (Delegation)
+### Agent-Initiated Exchange
 
-When your downstream policies need to know **which agent** made the call (not just which user), the agent must call the STS directly. This is the only way to get an OBO token with both `sub` (user) and `act` (agent) claims — because the agent must provide its own K8s SA token as the `actor_token`.
+The agent calls the STS directly instead of relying on the proxy. This is required for **delegation** (to get both `sub` and `act` claims), but also supports **impersonation** when the agent needs control over the exchange (custom scopes, audience) without needing an `act` claim.
+
+- **Delegation:** Include `actor_token` (K8s SA JWT) → OBO token has `sub` + `act`. Requires `may_act` in the user's JWT.
+- **Impersonation:** Omit `actor_token` → OBO token has `sub` only. Same result as gateway-mediated, but agent controls the exchange parameters.
 
 This works for **any backend type** (MCP, LLM, HTTP, A2A).
 
@@ -1368,7 +1372,7 @@ sequenceDiagram
 | **Impersonation** | `sub` only | An exchange that preserves only the user's identity. The OBO token contains `sub` (user) with no `act` claim. The agent is invisible to downstream. |
 | **OBO Token** | — | The new JWT issued by the STS after exchange. Signed by the STS (not the original IdP). This is what the downstream service receives. |
 | **Gateway-Mediated** | — | The proxy (data plane) calls the STS automatically — your agent doesn't need to know the STS exists. Always produces impersonation tokens. |
-| **Agent-Initiated** | — | The agent calls the STS directly. Required for delegation (dual identity). |
+| **Agent-Initiated** | — | The agent calls the STS directly. Supports both delegation (with actor token) and impersonation (without). Required for delegation; optional for impersonation when the agent needs control over exchange parameters. |
 
 ---
 
