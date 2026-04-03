@@ -6,20 +6,157 @@
 
 ---
 
+## Glossary
+
+| Term | What It Means |
+|---|---|
+| **OBO (On-Behalf-Of)** | A pattern where a service (the agent) acts on behalf of a user. The resulting token proves both "who the user is" and optionally "which agent is acting for them." |
+| **STS (Security Token Service)** | A server that exchanges one token for another. You give it a user's JWT, and it gives you back a new JWT signed by the STS. AGW has one built in at port `7777`. |
+| **Subject Token** | The user's original JWT from the identity provider (Keycloak, Okta, Auth0, etc.). This is the token being exchanged — it represents "who the user is." |
+| **Actor Token** | The agent's identity token — a Kubernetes service account JWT. This represents "which agent is making the call." Only used in delegation. |
+| **Delegation** | An exchange that preserves both identities. The OBO token contains `sub` (user) + `act` (agent). Downstream can enforce policies on both. |
+| **Impersonation** | An exchange that preserves only the user's identity. The OBO token contains `sub` (user) with no `act` claim. The agent is invisible to downstream. |
+| **`may_act` Claim** | A claim in the user's JWT that explicitly authorizes a specific agent to perform delegation. Without it, the STS rejects delegation requests. |
+| **OBO Token** | The new JWT issued by the STS after exchange. Signed by the STS (not the original IdP). This is what the downstream service receives. |
+| **Gateway-Mediated** | The proxy (data plane) calls the STS automatically — your agent doesn't need to know the STS exists. Always produces impersonation tokens. |
+| **Agent-Initiated** | The agent calls the STS directly. Required for delegation (dual identity). |
+
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [How the STS Works](#how-the-sts-works)
-3. [Delegation (Dual Identity)](#delegation-dual-identity)
-4. [Impersonation (Token Swap)](#impersonation-token-swap)
-5. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
+1. [Glossary](#glossary)
+2. [Why Token Exchange?](#why-token-exchange)
+3. [End-to-End Walkthrough](#end-to-end-walkthrough)
+4. [Overview](#overview)
+5. [How the STS Works](#how-the-sts-works)
+6. [Delegation (Dual Identity)](#delegation-dual-identity)
+7. [Impersonation (Token Swap)](#impersonation-token-swap)
+8. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
    - [Gateway-Mediated Exchange (ExchangeOnly)](#gateway-mediated-exchange-exchangeonly)
    - [Agent-Initiated Exchange (Delegation)](#agent-initiated-exchange-delegation)
    - [How the Agent Discovers the STS](#how-the-agent-discovers-the-sts)
-6. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
-7. [STS Configuration](#sts-configuration)
-8. [Downstream Policy Enforcement](#downstream-policy-enforcement)
-9. [Reference](#reference)
+9. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
+10. [STS Configuration](#sts-configuration)
+11. [Downstream Policy Enforcement](#downstream-policy-enforcement)
+12. [Reference](#reference)
+
+---
+
+## Why Token Exchange?
+
+Without token exchange, you have two bad options for authenticating agent-to-service calls:
+
+**Option 1: Forward the user's IdP token directly.** The agent passes the user's Keycloak/Okta JWT straight to the downstream MCP server or API.
+
+Problems:
+- The downstream must trust and validate tokens from **every** IdP in your organization
+- The user's token may contain sensitive IdP-specific claims (`realm_access`, `session_state`) that leak to downstream services
+- There's no way to know **which agent** made the call — was it the chat agent? The data pipeline? A rogue script?
+- Tokens can be replayed against any service — they aren't scoped to a specific downstream
+
+**Option 2: Use a shared service account.** The agent authenticates with its own static credential, ignoring the user's identity entirely.
+
+Problems:
+- All requests look like they came from the same "service account" — you lose all user attribution
+- No per-user access control is possible downstream
+- Audit logs are useless — you can't tell who did what
+
+**Token exchange solves both problems.** The STS takes the user's IdP token and issues a new, clean JWT that:
+- Is signed by a **single trusted issuer** (the STS) — downstream services only need to trust one issuer
+- Contains the **user's identity** (`sub`) so per-user policies and audit trails work
+- Optionally contains the **agent's identity** (`act`) so you can enforce per-agent policies
+- Is **scoped to a specific downstream** (`aud`) so it can't be replayed against other services
+- **Strips IdP-specific claims** so internal IdP structure doesn't leak
+
+---
+
+## End-to-End Walkthrough
+
+Here's a concrete scenario to make the concepts tangible. Alice uses a chat agent that calls an MCP tool to query a customer database.
+
+### Scenario: Gateway-Mediated (Impersonation)
+
+Alice's agent routes through Agent Gateway. The gateway handles everything — Alice's agent doesn't know the STS exists.
+
+```
+1. Alice logs into the chat app → gets a Keycloak JWT
+   Token contains: sub="alice", scope="openid profile", realm_access={...}
+
+2. Alice's agent sends a request to the MCP server via Agent Gateway
+   Authorization: Bearer <alice's-keycloak-jwt>
+
+3. Agent Gateway intercepts the request (ExchangeOnly mode)
+   → Proxy extracts Alice's JWT from the Authorization header
+   → Proxy calls the STS: POST /oauth2/token
+     - subject_token = alice's Keycloak JWT
+     - resource = "service/default/mcp-backend.default.svc.cluster.local:8080"
+   → STS validates Alice's JWT against Keycloak's JWKS
+   → STS issues a new OBO JWT:
+     {
+       "iss": "enterprise-agentgateway....:7777",  ← STS issuer (not Keycloak)
+       "sub": "alice",                              ← Alice's identity preserved
+       "aud": "service/default/mcp-backend...",     ← scoped to this backend
+       "scope": "openid profile",                   ← scopes preserved
+       "exp": 1712275200                            ← 24h from now
+     }
+     No "act" claim — the agent is invisible.
+
+4. Agent Gateway forwards the request to the MCP server
+   Authorization: Bearer <sts-signed-obo-jwt>
+   (Alice's original Keycloak JWT is gone — MCP server never sees it)
+
+5. MCP server validates the OBO JWT
+   → Checks issuer = STS ✓ (only needs to trust one issuer)
+   → Checks aud matches its own identity ✓
+   → Reads sub = "alice" → applies Alice's permissions
+   → Returns data to Alice's agent
+```
+
+**Result:** Alice's identity flows through cleanly, the MCP server trusts one issuer, and no IdP-specific claims leaked. But there's no record of which agent made the call.
+
+### Scenario: Agent-Initiated (Delegation)
+
+Same setup, but now the organization wants audit trails showing which agent accessed data on behalf of which user. The agent calls the STS directly.
+
+```
+1. Alice logs in → gets a Keycloak JWT (same as before)
+   This time, Alice's token also contains:
+   "may_act": {
+     "sub": "system:serviceaccount:default:chat-agent",
+     "iss": "https://kubernetes.default.svc.cluster.local"
+   }
+   (Added by Keycloak admin — authorizes the chat-agent to act for Alice)
+
+2. The chat-agent receives Alice's request and her JWT
+
+3. The chat-agent calls the STS directly (not via the proxy):
+   POST http://enterprise-agentgateway:7777/oauth2/token
+     - subject_token = Alice's Keycloak JWT (with may_act)
+     - actor_token = chat-agent's own K8s service account JWT
+   → STS validates Alice's JWT (JWKS) ✓
+   → STS validates the agent's K8s SA token (TokenReview) ✓
+   → STS checks: does may_act.sub match actor.sub? ✓
+   → STS issues an OBO JWT:
+     {
+       "iss": "enterprise-agentgateway....:7777",
+       "sub": "alice",
+       "act": {                                      ← agent identity included
+         "sub": "system:serviceaccount:default:chat-agent",
+         "iss": "https://kubernetes.default.svc.cluster.local"
+       },
+       "aud": "service/default/mcp-backend...",
+       "scope": "openid profile"
+     }
+
+4. The chat-agent sends the OBO JWT to the MCP server
+   Authorization: Bearer <sts-signed-obo-jwt-with-act>
+
+5. MCP server validates the OBO JWT
+   → sub = "alice" → applies Alice's permissions ✓
+   → act.sub = "chat-agent" → checks agent is allowed to call this tool ✓
+   → Audit log: "alice via chat-agent called query_database"
+```
+
+**Result:** Full audit trail, per-agent policies, and Alice's identity preserved. The trade-off: the agent needs to know about the STS and integrate with it.
 
 ---
 
@@ -34,7 +171,7 @@ The STS supports two exchange modes that differ in whether the **agent's identit
 | **Delegation** | Required (K8s SA token) | Present (`sub` + `iss` of agent) | Policies need both user AND agent identity |
 | **Impersonation** | Not provided | Absent | Downstream sees only the user, agent is transparent |
 
-Both modes work identically across MCP and non-MCP (LLM, HTTP) downstreams — the STS generates the same JWT structure regardless of backend type. The difference is in how the data plane proxy is configured to trigger the exchange.
+Both modes work identically across MCP and non-MCP (LLM, HTTP) downstreams — the STS generates the same JWT structure regardless of backend type. The difference is in who calls the STS — the proxy (gateway-mediated) or the agent (agent-initiated).
 
 ---
 
