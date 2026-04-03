@@ -176,21 +176,6 @@ When the agent needs to call an upstream API requiring OAuth credentials that do
 
 ---
 
-# Authorization
-
----
-
-## RBAC Tool-Level Access Control
-
-After authentication (via any flow), apply per-tool authorization using CEL expressions evaluated against JWT claims. Controls which users or groups can invoke specific MCP tools.
-
-> **Docs:** [Control Access to Tools](https://docs.solo.io/agentgateway/2.2.x/mcp/tool-access/)
-> **API:** [EnterpriseAgentgatewayPolicyTraffic (rbac)](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewaytrafficpolicy)
-
-![RBAC Tool-Level Access](images/12-rbac-tool-access.png)
-
----
-
 # Decision Flowchart
 
 ---

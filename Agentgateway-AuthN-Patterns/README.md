@@ -1,6 +1,6 @@
 # Agent Gateway Auth Patterns
 
-Comprehensive authorization audit of all authentication and authorization patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/).
+Comprehensive audit of all authentication patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/).
 
 All patterns documented in **[agentgateway-auth-patterns.md](agentgateway-auth-patterns.md)** (single-page reference) and as individual pages linked below.
 
@@ -22,7 +22,6 @@ All patterns documented in **[agentgateway-auth-patterns.md](agentgateway-auth-p
 | **Upstream Auth** | **[Claim-Based Token Mapping](flows/flow-07-claim-based-mapping.md)** | Map JWT claims (sub, team) to per-user/group static tokens via CEL transformation |
 | | **[Static Secret Injection](flows/flow-06-static-secret.md)** | Validate inbound JWT, replace with a shared static credential from K8s secret |
 | **Credential Gathering** | **[Elicitation](flows/flow-03-elicitation.md)** | Out-of-band OAuth flow to collect upstream API credentials when they don't exist yet |
-| **Authorization** | **[RBAC Tool-Level Access](flows/flow-12-rbac-tool-access.md)** | Per-tool access control via CEL expressions on JWT claims (layered on top of any auth flow) |
 
 Plus a **[Decision Flowchart](flows/decision-flowchart.md)** to help choose the right pattern for a given scenario.
 

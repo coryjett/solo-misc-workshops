@@ -4,11 +4,17 @@ Workshops, walkthroughs, and reference materials for Solo.io products.
 
 ## Contents
 
-### Agent Gateway — Auth Patterns
+### Agent Gateway — Authentication Patterns
 
-Comprehensive authorization audit covering all 13 authentication and authorization patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/) — OIDC, OBO delegation/impersonation, elicitation, passthrough, static secrets, claim-based mapping, API key, basic auth, ext auth, MCP OAuth + DCR, RBAC, and gateway-mediated token exchange.
+Comprehensive audit of all authentication patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/) — OIDC, OBO delegation/impersonation, elicitation, passthrough, static secrets, claim-based mapping, API key, basic auth, ext auth, MCP OAuth + DCR, mTLS, and gateway-mediated token exchange.
 
-- **[Auth Patterns guide with diagrams](Agentgateway-Auth-Patterns/)**
+- **[Authentication Patterns guide with diagrams](Agentgateway-AuthN-Patterns/)**
+
+### Agent Gateway — Authorization Patterns
+
+Comprehensive audit of all authorization patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/) — RBAC (MCP tool-level and LLM route access), rate limiting (LLM and MCP), guardrails (regex, moderation, Bedrock, Model Armor, webhook, multi-layered), and CORS.
+
+- **[Authorization Patterns guide with diagrams](Agentgateway-AuthZ-Patterns/)**
 
 ### Agent Gateway — OBO Walkthroughs
 
