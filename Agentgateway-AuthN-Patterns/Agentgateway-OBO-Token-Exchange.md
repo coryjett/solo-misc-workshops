@@ -10,7 +10,7 @@
 
 1. [Why Token Exchange?](#why-token-exchange)
 2. [Overview](#overview)
-   - [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-inbound-auth)
+   - [How Token Exchange Relates to JWT Auth and MCP Auth](#how-token-exchange-relates-to-jwt-auth-and-mcp-auth)
 3. [How the STS Works](#how-the-sts-works)
 4. [Delegation (Dual Identity)](#delegation-dual-identity)
 5. [Impersonation (Token Swap)](#impersonation-token-swap)
@@ -69,9 +69,9 @@ The STS supports two exchange modes that differ in whether the **agent's identit
 
 Both modes work identically across MCP and non-MCP (LLM, HTTP) downstreams — the STS generates the same JWT structure regardless of backend type. The difference is in who calls the STS — the proxy (gateway-mediated) or the agent (agent-initiated).
 
-### How Token Exchange Relates to Inbound Auth
+### How Token Exchange Relates to JWT Auth and MCP Auth
 
-Token exchange is **not** an authentication method — it's a **token transformation layer**. It takes a JWT the client already has and swaps it for an OBO JWT before the request reaches the downstream. But there's important nuance in how it interacts with other auth methods.
+Token exchange is **not** an authentication method — it's a **token transformation layer**. It takes a JWT the client already has and swaps it for an OBO JWT before the request reaches the downstream. But there's important nuance in how it interacts with [JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) and [MCP Auth](https://docs.solo.io/agentgateway/2.2.x/mcp/auth/setup/).
 
 **There are two separate concerns:**
 
@@ -84,8 +84,8 @@ Token exchange is **not** an authentication method — it's a **token transforma
 │                                                                             │
 │  ┌───────────────────────┐          ┌────────────────────────────────────┐  │
 │  │ MCP OAuth + DCR       │          │                                    │  │
-│  │ OIDC (Auth Code Flow) │ ──JWT──► │ Option A: Forward as-is            │  │
-│  │ API Key               │          │   (passthrough or JWT validation)   │  │
+│  │ OIDC (Auth Code Flow) │ ──JWT──► │ Option A: JWT Auth / MCP Auth      │  │
+│  │ API Key               │          │   (validate + forward as-is)       │  │
 │  │ mTLS                  │          │                                    │  │
 │  │                       │          │ Option B: Token exchange            │  │
 │  │                       │          │   (STS validates + issues OBO JWT)  │  │
@@ -94,28 +94,30 @@ Token exchange is **not** an authentication method — it's a **token transforma
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Where validation happens — and the overlap:**
+**The overlap:** [JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) and token exchange both validate JWTs — they use the same mechanism (`issuer`, `audiences`, `jwks` fields on `EnterpriseAgentgatewayPolicy`). The difference is **what issuer they trust** and **where in the flow they sit**:
 
-| Scenario | Who validates the IdP JWT? | What does the downstream receive? |
-|---|---|---|
-| **JWT Auth only** (no exchange) | `JWTAuthentication` or `mcp.authentication` policy | Original IdP JWT — downstream must trust the IdP |
-| **Token exchange only** | STS `subjectValidator` (during exchange) | OBO JWT — downstream trusts only the STS |
-| **JWT Auth + token exchange** | Both (JWT auth policy validates first, then STS `subjectValidator` validates again during exchange) | OBO JWT — double validation is redundant but not harmful |
+| Scenario | Who validates the IdP JWT? | `mcp.authentication` issuer | What does the downstream receive? |
+|---|---|---|---|
+| **[JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) only** (no exchange) | `mcp.authentication` or `traffic.jwtAuthentication` policy | IdP (Keycloak, Okta, etc.) | Original IdP JWT — downstream must trust the IdP |
+| **Token exchange only** | STS `subjectValidator` (during exchange) | STS (`enterprise-agentgateway:7777`) | OBO JWT — downstream trusts only the STS |
+| **JWT Auth + token exchange** | Both validate the IdP JWT (redundant) | STS | OBO JWT — double validation, not harmful |
 
-The key insight: **when token exchange is enabled, the STS's `subjectValidator` already validates the IdP JWT**. You don't need a separate `JWTAuthentication` policy for inbound validation — the exchange itself handles it. Adding one isn't wrong, but it's redundant.
+The key insight: **when token exchange is enabled, the STS's `subjectValidator` already validates the IdP JWT**. A separate [JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) policy is not required — the exchange itself handles validation. Adding one isn't wrong, but it's redundant.
 
-What token exchange does **not** replace is the **client-side auth flow** — how the client obtains the JWT in the first place. MCP OAuth + DCR, OIDC Authorization Code Flow, etc. are about client registration and token acquisition. Token exchange is about what the gateway does with that token after it arrives.
+The `mcp.authentication` block you see in the token exchange examples (e.g., Example 1 Step 4) is the **same** [`JWTAuthentication`](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#jwtauthentication) mechanism documented in the [JWT Auth setup guide](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) — it's just configured to trust the **STS issuer** instead of the IdP issuer, because after the exchange, the downstream only sees OBO tokens signed by the STS.
+
+What token exchange does **not** replace is the **client-side auth flow** — how the client obtains the JWT in the first place. [MCP OAuth + DCR](https://docs.solo.io/agentgateway/2.2.x/mcp/auth/about/), OIDC Authorization Code Flow, etc. are about client registration and token acquisition. Token exchange is about what the gateway does with that token after it arrives.
 
 **Example: MCP OAuth + DCR with token exchange**
 
-1. MCP client (Claude Code, VS Code) discovers the gateway, registers via DCR, completes OAuth → gets IdP JWT *(client-side — MCP OAuth)*
+1. MCP client (Claude Code, VS Code) discovers the gateway, registers via DCR, completes OAuth → gets IdP JWT *(client-side — [MCP Auth](https://docs.solo.io/agentgateway/2.2.x/mcp/auth/setup/))*
 2. Client sends MCP request with IdP JWT → gateway
 3. Gateway proxy intercepts, calls STS with IdP JWT as `subject_token`
 4. STS validates IdP JWT (`subjectValidator`), issues OBO JWT *(gateway-side — token exchange)*
 5. Proxy forwards request with OBO JWT → MCP backend
-6. MCP backend validates OBO JWT against STS issuer (`mcp.authentication`)
+6. MCP backend validates OBO JWT against STS issuer (`mcp.authentication` — same mechanism as [JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/), different issuer)
 
-MCP OAuth handles step 1 (how the client gets the token). Token exchange handles steps 3-5 (what the gateway does with it). They're complementary — one is client-side, the other is gateway-side.
+MCP Auth handles step 1 (how the client gets the token). Token exchange handles steps 3-5 (what the gateway does with it). Step 6 uses the same JWT validation mechanism as JWT Auth, just pointed at the STS.
 
 ---
 
@@ -711,7 +713,7 @@ Every token exchange deployment requires **three things**: (1) the STS itself (H
 
 The simplest setup. The built-in STS runs on the control plane, and the proxy swaps tokens automatically. No agent code changes needed.
 
-> **Note:** This example shows the token exchange configuration only. Clients still need a way to obtain an IdP JWT (via [MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md), [OIDC](flows/flow-01-oidc-auth.md), etc.). The STS's `subjectValidator` validates the IdP JWT during exchange — a separate `JWTAuthentication` policy is not required but can be added. See [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-inbound-auth).
+> **Note:** This example shows the token exchange configuration only. Clients still need a way to obtain an IdP JWT (via [MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md), [OIDC](flows/flow-01-oidc-auth.md), etc.). The STS's `subjectValidator` validates the IdP JWT during exchange — a separate `JWTAuthentication` policy is not required but can be added. See [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-jwt-auth-and-mcp-auth).
 
 **Step 1 — Enable the built-in STS (Helm values):**
 
@@ -863,7 +865,7 @@ Same STS, but the agent calls it directly. This supports **both** delegation and
 
 Requires the `agentsts-adk` SDK or direct HTTP calls.
 
-> **Note:** This example shows the token exchange configuration only. Clients still need a way to obtain an IdP JWT (via [MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md), [OIDC](flows/flow-01-oidc-auth.md), etc.). The agent receives the user's JWT and exchanges it directly with the STS. See [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-inbound-auth).
+> **Note:** This example shows the token exchange configuration only. Clients still need a way to obtain an IdP JWT (via [MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md), [OIDC](flows/flow-01-oidc-auth.md), etc.). The agent receives the user's JWT and exchanges it directly with the STS. See [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-jwt-auth-and-mcp-auth).
 
 **Step 1 — Enable the built-in STS (Helm values):**
 
@@ -993,7 +995,7 @@ spec:
 
 Token exchange works the same for non-MCP backends. The difference is how the downstream validates the OBO token — use `traffic.jwtAuthentication` instead of `backend.mcp.authentication`.
 
-> **Note:** This example shows the token exchange configuration only. Clients still need a way to obtain an IdP JWT (via [MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md), [OIDC](flows/flow-01-oidc-auth.md), etc.). The STS's `subjectValidator` validates the IdP JWT during exchange — a separate `JWTAuthentication` policy is not required but can be added. See [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-inbound-auth).
+> **Note:** This example shows the token exchange configuration only. Clients still need a way to obtain an IdP JWT (via [MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr.md), [OIDC](flows/flow-01-oidc-auth.md), etc.). The STS's `subjectValidator` validates the IdP JWT during exchange — a separate `JWTAuthentication` policy is not required but can be added. See [How Token Exchange Relates to Inbound Auth](#how-token-exchange-relates-to-jwt-auth-and-mcp-auth).
 
 **Step 1 — Enable the built-in STS (Helm values):**
 
