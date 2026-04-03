@@ -371,23 +371,42 @@ This works for **any backend type** (MCP, LLM, HTTP, A2A).
 
 #### How the Agent Discovers the STS
 
-There is no automatic STS discovery for agent-initiated exchange — the agent must be explicitly configured with the STS endpoint. The STS runs on the control plane service at port `7777`, so within the cluster the endpoint is:
+The agent discovers the STS token endpoint via **OAuth well-known configuration** — the standard `/.well-known/openid-configuration` endpoint that returns the `token_endpoint` URL. The AGW STS exposes this at:
 
 ```
-http://enterprise-agentgateway.<namespace>.svc.cluster.local:7777/token
+http://enterprise-agentgateway.<namespace>.svc.cluster.local:7777/.well-known/openid-configuration
 ```
 
-Common configuration patterns:
+The `agentsts-adk` SDK ([PyPI](https://pypi.org/project/agentsts-adk/)) uses this pattern. You pass the `well_known_uri` at initialization, and the SDK fetches the `token_endpoint` from the well-known response automatically:
 
-| Method | Example |
-|---|---|
-| **Environment variable** | `STS_URL=http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777` injected into the agent's Pod spec |
-| **K8s DNS** | Agent resolves the control plane service name directly (same cluster) |
-| **SDK config** | `agentsts-adk` Python package configured with the STS URL at initialization |
+```python
+from agentsts.adk import ADKSTSIntegration, ADKTokenPropagationPlugin
 
-The agent needs two tokens to perform the exchange:
-1. **Subject token** — the user's IdP JWT (passed to the agent by the client or extracted from the inbound request)
-2. **Actor token** — the agent's own K8s service account token, typically available at `/var/run/secrets/kubernetes.io/serviceaccount/token` or generated via `kubectl create token`
+# Initialize with the STS well-known URI
+sts = ADKSTSIntegration(
+    well_known_uri="http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/.well-known/openid-configuration",
+    # Actor token: defaults to /var/run/secrets/kubernetes.io/serviceaccount/token (auto-mounted by K8s)
+    # Or override with a custom path:
+    # service_account_token_path="/path/to/custom/token",
+    # Or provide a dynamic fetch callback:
+    # fetch_actor_token=lambda: get_fresh_token(),
+)
+
+# Use as a Google ADK plugin — automatically exchanges tokens before MCP tool calls
+plugin = ADKTokenPropagationPlugin(sts_integration=sts)
+plugin.add_to_agent(my_agent)
+```
+
+**How the SDK handles tokens:**
+
+| Token | Source | Details |
+|---|---|---|
+| **Subject token** (user JWT) | `session.state["headers"]["Authorization"]` | Extracted automatically from the ADK session's request headers. Custom source via `get_subject_token` callback. |
+| **Actor token** (agent identity) | K8s SA token file | Defaults to `/var/run/secrets/kubernetes.io/serviceaccount/token` (auto-mounted by K8s in every pod). Override via `service_account_token_path` or `fetch_actor_token` callback for dynamic fetching. |
+
+The plugin hooks into Google ADK's `before_run_callback` — before each agent run, it extracts the user's JWT from the session, exchanges it at the STS (with the actor token for delegation), caches the OBO token, and injects it as an `Authorization: Bearer` header on outbound MCP tool calls. Token caching respects JWT `exp` claims with a 5-second buffer.
+
+**Without the SDK**, you can call the STS directly via HTTP — the only requirement is knowing the well-known URI or token endpoint. No env var is needed if the agent hardcodes or is configured with the STS service name (reachable via K8s DNS within the cluster).
 
 ### Comparison
 
@@ -397,7 +416,7 @@ The agent needs two tokens to perform the exchange:
 | Agent code changes? | **None** — transparent to the agent | Must configure STS URL + call STS API |
 | Backend type | MCP or non-MCP | Any (MCP, LLM, HTTP, A2A) |
 | Delegation (`act` claim)? | **No** — always impersonation | **Yes** — include actor token |
-| STS discovery | Auto-configured via `EnterpriseAgentgatewayParameters` | Agent must be explicitly configured (env var, SDK) |
+| STS discovery | Auto-configured via `EnterpriseAgentgatewayParameters` | Agent configured with `well_known_uri` (SDK) or token endpoint URL |
 | When to use | Downstream only needs user identity | Downstream policies reference agent identity |
 
 ---
