@@ -2,10 +2,7 @@
 
 Comprehensive authorization audit of all authentication and authorization patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/).
 
-## Formats
-
-- **[Markdown with diagrams](agent-gateway-token-flows.md)** — source of truth, viewable on GitHub with rendered diagrams
-- **[PDF with linked TOC](Agent-Gateway-Token-Flows.pdf)** — printable version with rendered diagrams, styled headers, and clickable table of contents
+All patterns documented in **[agent-gateway-token-flows.md](agent-gateway-token-flows.md)** (single-page reference) and as individual pages linked below.
 
 ## Auth Patterns
 
