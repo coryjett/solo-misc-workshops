@@ -48,7 +48,7 @@ There are two ways to call the STS, depending on who performs the exchange:
 **Gateway-mediated exchange** — the data plane proxy calls the STS automatically (`ExchangeOnly` mode). It sends only the subject token and resource — **no actor token**. This means gateway-mediated exchange always produces **impersonation-style** tokens (no `act` claim):
 
 ```
-POST /token HTTP/1.1
+POST /oauth2/token HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
 Authorization: Bearer <sts-auth-token>
 
@@ -61,7 +61,7 @@ grant_type=urn:ietf:params:oauth:grant-type:token-exchange
 **Agent-initiated exchange** — the agent calls the STS directly. For **delegation**, it includes both the subject token and actor token. For **impersonation**, it omits the actor token:
 
 ```
-POST /token HTTP/1.1
+POST /oauth2/token HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
 Authorization: Bearer <api-auth-token>
 
@@ -303,13 +303,13 @@ metadata:
 spec:
   env:
   - name: STS_URI
-    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/token
+    value: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/oauth2/token
   - name: STS_AUTH_TOKEN
     value: /var/run/secrets/sts-tokens/sts-token
 ```
 
 The Gateway references this via `infrastructure.parametersRef`, and the control plane injects the env vars into the proxy pod automatically:
-- **`STS_URI`** — the STS `/token` endpoint URL
+- **`STS_URI`** — the STS `/oauth2/token` endpoint URL
 - **`STS_AUTH_TOKEN`** — path to a token file the proxy uses to authenticate its own calls to the STS (validated by the API Validator). Falls back to `/var/run/secrets/sts-tokens/sts-token` if not set.
 
 **For MCP backends**, the downstream MCP authentication policy validates the OBO token against the **STS issuer** (not the original IdP):
@@ -371,20 +371,46 @@ This works for **any backend type** (MCP, LLM, HTTP, A2A).
 
 #### How the Agent Discovers the STS
 
-The agent discovers the STS token endpoint via **OAuth well-known configuration** — the standard `/.well-known/openid-configuration` endpoint that returns the `token_endpoint` URL. The AGW STS exposes this at:
+The agent discovers the STS token endpoint via **OAuth Authorization Server Metadata** ([RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414)). The AGW STS exposes a well-known endpoint at:
 
 ```
-http://enterprise-agentgateway.<namespace>.svc.cluster.local:7777/.well-known/openid-configuration
+http://enterprise-agentgateway.<namespace>.svc.cluster.local:7777/.well-known/oauth-authorization-server
 ```
 
-The `agentsts-adk` SDK ([PyPI](https://pypi.org/project/agentsts-adk/)) uses this pattern. You pass the `well_known_uri` at initialization, and the SDK fetches the `token_endpoint` from the well-known response automatically:
+**Example response** (from a live AGW STS):
+
+```json
+{
+  "grant_types_supported": [
+    "urn:ietf:params:oauth:grant-type:token-exchange"
+  ],
+  "issuer": "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777",
+  "subject_types_supported": [
+    "public"
+  ],
+  "token_endpoint": "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/oauth2/token",
+  "token_endpoint_auth_methods_supported": [
+    "none"
+  ],
+  "token_expiration": 86400,
+  "token_types_supported": [
+    "urn:ietf:params:oauth:token-type:jwt"
+  ]
+}
+```
+
+The SDK reads `token_endpoint` from this response to know where to send exchange requests. Note the token endpoint path is `/oauth2/token` (not `/token`). The `token_endpoint` value omits the scheme — the SDK automatically prepends it from the `well_known_uri`.
+
+The STS also exposes its **JWKS** (public signing keys) at `/.well-known/jwks.json` — downstream services use this to validate OBO token signatures.
+
+The `agentsts-adk` SDK ([PyPI](https://pypi.org/project/agentsts-adk/)) wraps this discovery. You pass the `well_known_uri` at initialization, and the SDK fetches the `token_endpoint` automatically:
 
 ```python
 from agentsts.adk import ADKSTSIntegration, ADKTokenPropagationPlugin
 
 # Initialize with the STS well-known URI
 sts = ADKSTSIntegration(
-    well_known_uri="http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/.well-known/openid-configuration",
+    well_known_uri="http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/.well-known/oauth-authorization-server",
     # Actor token: defaults to /var/run/secrets/kubernetes.io/serviceaccount/token (auto-mounted by K8s)
     # Or override with a custom path:
     # service_account_token_path="/path/to/custom/token",
@@ -557,7 +583,7 @@ tokenExchange:
 |---|---|---|---|
 | **Subject** | Validates the user's JWT (the token being exchanged) | `remote` (JWKS) | Signature, issuer, expiration, `may_act` (delegation) |
 | **Actor** | Validates the agent's identity token | `k8s` | K8s SA token via TokenReview API |
-| **API** | Validates the caller's auth to the STS `/token` endpoint | `remote` or `k8s` | Prevents unauthorized parties from calling the STS |
+| **API** | Validates the caller's auth to the STS `/oauth2/token` endpoint | `remote` or `k8s` | Prevents unauthorized parties from calling the STS |
 
 **Validator types:**
 
