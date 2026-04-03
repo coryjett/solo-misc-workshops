@@ -854,4 +854,4 @@ kubectl delete namespace agentgateway-system
 - [About OBO and Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/about/) -- Conceptual overview
 - [Enterprise API Reference](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/) -- EnterpriseAgentgatewayPolicy, TokenExchangeMode
 - [Helm Values Reference](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/) -- tokenExchange values
-- [Auth Patterns](../Agentgateway-Auth-Patterns/agent-gateway-auth-patterns.md) -- All 13 auth pattern diagrams including Flow 13
+- [Auth Patterns](../Agentgateway-Auth-Patterns/agentgateway-auth-patterns.md) -- All 13 auth pattern diagrams including Flow 13
