@@ -43,7 +43,22 @@ Both modes work identically across MCP and non-MCP (LLM, HTTP) downstreams — t
 
 ### Token Exchange Request (RFC 8693)
 
-The agent (or data plane proxy) sends a `POST` to the STS `/token` endpoint:
+There are two ways to call the STS, depending on who performs the exchange:
+
+**Gateway-mediated exchange** — the data plane proxy calls the STS automatically (`ExchangeOnly` mode). It sends only the subject token and resource — **no actor token**. This means gateway-mediated exchange always produces **impersonation-style** tokens (no `act` claim):
+
+```
+POST /token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer <sts-auth-token>
+
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+&subject_token=<user-jwt>
+&subject_token_type=urn:ietf:params:oauth:token-type:jwt
+&resource=<upstream-service-name>      # becomes the "aud" claim (e.g., service/default/mcp-backend.default.svc.cluster.local:8080)
+```
+
+**Agent-initiated exchange** — the agent calls the STS directly. For **delegation**, it includes both the subject token and actor token. For **impersonation**, it omits the actor token:
 
 ```
 POST /token HTTP/1.1
@@ -53,12 +68,12 @@ Authorization: Bearer <api-auth-token>
 grant_type=urn:ietf:params:oauth:grant-type:token-exchange
 &subject_token=<user-jwt>
 &subject_token_type=urn:ietf:params:oauth:token-type:jwt
-&resource=<upstream-service-name>      # becomes the "aud" claim in the OBO token
-&actor_token=<k8s-sa-token>            # present for delegation, absent for impersonation
+&actor_token=<k8s-sa-token>            # present for delegation, omit for impersonation
 &actor_token_type=urn:ietf:params:oauth:token-type:jwt
+&resource=<upstream-service-name>      # optional — sets the "aud" claim
 ```
 
-When the **data plane proxy** performs the exchange (gateway-mediated / `ExchangeOnly` mode), it sends the `resource` parameter set to the upstream service name (e.g., `service/default/mcp-backend.default.svc.cluster.local:8080`). The STS uses this as the `aud` claim in the OBO token. When an **agent** calls the STS directly, it can set `resource`, `audience`, and/or `scope` per RFC 8693.
+The proxy auto-sets `resource` to the upstream Kubernetes service name. When an agent calls the STS directly, it can set `resource`, `audience`, and/or `scope` per RFC 8693.
 
 ---
 
@@ -338,17 +353,20 @@ In this mode, the data plane proxy uses:
 - `STS_URI` — the STS endpoint URL (auto-configured from Helm)
 - `STS_AUTH_TOKEN` — a token to authenticate the proxy's own calls to the STS (validated by the API Validator)
 
-The client never calls the STS directly. This is the simplest integration path and works well when the gateway owns the trust boundary.
+**Important:** Gateway-mediated exchange is always **impersonation-style**. The proxy sends only `subject_token` and `resource` to the STS — it does **not** send an `actor_token`. This means the resulting OBO JWT will have a `sub` claim (user) but **no `act` claim** (agent). If you need delegation (dual identity with `act`), the agent must call the STS directly with both the subject token and its own K8s SA token as the actor token.
+
+The client never calls the STS directly. This is the simplest integration path and works well when the gateway owns the trust boundary and downstream services don't need to know which agent made the call.
 
 ### Comparison
 
-| Aspect | MCP (ExchangeOnly) | Non-MCP (Agent-Initiated) | Gateway-Mediated |
-|---|---|---|---|
-| Who calls the STS? | Data plane proxy | Agent application | Data plane proxy |
-| Client awareness | None — transparent | Agent must integrate STS SDK | None — transparent |
-| Token in flight to backend | OBO JWT only | OBO JWT only | OBO JWT only |
-| Backend type | MCP only | Any (LLM, HTTP, A2A) | MCP or non-MCP |
-| Agent SDK required? | No | Yes (`agentsts-adk`) | No |
+| Aspect | Gateway-Mediated (`ExchangeOnly`) | Agent-Initiated |
+|---|---|---|
+| Who calls the STS? | Data plane proxy (automatic) | Agent application (explicit) |
+| Client awareness | None — transparent | Agent must integrate STS SDK (`agentsts-adk`) |
+| Token in flight to backend | OBO JWT only | OBO JWT only |
+| Backend type | MCP or non-MCP | Any (LLM, HTTP, A2A) |
+| Delegation support? | **No** — always impersonation (no `act` claim) | **Yes** — include actor token for delegation |
+| Agent SDK required? | No | Yes |
 
 ---
 
