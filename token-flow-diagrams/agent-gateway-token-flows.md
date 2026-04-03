@@ -176,7 +176,7 @@ sequenceDiagram
     participant Backend as Backend (LLM / MCP / API)
 
     Note over Client: Client already authenticated<br/>(has token from its own OIDC flow or API key)
-    Client->>AGW: Request + Authorization: Bearer <token>
+    Client->>AGW: Request + Authorization: Bearer [token]
     AGW->>AGW: Passthrough (no validation/exchange)
     AGW->>Backend: Forward request with same token
     Backend-->>AGW: Response
@@ -199,11 +199,11 @@ sequenceDiagram
     participant K8s as K8s Secret<br/>(opaque token)
     participant Backend as Upstream API
 
-    Client->>AGW: Request + Authorization: Bearer <user JWT>
+    Client->>AGW: Request + Authorization: Bearer [user JWT]
     AGW->>AGW: Validate JWT (jwtAuthentication)
     AGW->>K8s: Read secretRef / inline key
     K8s-->>AGW: Static opaque token
-    AGW->>Backend: Request + Authorization: Bearer <opaque token>
+    AGW->>Backend: Request + Authorization: Bearer [opaque token]
     Backend-->>AGW: Response
     AGW-->>Client: Response
 
@@ -225,11 +225,11 @@ sequenceDiagram
     participant AGW as Agent Gateway Proxy
     participant Backend as Upstream API
 
-    Client->>AGW: Request + Authorization: Bearer <OIDC JWT>
+    Client->>AGW: Request + Authorization: Bearer [OIDC JWT]
     AGW->>AGW: 1. Validate JWT (jwtAuthentication)
     AGW->>AGW: 2. Extract claim (e.g., jwt.sub, jwt.team)
     AGW->>AGW: 3. CEL transformation:<br/>jwt.team == 'engineering'<br/>? 'Bearer opaque-token-eng'<br/>: 'Bearer opaque-token-default'
-    AGW->>Backend: Request + Authorization: Bearer <mapped opaque token>
+    AGW->>Backend: Request + Authorization: Bearer [mapped opaque token]
     Backend-->>AGW: Response
     AGW-->>Client: Response
 
@@ -254,7 +254,7 @@ sequenceDiagram
     participant K8s as K8s Secrets<br/>(API Keys)
     participant Backend as Backend
 
-    Client->>AGW: Request + Authorization: Bearer <API key>
+    Client->>AGW: Request + Authorization: Bearer [API key]
     AGW->>K8s: Lookup secret (by label selector or name)
     K8s-->>AGW: Secret found, compare key
 
@@ -283,7 +283,7 @@ sequenceDiagram
     participant K8s as K8s Secret<br/>(hashed credentials)
     participant Backend as Backend
 
-    Client->>AGW: Request + Authorization: Basic <base64(user:pass)>
+    Client->>AGW: Request + Authorization: Basic [base64 user:pass]
     AGW->>AGW: Decode Base64 credentials
     AGW->>K8s: Read secret with hashed passwords
     AGW->>AGW: Verify password hash (APR1)
@@ -437,7 +437,7 @@ sequenceDiagram
     STS-->>AGW: New token (signed by STS)
 
     Note over User,Agent: Phase 3: Forward to Agent
-    AGW->>Agent: Request + Authorization: Bearer <exchanged token><br/>(original IdP token never forwarded)
+    AGW->>Agent: Request + Authorization: Bearer [exchanged token]<br/>(original IdP token never forwarded)
     Agent->>Agent: Validate token (trusts STS issuer)
     Agent-->>AGW: Response
     AGW-->>User: Result
