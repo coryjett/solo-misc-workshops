@@ -6,6 +6,24 @@
 
 ---
 
+## Table of Contents
+
+1. [Overview](#overview)
+2. [How the STS Works](#how-the-sts-works)
+3. [Delegation (Dual Identity)](#delegation-dual-identity)
+4. [Impersonation (Token Swap)](#impersonation-token-swap)
+5. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
+   - [Gateway-Mediated Exchange (ExchangeOnly)](#gateway-mediated-exchange-exchangeonly)
+   - [Agent-Initiated Exchange (Delegation)](#agent-initiated-exchange-delegation)
+   - [How the Agent Discovers the STS](#how-the-agent-discovers-the-sts)
+6. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
+7. [STS Configuration](#sts-configuration)
+8. [Downstream Policy Enforcement](#downstream-policy-enforcement)
+9. [Microsoft Entra ID (Azure AD) OBO](#microsoft-entra-id-azure-ad-obo)
+10. [Reference](#reference)
+
+---
+
 ## Overview
 
 Solo Enterprise for Agent Gateway includes a **built-in Security Token Service (STS)** that implements RFC 8693 (OAuth 2.0 Token Exchange). The STS runs on the control plane at port `7777` and enables agents and services to act on behalf of users through token delegation — without requiring your identity provider (IdP) to natively support RFC 8693.
