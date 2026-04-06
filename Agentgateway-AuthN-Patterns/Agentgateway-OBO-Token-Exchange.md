@@ -24,8 +24,9 @@
 9. [Downstream Policy Enforcement](#downstream-policy-enforcement)
 10. [End-to-End Walkthrough](#end-to-end-walkthrough)
 11. [FAQ: Why JWTs and Not Opaque Tokens?](#faq-why-jwts-and-not-opaque-tokens)
-12. [Glossary](#glossary)
-13. [Reference](#reference)
+12. [External IdP / STS Provider Guide](#external-idp--sts-provider-guide)
+13. [Glossary](#glossary)
+14. [Reference](#reference)
 
 ---
 
@@ -1631,6 +1632,342 @@ Configuration changes vs the standard flow:
 - Every MCP server must implement introspection independently (or use a shared library/sidecar)
 
 **If you need easy revocation** (the main reason to want opaque tokens), consider **short-lived JWTs** instead — set `tokenExchange.tokenExpiration` to a short duration (e.g., `5m`). You get the same practical benefit (tokens expire quickly, limiting the replay window) without needing introspection infrastructure.
+
+---
+
+## External IdP / STS Provider Guide
+
+This section covers how to integrate AGW token exchange with common identity providers. Each provider has different capabilities and configuration requirements.
+
+### Provider Comparison
+
+| Provider | RFC 8693 Token Exchange | OBO Grant Type | Token Format | Introspection (RFC 7662) | AGW Integration |
+|---|---|---|---|---|---|
+| **AGW Built-in STS** | Yes | — | JWT | No (JWKS only) | Native — Examples 1-3 above |
+| **Keycloak** | Yes | — | JWT | Yes | Fully compatible — used in all lab examples |
+| **Okta** | Yes (Custom Auth Server) | — | JWT | Yes | Fully compatible — see below |
+| **Microsoft Entra ID** | No — uses `jwt-bearer` | `urn:ietf:params:oauth:grant-type:jwt-bearer` | JWT | No | Requires AGW's native Entra support — see below |
+| **Auth0** | No | — | JWT | No | Use as IdP only (inbound auth), not as external STS |
+| **Google Cloud STS** | Yes | — | OAuth access token | No | Specialized for GCP workload identity — see below |
+| **PingFederate** | Yes | — | JWT or reference token | Yes | Compatible — similar to Keycloak setup |
+| **Ory Hydra** | Yes | — | JWT or opaque | Yes | Fully compatible — only OSS STS with native opaque tokens |
+
+---
+
+### Keycloak
+
+Keycloak is used throughout this doc and the lab examples. It supports RFC 8693 natively and is the simplest external STS to integrate with AGW.
+
+**As IdP (inbound auth):** Standard OIDC — Authorization Code Flow or Direct Access Grant. Configure `mcp.authentication` or `subjectValidator` with the Keycloak realm's JWKS URL.
+
+**As external STS:** Point `STS_URI` at Keycloak's token endpoint. Keycloak validates the subject token and issues a new JWT signed by the realm's key.
+
+**Key details:**
+- Token endpoint: `https://{host}/realms/{realm}/protocol/openid-connect/token`
+- JWKS: `https://{host}/realms/{realm}/protocol/openid-connect/certs`
+- Token exchange must be enabled per-client (disabled by default): Admin Console → Clients → {client} → Settings → "token-exchange" fine-grained permission
+- Always returns JWTs (no opaque token option)
+- Supports `may_act` via hardcoded claim mapper (see [Delegation section](#delegation-dual-identity))
+
+**AGW configuration:** See [Example 1](#example-1-built-in-sts--gateway-mediated-exchange-impersonation) (as IdP) or [Example 4](#example-4-external-sts) (as external STS).
+
+> **Labs:** [Flow 13: Gateway-Mediated Token Exchange](../flow13-token-exchange/flow13-gateway-mediated-token-exchange/) · [Flow 13b: External STS with Opaque Tokens](../flow13-token-exchange/flow13b-external-sts-opaque-token/)
+
+---
+
+### Okta
+
+Okta supports RFC 8693 token exchange on **Custom Authorization Servers** (requires the API Access Management product in production). The Org Authorization Server does not support token exchange.
+
+> **Docs:** [Set up OAuth 2.0 On-Behalf-Of Token Exchange](https://developer.okta.com/docs/guides/set-up-token-exchange/main/) · [Authorization Servers](https://developer.okta.com/docs/concepts/auth-servers/)
+
+**As IdP (inbound auth):** Standard OIDC. Configure `mcp.authentication` or `subjectValidator` with the Custom Authorization Server's JWKS URL.
+
+**As external STS:** Point `STS_URI` at the Custom Authorization Server's token endpoint. Okta validates the subject token against access policies and issues a new JWT.
+
+**Key details:**
+- Token endpoint: `https://{yourOktaDomain}/oauth2/{authServerId}/v1/token`
+- JWKS: `https://{yourOktaDomain}/oauth2/{authServerId}/v1/keys`
+- Discovery: `https://{yourOktaDomain}/oauth2/{authServerId}/.well-known/oauth-authorization-server`
+- Default Custom Authorization Server uses `default` as the `authServerId`
+- Always returns JWTs from Custom Authorization Servers
+- Token exchange grant type must be enabled on the service app: Admin Console → Applications → {service app} → General → Grant type → Advanced → Token Exchange
+- Requires access policies and rules on the authorization server that allow the service app + scopes
+- Supports **trusted servers** for cross-authorization-server exchange (one auth server trusts tokens from another)
+- Client authentication: Base64-encoded `client_id:client_secret` in the `Authorization: Basic` header
+
+**Okta-specific exchange request parameters:**
+
+```
+POST https://{yourOktaDomain}/oauth2/{authServerId}/v1/token
+Authorization: Basic {base64(client_id:client_secret)}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+&subject_token={access_token_from_IdP}
+&subject_token_type=urn:ietf:params:oauth:token-type:access_token
+&scope=api:access:read api:access:write
+&audience={authorization_server_audience}
+```
+
+**Okta setup checklist:**
+
+1. Create a **Custom Authorization Server** (or use `default`) with custom scopes
+2. Create a **native app** for the client (Authorization Code + PKCE)
+3. Create a **service app** (API Services) for the middle-tier service (AGW proxy or agent)
+4. Enable **Token Exchange** grant type on the service app
+5. Create **access policies** + rules that allow the service app to request the custom scopes
+6. If using a second authorization server, add the first as a **trusted server**
+
+**AGW configuration (Okta as external STS):**
+
+```yaml
+# EnterpriseAgentgatewayParameters
+spec:
+  env:
+  - name: STS_URI
+    value: https://{yourOktaDomain}/oauth2/{authServerId}/v1/token
+
+# EnterpriseAgentgatewayPolicy
+spec:
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "https://{yourOktaDomain}/oauth2/{authServerId}"  # Okta IdP issuer
+        jwks:
+          url: "https://{yourOktaDomain}/oauth2/{authServerId}/v1/keys"
+    tokenExchange:
+      mode: ExchangeOnly
+```
+
+> **Note:** When Okta is both the IdP and the external STS (same or different Custom Authorization Servers), `mcp.authentication` and `STS_URI` may point to the same Okta domain. The `mcp.authentication` validates the inbound JWT so AGW can extract it; the `STS_URI` is where AGW sends the exchange request.
+
+---
+
+### Microsoft Entra ID (Azure AD)
+
+Entra ID does **not** support RFC 8693 (`urn:ietf:params:oauth:grant-type:token-exchange`). Instead, it uses its own OBO grant type: `urn:ietf:params:oauth:grant-type:jwt-bearer`. This means you cannot point AGW's `STS_URI` at Entra's token endpoint — AGW sends RFC 8693 requests, which Entra will reject with `unsupported_grant_type`.
+
+> **Docs:** [Microsoft identity platform and OAuth 2.0 On-Behalf-Of flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow) · [AGW Entra OBO support](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/)
+
+**Entra's `jwt-bearer` grant (not RFC 8693):**
+
+```
+POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
+&client_id={middle_tier_client_id}
+&client_secret={middle_tier_client_secret}
+&assertion={user_access_token}
+&scope=https://graph.microsoft.com/.default
+&requested_token_use=on_behalf_of
+```
+
+Key differences from RFC 8693:
+- Uses `assertion` instead of `subject_token`
+- Uses `requested_token_use=on_behalf_of` instead of `subject_token_type`
+- Requires `client_secret` or `client_assertion` (certificate) — the middle-tier app must authenticate
+- Always returns JWTs
+- No `actor_token` concept — the middle-tier app's identity is implicit from `client_id`
+
+**AGW integration options:**
+
+**Option A: AGW's native Entra support (recommended)**
+
+AGW has built-in support for Entra's `jwt-bearer` grant type. See the [AGW docs on Entra OBO](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) for configuration.
+
+**Option B: Entra as IdP only + AGW built-in STS**
+
+Use Entra as the IdP (inbound auth) and AGW's built-in STS for the exchange. The `subjectValidator` is configured with Entra's JWKS:
+
+```yaml
+# Helm values
+tokenExchange:
+  enabled: true
+  subjectValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys"
+```
+
+```yaml
+# EnterpriseAgentgatewayPolicy
+spec:
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "https://login.microsoftonline.com/{tenant}/v2.0"
+        audiences:
+        - "{client_id}"            # App registration's Application (client) ID
+        jwks:
+          url: "https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys"
+    tokenExchange:
+      mode: ExchangeOnly
+```
+
+**Entra-specific notes:**
+- Tenant can be a GUID, `common`, `organizations`, or `consumers`
+- JWKS URL: `https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys`
+- Issuer format: `https://login.microsoftonline.com/{tenant}/v2.0` (v2.0 endpoint) or `https://sts.windows.net/{tenant}/` (v1.0)
+- Entra access tokens include `oid` (object ID) in addition to `sub` — the `sub` is a pairwise identifier (different per app), while `oid` is the user's unique directory ID
+- Multi-tenant apps: set `audiences` to include both the client ID and `api://{client_id}`
+
+---
+
+### Google Cloud STS
+
+Google Cloud STS supports RFC 8693 but is specialized for **workload identity federation** — exchanging external identity tokens (from AWS, Azure, OIDC providers) for Google Cloud access tokens. It is not a general-purpose STS.
+
+> **Docs:** [STS API reference](https://cloud.google.com/iam/docs/reference/sts/rest/v1/TopLevel/token) · [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
+
+**Key details:**
+- Token endpoint: `https://sts.googleapis.com/v1/token`
+- Uses `urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693 compliant)
+- Returns Google OAuth 2.0 access tokens (opaque to external consumers)
+- `audience` must be a full GCP resource name (workload identity pool provider)
+- Primarily for authenticating workloads running outside GCP to access GCP APIs
+
+**AGW integration:** Google Cloud STS is typically not used as an external STS for AGW token exchange. Instead, use Google as an **IdP** via OIDC:
+
+```yaml
+# Helm values — subjectValidator trusts Google OIDC
+tokenExchange:
+  subjectValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "https://www.googleapis.com/oauth2/v3/certs"
+```
+
+If your agents need GCP API access with user context, consider having the agent exchange tokens directly with Google Cloud STS (agent-initiated, outside of AGW).
+
+---
+
+### Auth0
+
+Auth0 does **not** support RFC 8693 token exchange. It cannot be used as an external STS with AGW.
+
+> **Note:** Auth0's "Token Exchange" feature (if available) refers to Native SSO or impersonation flows, not RFC 8693.
+
+**AGW integration:** Auth0 works as an **IdP only** (inbound auth):
+
+```yaml
+# Helm values — subjectValidator trusts Auth0
+tokenExchange:
+  subjectValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "https://{yourAuth0Domain}/.well-known/jwks.json"
+
+# EnterpriseAgentgatewayPolicy
+spec:
+  backend:
+    mcp:
+      authentication:
+        issuer: "https://{yourAuth0Domain}/"     # Note trailing slash
+        audiences:
+        - "{api_identifier}"                      # Auth0 API audience
+        jwks:
+          url: "https://{yourAuth0Domain}/.well-known/jwks.json"
+```
+
+For token exchange, use AGW's built-in STS or another RFC 8693-compliant external STS.
+
+---
+
+### Ory Hydra
+
+Ory Hydra is the only open-source provider that supports RFC 8693 token exchange **and** native opaque tokens. This makes it the best production alternative to the custom Python STS in the [Flow 13b lab](../flow13-token-exchange/flow13b-external-sts-opaque-token/).
+
+> **Docs:** [Ory Hydra](https://www.ory.sh/docs/hydra/) · [Token Exchange](https://www.ory.sh/docs/oauth2-oidc/token-exchange)
+
+**Key details:**
+- Token endpoint: `https://{hydra-public}/oauth2/token`
+- JWKS: `https://{hydra-public}/.well-known/jwks.json`
+- Supports RFC 8693 (`urn:ietf:params:oauth:grant-type:token-exchange`)
+- Can issue **opaque tokens** (reference tokens) natively — no custom code needed
+- Supports RFC 7662 introspection (`POST /oauth2/introspect`) for opaque tokens
+- Open source (Apache 2.0)
+
+**AGW configuration (Hydra as external STS with opaque tokens):**
+
+```yaml
+# EnterpriseAgentgatewayParameters
+spec:
+  env:
+  - name: STS_URI
+    value: https://{hydra-public}/oauth2/token
+
+# EnterpriseAgentgatewayPolicy — mcp.authentication validates inbound IdP JWT
+spec:
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "https://{idp-issuer}"           # Your IdP (Keycloak, Okta, etc.)
+        jwks:
+          url: "https://{idp-issuer}/.well-known/jwks.json"
+    tokenExchange:
+      mode: ExchangeOnly
+```
+
+The MCP server introspects opaque tokens at `https://{hydra-admin}/oauth2/introspect`. Same pattern as the Flow 13b lab, but with a production-grade STS.
+
+---
+
+### PingFederate / Ping Identity
+
+PingFederate supports RFC 8693 token exchange and can issue both JWTs and **reference tokens** (opaque). It also supports RFC 7662 introspection.
+
+> **Docs:** [PingFederate Token Exchange](https://docs.pingidentity.com/pingfederate/latest/administrators_reference_guide/pf_c_tokenExchangeProcessorPolicies.html)
+
+**Key details:**
+- Token endpoint: `https://{pingfederate}/as/token.oauth2`
+- JWKS: `https://{pingfederate}/pf/JWKS`
+- Supports RFC 8693 with configurable token exchange processor policies
+- Can issue reference tokens (opaque) via access token manager configuration
+- Supports RFC 7662 introspection
+- Token exchange must be enabled via processor policies in the admin console
+
+**AGW configuration:** Same pattern as Keycloak or Okta — configure `STS_URI` to PingFederate's token endpoint and `mcp.authentication` to the IdP's JWKS.
+
+---
+
+### Integration Decision Tree
+
+```
+Does your IdP support RFC 8693 token exchange?
+│
+├─ YES (Keycloak, Okta, Ory Hydra, PingFederate, Google Cloud STS)
+│   │
+│   ├─ Do you want the IdP to be the external STS?
+│   │   │
+│   │   ├─ YES → Example 4: STS_URI → IdP token endpoint
+│   │   │         mcp.authentication → same IdP (validates inbound JWT)
+│   │   │
+│   │   └─ NO → Examples 1-3: Use AGW built-in STS
+│   │            subjectValidator → IdP JWKS (validates inbound JWT)
+│   │
+│   └─ Do you need opaque tokens?
+│       │
+│       ├─ YES → Ory Hydra or PingFederate (native opaque)
+│       │         or custom STS (Flow 13b lab)
+│       │         MCP server must implement RFC 7662 introspection
+│       │
+│       └─ NO → Any RFC 8693 provider works (JWT exchange)
+│
+├─ NO, uses jwt-bearer (Entra ID)
+│   │
+│   ├─ Use AGW's native Entra support (Option A, recommended)
+│   │
+│   └─ Or use Entra as IdP only + AGW built-in STS (Option B)
+│
+└─ NO, no token exchange support (Auth0)
+    │
+    └─ Use as IdP only + AGW built-in STS
+```
 
 ---
 
