@@ -6,27 +6,157 @@
 
 ---
 
+## Learning Path
+
+This guide takes you from foundational concepts to implementation. If you're new to token exchange, read in order. If you already understand OAuth/JWT basics, skip to [Why Token Exchange?](#why-token-exchange).
+
+| Step | Section | What You'll Learn |
+|------|---------|-------------------|
+| 1 | [Prerequisites](#prerequisites) | OAuth 2.0, JWTs, OIDC — the building blocks |
+| 2 | [Why Token Exchange?](#why-token-exchange) | The problem token exchange solves |
+| 3 | [Overview](#overview) | How AGW's built-in STS fits in |
+| 4 | [Delegation vs Impersonation](#delegation-dual-identity) | The two exchange modes and when to use each |
+| 5 | [Gateway-Mediated vs Agent-Initiated](#gateway-mediated-vs-agent-initiated-exchange) | Who calls the STS and why it matters |
+| 6 | [End-to-End Walkthrough](#end-to-end-walkthrough) | Concrete scenario with Alice, an agent, and an MCP server |
+| 7 | [STS Configuration](#sts-configuration) | Copy-paste deployment examples |
+| 8 | **Hands-on labs** | [Flow 13](../flow13-token-exchange/flow13-gateway-mediated-token-exchange/) (JWT) or [Flow 13b](../flow13-token-exchange/flow13b-external-sts-opaque-token/) (opaque) |
+| 9 | [External IdP / STS Provider Guide](#external-idp--sts-provider-guide) | Integrating with Okta, Entra ID, etc. |
+| 10 | [Troubleshooting](#troubleshooting) | Common errors and how to fix them |
+
+---
+
 ## Table of Contents
 
-1. [Why Token Exchange?](#why-token-exchange)
-2. [Overview](#overview)
+1. [Prerequisites](#prerequisites)
+2. [Why Token Exchange?](#why-token-exchange)
+3. [Overview](#overview)
    - [How Token Exchange Relates to JWT Auth and MCP Auth](#how-token-exchange-relates-to-jwt-auth-and-mcp-auth)
-3. [How the STS Works](#how-the-sts-works)
-4. [Delegation (Dual Identity)](#delegation-dual-identity)
-5. [Impersonation (Token Swap)](#impersonation-token-swap)
-6. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
+4. [How the STS Works](#how-the-sts-works)
+5. [Delegation (Dual Identity)](#delegation-dual-identity)
+6. [Impersonation (Token Swap)](#impersonation-token-swap)
+7. [Gateway-Mediated vs Agent-Initiated Exchange](#gateway-mediated-vs-agent-initiated-exchange)
    - [Gateway-Mediated Exchange (ExchangeOnly)](#gateway-mediated-exchange-exchangeonly)
    - [Agent-Initiated Exchange](#agent-initiated-exchange)
    - [How the Agent Discovers the STS](#how-the-agent-discovers-the-sts)
-7. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
-8. [STS Configuration](#sts-configuration)
+8. [Audience, Scopes, and Claim Generation](#audience-scopes-and-claim-generation)
+9. [STS Configuration](#sts-configuration)
    - [Deployment Examples](#deployment-examples)
-9. [Downstream Policy Enforcement](#downstream-policy-enforcement)
-10. [End-to-End Walkthrough](#end-to-end-walkthrough)
-11. [FAQ: Why JWTs and Not Opaque Tokens?](#faq-why-jwts-and-not-opaque-tokens)
-12. [External IdP / STS Provider Guide](#external-idp--sts-provider-guide)
-13. [Glossary](#glossary)
-14. [Reference](#reference)
+10. [Downstream Policy Enforcement](#downstream-policy-enforcement)
+11. [End-to-End Walkthrough](#end-to-end-walkthrough)
+12. [Troubleshooting](#troubleshooting)
+13. [FAQ: Why JWTs and Not Opaque Tokens?](#faq-why-jwts-and-not-opaque-tokens)
+14. [External IdP / STS Provider Guide](#external-idp--sts-provider-guide)
+15. [Glossary](#glossary)
+16. [Reference](#reference)
+
+---
+
+## Prerequisites
+
+This section covers the foundational concepts you need to understand before diving into token exchange. If you're already comfortable with OAuth 2.0, JWTs, and OIDC, skip to [Why Token Exchange?](#why-token-exchange).
+
+### What Is OAuth 2.0?
+
+OAuth 2.0 is an authorization framework that lets applications access resources on behalf of a user without the user sharing their password. Instead of handing over credentials, the user logs in to an **authorization server** (like Keycloak, Okta, or Entra ID), which issues a **token** — a temporary credential that proves the user said "yes, this app can act for me."
+
+The key participants:
+
+| Role | What It Does | Example |
+|------|-------------|---------|
+| **Resource Owner** | The user who owns the data | Alice |
+| **Client** | The app requesting access | A chat agent, Claude Code, VS Code |
+| **Authorization Server** | Issues tokens after the user authenticates | Keycloak, Okta, Entra ID |
+| **Resource Server** | The API that holds the data | An MCP server, a REST API |
+
+The most common flow for web/desktop apps is the **Authorization Code Flow**:
+
+```
+1. User clicks "Login" → app redirects to authorization server
+2. User enters credentials → authorization server validates
+3. Authorization server redirects back with a one-time "code"
+4. App exchanges the code for tokens (access token + refresh token)
+5. App uses the access token to call APIs
+```
+
+> **Further reading:** [OAuth 2.0 Simplified](https://www.oauth.com/) · [RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749)
+
+### What Is a JWT?
+
+A **JSON Web Token (JWT)** is a compact, URL-safe way to represent claims (statements about a user) as a signed JSON object. Most OAuth 2.0 access tokens in modern systems are JWTs.
+
+A JWT has three parts separated by dots: `Header.Payload.Signature`
+
+```
+eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL2tleWNsb2FrLmV4YW1wbGUuY29tIiwic3ViIjoiYWxpY2UiLCJleHAiOjE3MTIxOTI0MDB9.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+│              │                                                                                                            │
+└─ Header      └─ Payload (claims)                                                                                          └─ Signature
+   (algorithm)    (who, what, when)                                                                                            (proves it's authentic)
+```
+
+Each part is Base64URL-encoded JSON. You can decode the payload to see the claims:
+
+```json
+{
+  "iss": "https://keycloak.example.com/realms/my-realm",   // Issuer — who signed this token
+  "sub": "alice",                                           // Subject — who this token is about
+  "aud": "my-app",                                          // Audience — who this token is for
+  "exp": 1712192400,                                        // Expiration — when it expires (Unix timestamp)
+  "iat": 1712188800,                                        // Issued At — when it was created
+  "scope": "openid profile email"                           // Scopes — what permissions were granted
+}
+```
+
+**Why JWTs matter for token exchange:** The STS takes a JWT from one issuer (your IdP) and produces a new JWT from a different issuer (the STS itself). The downstream service only needs to trust the STS's signing key — it doesn't need to know about your IdP.
+
+**How JWT validation works:** The receiver fetches the issuer's public keys from a **JWKS (JSON Web Key Set)** endpoint (e.g., `https://keycloak.example.com/.well-known/jwks.json`), then verifies the token's signature cryptographically. This is a **local operation** — no network call to the issuer per request. If the signature matches, the issuer matches, and the token isn't expired, it's valid.
+
+> **Try it:** Paste any JWT into [jwt.io](https://jwt.io) to decode it. · **Spec:** [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519)
+
+### What Is OIDC?
+
+**OpenID Connect (OIDC)** is an identity layer built on top of OAuth 2.0. While OAuth 2.0 only handles **authorization** ("can this app access this resource?"), OIDC adds **authentication** ("who is this user?").
+
+OIDC introduces:
+- An **ID Token** — a JWT that contains the user's identity (name, email, etc.)
+- A **UserInfo endpoint** — an API the app can call to get more user details
+- A **discovery document** — a well-known URL (`/.well-known/openid-configuration`) that tells the client where all the endpoints are
+
+In the context of Agent Gateway and token exchange, OIDC is how the **user authenticates initially** — the Authorization Code Flow produces a JWT that the STS then exchanges.
+
+> **Further reading:** [OpenID Connect Explained](https://connect2id.com/learn/openid-connect)
+
+### What Is an STS?
+
+A **Security Token Service (STS)** is a server that exchanges one token for another. You send it a token you already have (the **subject token**), and it gives you back a new token with different properties — different issuer, different claims, different audience.
+
+**RFC 8693** defines the standard protocol for token exchange. The request looks like:
+
+```
+POST /oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+&subject_token=<the-token-you-have>
+&subject_token_type=urn:ietf:params:oauth:token-type:jwt
+```
+
+The STS validates the subject token (checks signature, issuer, expiration), then issues a new token signed with its own key.
+
+**Agent Gateway has a built-in STS** on the control plane at port `7777`. You can also use an external STS (Keycloak, Okta, PingFederate, etc.) — the protocol is the same.
+
+### Key Concepts Summary
+
+Before proceeding, make sure you're comfortable with these:
+
+| Concept | One-liner |
+|---------|-----------|
+| **OAuth 2.0** | Framework for delegated authorization — apps get tokens instead of passwords |
+| **JWT** | Signed JSON token with claims (`sub`, `iss`, `aud`, `exp`) — verifiable without calling the issuer |
+| **JWKS** | Public key endpoint the receiver uses to verify JWT signatures locally |
+| **OIDC** | Identity layer on OAuth 2.0 — adds "who is this user?" to "what can they access?" |
+| **STS** | Server that exchanges one token for another — takes an IdP token, issues an OBO token |
+| **Claims** | Key-value pairs inside a JWT — `sub` (who), `iss` (signed by), `aud` (intended for), `exp` (valid until) |
+| **IdP** | Identity Provider — the system users log into (Keycloak, Okta, Entra ID, Auth0) |
 
 ---
 
@@ -367,6 +497,8 @@ User ──► Agent ──► AGW STS ──► Downstream
 | Replace IdP token to avoid leaking IdP-specific claims downstream | **Impersonation** |
 | IdP doesn't support custom claims like `may_act` | **Impersonation** |
 
+> **Try it yourself:** The [Flow 13 lab](../flow13-token-exchange/flow13-gateway-mediated-token-exchange/) demonstrates gateway-mediated impersonation end-to-end. The `echo_token` MCP tool lets you inspect the OBO token and verify there's no `act` claim.
+
 ---
 
 ## Gateway-Mediated vs Agent-Initiated Exchange
@@ -559,6 +691,8 @@ The plugin hooks into Google ADK's `before_run_callback` — before each agent r
 | Delegation (`act` claim)? | **No** — always impersonation (proxy never sends actor token) | **Optional** — include actor token for delegation, omit for impersonation |
 | STS discovery | Auto-configured via `EnterpriseAgentgatewayParameters` | SDK fetches `/.well-known/oauth-authorization-server` → `token_endpoint` |
 | When to use | Downstream only needs user identity; zero agent code changes | Agent needs control over exchange (delegation for audit trails, or impersonation with custom scopes/audience) |
+
+> **Try it yourself:** [Flow 13](../flow13-token-exchange/flow13-gateway-mediated-token-exchange/) walks through gateway-mediated exchange (zero agent code changes). [Flow 13b](../flow13-token-exchange/flow13b-external-sts-opaque-token/) shows the same flow with an external STS returning opaque tokens — demonstrating the JWT vs opaque trade-off in practice.
 
 ---
 
@@ -1564,6 +1698,142 @@ sequenceDiagram
 **Result:** Full audit trail, per-agent policies, and Alice's identity preserved. The trade-off: the agent needs to know about the STS and integrate with the SDK.
 
 </details>
+
+---
+
+## Troubleshooting
+
+Common errors you'll encounter when setting up token exchange, what causes them, and how to fix them.
+
+### Exchange Never Triggers (Token Passes Through Unchanged)
+
+**Symptom:** The downstream MCP server receives the original IdP JWT instead of an OBO token. No exchange happens.
+
+**Causes and fixes:**
+
+| Cause | How to Verify | Fix |
+|-------|--------------|-----|
+| Missing `mcp.authentication` on the policy | `kubectl get enterpriseagentgatewaypolicies -o yaml` — no `authentication` block | Add `mcp.authentication` with the IdP issuer and JWKS. AGW needs this to parse the Authorization header and extract the JWT for exchange. |
+| Missing `tokenExchange.mode` on the policy | Policy has no `tokenExchange` section | Add `tokenExchange: { mode: ExchangeOnly }` to the policy |
+| `STS_URI` not configured | Check `EnterpriseAgentgatewayParameters` exists and is referenced by the Gateway | Create the Parameters resource with `STS_URI` and link it via `infrastructure.parametersRef` on the Gateway |
+| Parameters not linked to Gateway | Gateway has no `infrastructure.parametersRef` | Add `parametersRef` pointing to your `EnterpriseAgentgatewayParameters` |
+| Proxy pod not restarted after config change | Proxy pod still has old env vars | `kubectl rollout restart deployment` on the proxy (or delete the Gateway and recreate) |
+
+**Debug steps:**
+```bash
+# 1. Check if the proxy has STS env vars
+kubectl exec -n agentgateway-system deploy/agentgateway-proxy -- env | grep STS
+
+# 2. Check policy status
+kubectl get enterpriseagentgatewaypolicies -o yaml | grep -A5 tokenExchange
+
+# 3. Look at proxy logs for exchange attempts
+kubectl logs -n agentgateway-system deploy/agentgateway-proxy | grep -i "token exchange\|sts\|exchange"
+```
+
+### STS Returns 400 (Bad Request)
+
+**Symptom:** The proxy calls the STS, but the STS rejects the exchange with a 400 error.
+
+| Cause | Error Message | Fix |
+|-------|--------------|-----|
+| Subject token expired | `"error": "invalid_grant"` | The user's IdP JWT has expired. The client needs to refresh it before making the request. |
+| Subject token signature invalid | `"error": "invalid_grant"` | The `subjectValidator` JWKS URL is wrong or unreachable. Verify it points to the correct IdP JWKS endpoint. |
+| Subject token issuer mismatch | `"error": "invalid_grant"` | The `subjectValidator` expects tokens from issuer A, but the token is from issuer B. Check the JWKS URL matches the IdP. |
+| Missing `may_act` claim (delegation) | `"error": "invalid_grant"` | The subject token doesn't contain a `may_act` claim authorizing the actor. Add a hardcoded claim mapper in your IdP. |
+| `may_act` doesn't match actor | `"error": "invalid_grant"` | The `may_act.sub` or `may_act.iss` in the subject token doesn't match the actor token's identity. Verify the K8s SA name and issuer URL. |
+| Wrong `grant_type` | `"error": "unsupported_grant_type"` | The STS received a non-RFC-8693 request. If using Entra ID, note it uses `jwt-bearer` not `token-exchange`. |
+
+**Debug steps:**
+```bash
+# 1. Decode the subject token to check claims
+echo "<jwt>" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
+
+# 2. Check may_act claim exists (delegation only)
+echo "<jwt>" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.may_act'
+
+# 3. Check the actor token identity
+ACTOR=$(kubectl create token my-agent -n default --duration=60s)
+echo "$ACTOR" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{sub, iss}'
+
+# 4. Verify the subjectValidator JWKS URL is reachable from the STS pod
+kubectl exec -n agentgateway-system deploy/enterprise-agentgateway -- \
+  curl -s http://keycloak.keycloak.svc.cluster.local:8080/realms/my-realm/protocol/openid-connect/certs | jq .keys[0].kid
+```
+
+### STS Returns 401/403 (Unauthorized)
+
+**Symptom:** The proxy or agent can't authenticate to the STS endpoint.
+
+| Cause | Fix |
+|-------|-----|
+| `STS_AUTH_TOKEN` file doesn't exist | Verify the token file path. Default: `/var/run/secrets/xds-tokens/xds-token`. Check if it's mounted in the proxy pod. |
+| `STS_AUTH_TOKEN` is expired or invalid | The token file may contain a stale token. Check if the token volume mount is configured correctly. |
+| API Validator rejects the caller's token | The `apiValidator` in Helm values is configured to validate against a specific JWKS. Ensure the proxy's auth token is signed by a key in that JWKS. |
+
+### Downstream Rejects the OBO Token
+
+**Symptom:** The exchange succeeds (STS returns an OBO token), but the downstream MCP server rejects it with 401.
+
+| Cause | How to Verify | Fix |
+|-------|--------------|-----|
+| Wrong issuer in `mcp.authentication` | Decode the OBO token — check `iss` | Set `mcp.authentication.issuer` to the STS issuer (e.g., `enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777`) |
+| JWKS endpoint unreachable from downstream | `curl` the JWKS URL from the MCP server pod | Ensure the MCP server can reach the STS at port 7777. Check K8s DNS and network policies. |
+| Audience mismatch | Decode the OBO token — check `aud` | The `aud` claim must match one of the `audiences` configured in `mcp.authentication`. Check the `resource` parameter format. |
+| OBO token expired | Decode the OBO token — check `exp` | Increase `tokenExchange.tokenExpiration` in Helm values. Default is 24h. |
+
+**Debug steps:**
+```bash
+# 1. Check what the downstream actually received
+# (if you control the MCP server, log the Authorization header)
+kubectl logs deploy/mcp-server | grep -i "auth\|token\|jwt"
+
+# 2. Decode the OBO token to verify claims
+echo "<obo-jwt>" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, sub, aud, act, exp}'
+
+# 3. Verify the STS JWKS is reachable from the MCP server
+kubectl exec deploy/mcp-server -- curl -s \
+  http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/.well-known/jwks.json | jq .keys[0].kid
+```
+
+### CEL RBAC Denies Access
+
+**Symptom:** The OBO token is valid, but a CEL RBAC rule rejects the request.
+
+| Cause | Fix |
+|-------|-----|
+| Policy checks `claims.act` but token has no `act` (impersonation) | Either switch to agent-initiated delegation (include actor token), or update the CEL expression to not require `act` |
+| Wrong K8s SA name in CEL expression | `claims.act.sub` is the full K8s SA path: `system:serviceaccount:{namespace}:{name}`. Verify namespace and name match. |
+| `groups` claim missing from OBO token | The STS only copies `sub`, `scope`, and optionally `act`. It does not copy `groups` from the IdP token. If you need groups-based RBAC, add group claims to the STS configuration. |
+
+### Debugging Checklist
+
+When something isn't working, check these in order:
+
+```
+1. Does the proxy have STS_URI and STS_AUTH_TOKEN?
+   → kubectl exec proxy -- env | grep STS
+
+2. Is mcp.authentication configured on the policy?
+   → kubectl get enterpriseagentgatewaypolicies -o yaml
+
+3. Is the subjectValidator JWKS URL reachable from the STS?
+   → kubectl exec enterprise-agentgateway -- curl <jwks-url>
+
+4. Is the user's JWT valid (not expired, correct issuer)?
+   → Decode it: echo "<jwt>" | cut -d. -f2 | base64 -d | jq '{iss, sub, exp}'
+
+5. Does the OBO token have the right claims?
+   → Decode it the same way, check iss, sub, aud, act
+
+6. Can the downstream reach the STS JWKS?
+   → kubectl exec mcp-server -- curl <sts-jwks-url>
+
+7. Does the aud match what the downstream expects?
+   → Compare OBO token aud with mcp.authentication.audiences
+```
+
+> **Hands-on debugging:** The [Flow 13 lab](../flow13-token-exchange/flow13-gateway-mediated-token-exchange/) includes an `echo_token` MCP tool that returns the exact token the MCP server received — useful for verifying that exchange happened and the claims are correct.
 
 ---
 
