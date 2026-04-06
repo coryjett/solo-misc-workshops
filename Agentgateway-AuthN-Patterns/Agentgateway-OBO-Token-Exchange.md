@@ -1114,9 +1114,9 @@ spec:
 <details>
 <summary><strong><a id="example-4-external-sts"></a>Example 4: External STS</strong></summary>
 
-Instead of the built-in STS, you point the proxy at an external RFC 8693-compliant STS (e.g., a corporate STS, a cloud provider's token exchange endpoint).
+Instead of the built-in STS, you point the proxy at an external RFC 8693-compliant STS (e.g., a corporate STS, Okta Custom Authorization Server, or a cloud provider's token exchange endpoint).
 
-**Step 1 — No `tokenExchange` in Helm values** (the built-in STS is not used).
+**Step 1 — No `tokenExchange` in Helm values** (the built-in STS is not used). You still need `tokenExchange.enabled: true` in the Helm chart if it's required for the CRDs, but the validators are unused — the external STS handles validation.
 
 **Step 2 — Point the proxy at the external STS:**
 
@@ -1154,7 +1154,12 @@ spec:
         from: All
 ```
 
-**Step 3 — Policy is the same**, but downstream validates against the **external STS issuer** and JWKS:
+**Step 3 — Policy:** `mcp.authentication` is **always required** — AGW must validate the inbound IdP JWT so it can extract it for exchange. What `mcp.authentication` points at depends on what the external STS returns:
+
+- **External STS returns JWTs:** `mcp.authentication` points at the **IdP issuer** (Keycloak, Okta, etc.) to validate the inbound JWT. AGW then also validates the exchanged JWT downstream if you add a second policy or the same policy trusts the external STS issuer.
+- **External STS returns opaque tokens:** `mcp.authentication` points at the **IdP issuer** to validate the inbound JWT. AGW cannot validate the opaque token downstream — the MCP server must handle introspection. See [Option B in the FAQ](#faq-why-jwts-and-not-opaque-tokens) and the [Flow 13b lab](../flow13-token-exchange/flow13b-external-sts-opaque-token/).
+
+Example policy (external STS returns JWTs):
 
 ```yaml
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
@@ -1171,9 +1176,41 @@ spec:
     mcp:
       authentication:
         mode: Strict
-        issuer: "https://sts.example.com"              # External STS issuer
+        issuer: "https://idp.example.com"              # IdP issuer (validates inbound JWT)
         jwks:
-          url: "https://sts.example.com/.well-known/jwks.json"
+          url: "https://idp.example.com/.well-known/jwks.json"
+    tokenExchange:
+      mode: ExchangeOnly
+```
+
+Example policy (external STS returns opaque tokens — e.g., [Flow 13b](../flow13-token-exchange/flow13b-external-sts-opaque-token/)):
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-external-sts-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "https://idp.example.com"              # IdP issuer (validates inbound JWT)
+        audiences:
+        - account
+        - my-client-id
+        jwks:
+          backendRef:                                    # Or use url: for external JWKS
+            name: keycloak
+            kind: Service
+            namespace: keycloak
+            port: 8080
+          jwksPath: realms/my-realm/protocol/openid-connect/certs
     tokenExchange:
       mode: ExchangeOnly
 ```
@@ -1580,12 +1617,14 @@ Skip AGW's downstream auth and let the MCP server validate opaque tokens itself:
 Configuration changes vs the standard flow:
 
 1. **`EnterpriseAgentgatewayParameters`** — `STS_URI` points to the external STS token exchange endpoint
-2. **`EnterpriseAgentgatewayPolicy`** — set `tokenExchange.mode: ExchangeOnly` but **remove `mcp.authentication`** (AGW can't validate opaque tokens)
+2. **`EnterpriseAgentgatewayPolicy`** — set `tokenExchange.mode: ExchangeOnly` and **keep `mcp.authentication` pointing at the IdP issuer** (e.g., Keycloak). AGW needs `mcp.authentication` to validate and parse the **inbound** IdP JWT so it can extract it for exchange. Without it, AGW doesn't read the Authorization header and the exchange never triggers. After the exchange, AGW forwards the opaque token to the MCP server without further validation (it can't validate opaque tokens via JWKS).
 3. **MCP server** — must call the external STS introspection endpoint (`POST /introspect` per [RFC 7662](https://datatracker.ietf.org/doc/html/rfc7662)) on every request to validate the opaque token and extract claims
+
+> **See also:** [Flow 13b: External STS with Opaque Token Exchange](../flow13-token-exchange/flow13b-external-sts-opaque-token/) — end-to-end lab demonstrating this pattern with a Python STS, including the `mcp.authentication` + `tokenExchange` policy configuration.
 
 **Trade-offs of Option B:**
 
-- AGW no longer enforces auth on the downstream — it becomes a passthrough for the exchanged token
+- AGW validates the inbound IdP JWT but does not enforce auth on the exchanged opaque token downstream — the MCP server is responsible for introspection
 - Every MCP server needs introspection logic + network access to the external STS
 - A network call per request on the hot path (introspection latency + STS availability dependency)
 - If the external STS goes down, all token validation fails (no local fallback)
