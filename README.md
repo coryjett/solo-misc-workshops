@@ -14,7 +14,7 @@ Comprehensive audit of all authentication patterns supported by [Solo Enterprise
 
 Deep-dive enablement on OBO token exchange — how the built-in STS works, delegation vs impersonation, gateway-mediated vs agent-initiated exchange, external IdP/STS provider integration (Keycloak, Okta, Entra ID, Google Cloud STS, Auth0, Ory Hydra, PingFederate), and downstream policy enforcement.
 
-- **[OBO Token Exchange Enablement](obo-token-exchange-enablement/Agentgateway-OBO-Token-Exchange.md)**
+- **[OBO Token Exchange Enablement](obo-token-exchange-enablement/OBO-Token-Exchange.md)**
 
 ### Agent Gateway — Authorization Patterns
 
