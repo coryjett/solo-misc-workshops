@@ -2,30 +2,7 @@
 
 Variant of [Flow 13](../flow13-gateway-mediated-token-exchange/) that uses an **external STS** returning **opaque tokens** instead of the built-in STS returning JWTs. The MCP server receives an opaque token and calls the external STS introspection endpoint to resolve it.
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant KC as Keycloak
-    participant AGW as Agent Gateway
-    participant STS as External STS
-    participant MCP as MCP Server
-
-    C->>KC: 1. Authenticate (password grant)
-    KC-->>C: User JWT
-
-    C->>AGW: 2. MCP request + Bearer JWT
-    AGW->>STS: 3. POST /token (subject_token=JWT)
-    STS-->>AGW: 4. { access_token: "a3f7b2c9..." }
-
-    Note over AGW: Replaces JWT with opaque token
-
-    AGW->>MCP: 5. Bearer a3f7b2c9... (NOT a JWT)
-    MCP->>STS: 6. POST /introspect (token=a3f7b2c9...)
-    STS-->>MCP: 7. { active: true, sub: "alice" }
-
-    MCP-->>AGW: 8. Response
-    AGW-->>C: 9. Response
-```
+![Flow 13b: External STS with Opaque Token Exchange](flow13b-external-sts-opaque.png)
 
 | | Flow 13 (built-in STS) | Flow 13b (external STS) |
 |---|---|---|
