@@ -44,10 +44,6 @@ Step-by-step guides for setting up On-Behalf-Of token exchange with Keycloak and
 
 - **[MCP Authentication API](agentgateway-enterprise/MCP-Authentication.md)** — How agentgateway adapts MCP OAuth traffic for authorization servers (Keycloak well-known endpoint rewriting, token validation, client registration proxying)
 
-### Agent Gateway — Misc
-
-- **[URL Rewrite for OAuth Protected Resource](test.md)** — HTTPRoute rule to rewrite `/.well-known/oauth-protected-resource/mcp` → `/.well-known/oauth-protected-resource` for MCP backends
-
 ### Source Repos (Reference)
 
 - **[agentgateway-enterprise](agentgateway-enterprise/)** — Solo Enterprise for Agent Gateway source (enterprise extensions, security, traffic management, plugin architecture)
