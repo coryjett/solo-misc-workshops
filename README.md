@@ -25,8 +25,8 @@ Step-by-step guides for setting up On-Behalf-Of token exchange with Keycloak and
 
 ### Agent Gateway — OIDC Integration
 
-- **[OIDC Echo Server](Agentgateway-OIDC-Echo.md)** — OIDC auth with echo backend
-- **[OIDC MCP Server](Agentgateway-OIDC-MCP.md)** — OIDC auth for MCP tool access
+- **[OIDC Echo Server](oidc-integration/Agentgateway-OIDC-Echo.md)** — OIDC auth with echo backend
+- **[OIDC MCP Server](oidc-integration/Agentgateway-OIDC-MCP.md)** — OIDC auth for MCP tool access
 - **[OIDC MCP + OBO](obo-token-exchange/Agentgateway-OIDC-MCP-OBO.md)** — OIDC auth with OBO token exchange for MCP
 
 ### Agent Gateway — Gateway-Mediated Token Exchange
