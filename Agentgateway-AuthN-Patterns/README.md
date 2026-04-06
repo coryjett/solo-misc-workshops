@@ -27,7 +27,7 @@ Plus a **[Decision Flowchart](flows/decision-flowchart.md)** to help choose the 
 
 ## Deep Dives
 
-- **[OBO Token Exchange](Agentgateway-OBO-Token-Exchange.md)** — How the built-in STS works, delegation vs impersonation, gateway-mediated vs agent-initiated exchange, `agentsts-adk` SDK integration, audience/scopes/claim generation, and downstream policy enforcement
+- **[OBO Token Exchange](obo-token-exchange/Agentgateway-OBO-Token-Exchange.md)** — How the built-in STS works, delegation vs impersonation, gateway-mediated vs agent-initiated exchange, `agentsts-adk` SDK integration, audience/scopes/claim generation, and downstream policy enforcement
 
 ## Reference
 

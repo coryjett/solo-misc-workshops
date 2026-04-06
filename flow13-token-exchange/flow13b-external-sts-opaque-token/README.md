@@ -747,4 +747,4 @@ kubectl delete namespace agentgateway-system
 - [RFC 8693 -- Token Exchange](https://datatracker.ietf.org/doc/html/rfc8693)
 - [RFC 7662 -- Token Introspection](https://datatracker.ietf.org/doc/html/rfc7662)
 - [Flow 13 (built-in STS)](../flow13-gateway-mediated-token-exchange/)
-- [OBO Deep Dive -- FAQ: Why JWTs and Not Opaque Tokens?](../Agentgateway-AuthN-Patterns/Agentgateway-OBO-Token-Exchange.md#faq-why-jwts-and-not-opaque-tokens)
+- [OBO Deep Dive -- FAQ: Why JWTs and Not Opaque Tokens?](../../Agentgateway-AuthN-Patterns/obo-token-exchange/Agentgateway-OBO-Token-Exchange.md#faq-why-jwts-and-not-opaque-tokens)
