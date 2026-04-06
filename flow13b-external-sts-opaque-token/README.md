@@ -743,22 +743,6 @@ Key difference from Flow 13: **`STS_URI` points to the external STS** (not the b
 
 ```bash
 kubectl apply -f - <<'EOF'
-# ReferenceGrant: allow HTTPRoute in default to reference Keycloak in keycloak namespace
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-default-to-keycloak
-  namespace: keycloak
-spec:
-  from:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    namespace: default
-  to:
-  - group: ""
-    kind: Service
-    name: keycloak
----
 # Data plane parameters: STS_URI points to EXTERNAL STS (not built-in)
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayParameters
@@ -817,7 +801,6 @@ spec:
   - name: flow13b-gateway
     namespace: default
   rules:
-  # MCP path -> MCP backend
   - backendRefs:
     - group: agentgateway.dev
       kind: AgentgatewayBackend
@@ -826,35 +809,6 @@ spec:
     - path:
         type: PathPrefix
         value: /mcp
-    filters:
-    - type: ResponseHeaderModifier
-      responseHeaderModifier:
-        add:
-        - name: Access-Control-Allow-Origin
-          value: "*"
-        - name: Access-Control-Allow-Methods
-          value: "GET, POST, OPTIONS"
-        - name: Access-Control-Allow-Headers
-          value: "Authorization, Content-Type, Accept, Mcp-Protocol-Version"
-  # Proxy Keycloak endpoints through the gateway
-  - backendRefs:
-    - name: keycloak
-      namespace: keycloak
-      port: 8080
-    matches:
-    - path:
-        type: PathPrefix
-        value: /realms/flow13b-realm
-    filters:
-    - type: ResponseHeaderModifier
-      responseHeaderModifier:
-        add:
-        - name: Access-Control-Allow-Origin
-          value: "*"
-        - name: Access-Control-Allow-Methods
-          value: "GET, POST, OPTIONS"
-        - name: Access-Control-Allow-Headers
-          value: "Authorization, Content-Type, Accept"
 ---
 # Policy: token exchange only -- NO mcp.authentication (can't validate opaque tokens)
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
@@ -1051,7 +1005,6 @@ kubectl delete gateway flow13b-gateway -n default
 kubectl delete configmap external-sts-script mcp-server-script -n default
 kubectl delete deployment external-sts mcp-website-fetcher -n default
 kubectl delete service external-sts mcp-website-fetcher -n default
-kubectl delete referencegrant allow-default-to-keycloak -n keycloak 2>/dev/null || true
 kubectl delete namespace keycloak
 helm uninstall enterprise-agentgateway -n agentgateway-system
 helm uninstall enterprise-agentgateway-crds -n agentgateway-system
