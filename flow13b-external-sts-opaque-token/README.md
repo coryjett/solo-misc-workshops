@@ -1,70 +1,52 @@
 # Flow 13b: External STS with Opaque Token Exchange
 
-Variant of [Flow 13](../flow13-gateway-mediated-token-exchange/) that uses an **external STS** returning **opaque tokens** instead of the built-in STS returning JWTs. The MCP server receives an opaque token (not a JWT) and calls the external STS introspection endpoint to validate it.
-
-### Flow in brief
-
-1. **Client** authenticates with Keycloak and receives a **user JWT**.
-2. The client sends the JWT to **Agent Gateway**.
-3. Agent Gateway **exchanges** the JWT at the **external STS** (RFC 8693 token exchange).
-4. The external STS validates the JWT, stores the claims, and returns an **opaque token** (random hex string).
-5. Agent Gateway forwards the **opaque token** to the MCP server. The original IdP token is never forwarded.
-6. The MCP server calls the external STS **introspection endpoint** to resolve the opaque token back to claims.
+Variant of [Flow 13](../flow13-gateway-mediated-token-exchange/) that uses an **external STS** returning **opaque tokens** instead of the built-in STS returning JWTs. The MCP server receives an opaque token and calls the external STS introspection endpoint to resolve it.
 
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant KC as Keycloak<br/>(OIDC Provider)
-    participant AGW as Agent Gateway<br/>(Proxy)
-    participant STS as External STS<br/>(port 9000)
+    participant KC as Keycloak
+    participant AGW as Agent Gateway
+    participant STS as External STS
     participant MCP as MCP Server
 
-    C->>KC: 1. Authenticate (username/password)
-    KC-->>C: User JWT (iss: Keycloak)
+    C->>KC: 1. Authenticate (password grant)
+    KC-->>C: User JWT
 
     C->>AGW: 2. MCP request + Bearer JWT
-    AGW->>STS: 3. POST /token<br/>grant_type=token-exchange<br/>subject_token=<JWT>
-    STS-->>STS: Decode JWT, store claims<br/>Generate opaque token (hex)
+    AGW->>STS: 3. POST /token (subject_token=JWT)
     STS-->>AGW: 4. { access_token: "a3f7b2c9..." }
 
-    Note over AGW: Replaces Authorization header<br/>with opaque token
+    Note over AGW: Replaces JWT with opaque token
 
-    AGW->>MCP: 5. MCP request + Bearer <opaque token>
+    AGW->>MCP: 5. Bearer a3f7b2c9... (NOT a JWT)
+    MCP->>STS: 6. POST /introspect (token=a3f7b2c9...)
+    STS-->>MCP: 7. { active: true, sub: "alice" }
 
-    Note over MCP: Not a JWT!<br/>No dots, no claims, can't decode
-
-    MCP->>STS: 6. POST /introspect<br/>token=a3f7b2c9...
-    STS-->>MCP: 7. { active: true, sub: "alice",<br/>username: "testuser" }
-
-    MCP-->>AGW: 8. MCP response
-    AGW-->>C: 9. MCP response
+    MCP-->>AGW: 8. Response
+    AGW-->>C: 9. Response
 ```
-
-### Key differences from Flow 13
 
 | | Flow 13 (built-in STS) | Flow 13b (external STS) |
 |---|---|---|
-| **STS** | Built-in on control plane (:7777) | External Python server (:9000) |
-| **Token type** | JWT (self-contained, signed) | Opaque (random hex, no claims) |
-| **Downstream validation** | JWKS signature check (local) | Introspection call to STS (network) |
-| **AGW auth policy** | `mcp.authentication` validates OBO JWT | No `mcp.authentication` (AGW can't validate opaque tokens) |
-| **MCP server** | Decodes JWT locally | Calls `/introspect` on external STS |
+| **STS** | Built-in (:7777) | External Python server (:9000) |
+| **Token type** | JWT (self-contained) | Opaque (random hex) |
+| **Downstream validation** | JWKS check (local) | Introspection (network) |
+| **AGW policy** | `mcp.authentication` validates OBO JWT (STS issuer) | `mcp.authentication` validates inbound JWT (Keycloak issuer) |
 
-> **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) | [Set up JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) | [Helm values reference](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/)
+> **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) | [JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) | [Helm values](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/)
 
 ---
 
 ## Prerequisites
 
-- **Kubernetes cluster** (e.g. AKS, GKE, kind), **kubectl**, **helm** (v3+), **jq**, **curl**
-- **Solo Enterprise license:** `export AGENTGATEWAY_LICENSE_KEY="<your-license-key>"`
-- Run all steps in the same shell so variables persist.
+- Kubernetes cluster, **kubectl**, **helm** (v3+), **jq**, **curl**
+- `export AGENTGATEWAY_LICENSE_KEY="<your-license-key>"`
+- Run all steps in the same shell.
 
 ---
 
-## Step 1: Deploy Keycloak and PostgreSQL
-
-Same as [Flow 13 Step 1](../flow13-gateway-mediated-token-exchange/README.md#step-1-deploy-keycloak-and-postgresql).
+## Step 1: Deploy Keycloak
 
 <details>
 <summary><strong>Keycloak + PostgreSQL YAML</strong></summary>
@@ -78,8 +60,6 @@ kind: Service
 metadata:
   name: keycloak
   namespace: keycloak
-  labels:
-    app: keycloak
 spec:
   ports:
   - port: 8080
@@ -87,28 +67,22 @@ spec:
     name: http
   selector:
     app: keycloak
-  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: keycloak-discovery
   namespace: keycloak
-  labels:
-    app: keycloak
 spec:
   selector:
     app: keycloak
   clusterIP: None
-  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: keycloak
   namespace: keycloak
-  labels:
-    app: keycloak
 spec:
   serviceName: keycloak-discovery
   replicas: 1
@@ -175,8 +149,6 @@ kind: Deployment
 metadata:
   name: postgres
   namespace: keycloak
-  labels:
-    app: postgres
 spec:
   replicas: 1
   selector:
@@ -198,8 +170,7 @@ spec:
         - name: POSTGRES_DB
           value: "keycloak"
         ports:
-        - name: postgres
-          containerPort: 5432
+        - containerPort: 5432
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
@@ -212,15 +183,12 @@ kind: Service
 metadata:
   name: postgres
   namespace: keycloak
-  labels:
-    app: postgres
 spec:
   selector:
     app: postgres
   ports:
   - port: 5432
     targetPort: 5432
-  type: ClusterIP
 EOF
 
 kubectl wait -n keycloak statefulset/keycloak --for=condition=Ready --timeout=420s
@@ -230,7 +198,7 @@ kubectl wait -n keycloak statefulset/keycloak --for=condition=Ready --timeout=42
 
 ---
 
-## Step 2: Configure Keycloak realm, client, and user
+## Step 2: Configure Keycloak
 
 ```bash
 pkill -f "port-forward.*keycloak.*8080" 2>/dev/null || true
@@ -239,52 +207,28 @@ kubectl port-forward -n keycloak svc/keycloak 8080:8080 &
 sleep 3
 export KEYCLOAK_URL="http://localhost:8080"
 export KEYCLOAK_JWKS_URL="http://keycloak.keycloak.svc.cluster.local:8080/realms/flow13b-realm/protocol/openid-connect/certs"
-```
 
-```bash
 ADMIN_TOKEN=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
   -d "username=admin" -d "password=admin" -d "grant_type=password" -d "client_id=admin-cli" | jq -r '.access_token')
 
-# Create realm
 curl -s -X POST "${KEYCLOAK_URL}/admin/realms" \
-  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "Content-Type: application/json" \
   -d '{"realm":"flow13b-realm","enabled":true}'
 
-# Create client
 curl -s -X POST "${KEYCLOAK_URL}/admin/realms/flow13b-realm/clients" \
-  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "clientId": "agw-client",
-    "enabled": true,
-    "clientAuthenticatorType": "client-secret",
-    "secret": "agw-client-secret",
-    "directAccessGrantsEnabled": true,
-    "serviceAccountsEnabled": false
-  }'
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "Content-Type: application/json" \
+  -d '{"clientId":"agw-client","enabled":true,"clientAuthenticatorType":"client-secret","secret":"agw-client-secret","directAccessGrantsEnabled":true}'
 
-# Create user
 curl -s -X POST "${KEYCLOAK_URL}/admin/realms/flow13b-realm/users" \
-  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "email": "testuser@example.com",
-    "emailVerified": true,
-    "firstName": "Test",
-    "lastName": "User",
-    "enabled": true,
-    "requiredActions": [],
-    "credentials": [{"type": "password", "value": "testuser", "temporary": false}]
-  }'
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "Content-Type: application/json" \
+  -d '{"username":"testuser","email":"testuser@example.com","emailVerified":true,"firstName":"Test","lastName":"User","enabled":true,"credentials":[{"type":"password","value":"testuser","temporary":false}]}'
 ```
 
 ---
 
-## Step 3: Deploy the External STS
+## Step 3: Deploy External STS
 
-A minimal Python server that implements RFC 8693 token exchange and RFC 7662 introspection. It accepts a user JWT, stores the claims in memory, and returns a random opaque token.
+Minimal Python server implementing RFC 8693 token exchange and RFC 7662 introspection.
 
 <details>
 <summary><strong>External STS YAML</strong></summary>
@@ -295,104 +239,61 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: external-sts-script
-  namespace: default
 data:
   sts.py: |
-    """External STS: RFC 8693 token exchange (opaque tokens) + RFC 7662 introspection."""
+    """External STS: RFC 8693 token exchange + RFC 7662 introspection."""
     from http.server import BaseHTTPRequestHandler, HTTPServer
     import json, sys, base64, secrets, urllib.parse
 
-    # In-memory token store: opaque_token -> { claims, issued_at }
     token_store = {}
 
     def decode_jwt_payload(token):
-        """Decode JWT payload without signature verification (lab only)."""
         try:
             parts = token.split('.')
-            if len(parts) != 3:
-                return None
+            if len(parts) != 3: return None
             payload = parts[1]
             padding = 4 - len(payload) % 4
-            if padding != 4:
-                payload += '=' * padding
+            if padding != 4: payload += '=' * padding
             return json.loads(base64.urlsafe_b64decode(payload))
         except Exception as e:
             return {"error": str(e)}
 
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, format, *args):
-            pass  # Suppress default access logs
+        def log_message(self, format, *args): pass
 
         def do_POST(self):
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length).decode('utf-8')
+            body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode()
             params = urllib.parse.parse_qs(body)
-
-            if self.path == '/token':
-                self.handle_exchange(params)
-            elif self.path == '/introspect':
-                self.handle_introspect(params)
-            else:
-                self.send_json(404, {"error": "not_found"})
+            if self.path == '/token': self.handle_exchange(params)
+            elif self.path == '/introspect': self.handle_introspect(params)
+            else: self.send_json(404, {"error": "not_found"})
 
         def handle_exchange(self, params):
-            """RFC 8693 token exchange: accept JWT, return opaque token."""
-            grant_type = params.get('grant_type', [''])[0]
-
-            if grant_type != 'urn:ietf:params:oauth:grant-type:token-exchange':
-                self.send_json(400, {"error": "unsupported_grant_type"})
-                return
-
+            if params.get('grant_type', [''])[0] != 'urn:ietf:params:oauth:grant-type:token-exchange':
+                return self.send_json(400, {"error": "unsupported_grant_type"})
             subject_token = params.get('subject_token', [''])[0]
             if not subject_token:
-                self.send_json(400, {"error": "invalid_request", "error_description": "missing subject_token"})
-                return
-
+                return self.send_json(400, {"error": "invalid_request"})
             claims = decode_jwt_payload(subject_token)
             if not claims:
-                self.send_json(400, {"error": "invalid_request", "error_description": "subject_token is not a valid JWT"})
-                return
-
-            # Generate opaque token (64 hex chars = 32 bytes of randomness)
+                return self.send_json(400, {"error": "invalid_request"})
             opaque = secrets.token_hex(32)
             token_store[opaque] = claims
-
-            sys.stderr.write(f"\n{'='*60}\n")
-            sys.stderr.write(f"TOKEN EXCHANGE REQUEST\n")
-            sys.stderr.write(f"  Input:  JWT from {claims.get('iss', 'unknown')}\n")
-            sys.stderr.write(f"          sub = {claims.get('sub', 'unknown')}\n")
-            sys.stderr.write(f"          preferred_username = {claims.get('preferred_username', 'unknown')}\n")
-            sys.stderr.write(f"  Output: Opaque token {opaque[:20]}...\n")
-            sys.stderr.write(f"  Store:  {len(token_store)} active tokens\n")
-            sys.stderr.write(f"{'='*60}\n\n")
+            sys.stderr.write(f"\nTOKEN EXCHANGE: JWT (sub={claims.get('sub','?')}) -> opaque {opaque[:16]}... ({len(token_store)} active)\n")
             sys.stderr.flush()
-
-            self.send_json(200, {
-                "access_token": opaque,
-                "token_type": "Bearer",
-                "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
-                "expires_in": 3600
-            })
+            self.send_json(200, {"access_token": opaque, "token_type": "Bearer",
+                "issued_token_type": "urn:ietf:params:oauth:token-type:access_token", "expires_in": 3600})
 
         def handle_introspect(self, params):
-            """RFC 7662 introspection: resolve opaque token to claims."""
             token = params.get('token', [''])[0]
             claims = token_store.get(token)
-
             if claims:
-                sys.stderr.write(f"INTROSPECT: token {token[:20]}... -> active (sub={claims.get('sub')})\n")
+                sys.stderr.write(f"INTROSPECT: {token[:16]}... -> active (sub={claims.get('sub')})\n")
                 sys.stderr.flush()
-                self.send_json(200, {
-                    "active": True,
-                    "sub": claims.get('sub'),
-                    "username": claims.get('preferred_username'),
-                    "iss": "external-sts",
-                    "token_type": "Bearer",
-                    "original_issuer": claims.get('iss')
-                })
+                self.send_json(200, {"active": True, "sub": claims.get('sub'),
+                    "username": claims.get('preferred_username'), "iss": "external-sts",
+                    "token_type": "Bearer", "original_issuer": claims.get('iss')})
             else:
-                sys.stderr.write(f"INTROSPECT: token {token[:20] if token else '(empty)'}... -> NOT ACTIVE\n")
-                sys.stderr.flush()
                 self.send_json(200, {"active": False})
 
         def send_json(self, status, data):
@@ -404,18 +305,14 @@ data:
             self.wfile.write(body)
 
     if __name__ == '__main__':
-        server = HTTPServer(('', 9000), Handler)
-        sys.stderr.write("External STS started on port 9000\n")
-        sys.stderr.write("  POST /token      - RFC 8693 token exchange (JWT -> opaque)\n")
-        sys.stderr.write("  POST /introspect - RFC 7662 introspection (opaque -> claims)\n")
+        sys.stderr.write("External STS on :9000 (POST /token, POST /introspect)\n")
         sys.stderr.flush()
-        server.serve_forever()
+        HTTPServer(('', 9000), Handler).serve_forever()
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: external-sts
-  namespace: default
 spec:
   replicas: 1
   selector:
@@ -447,38 +344,24 @@ apiVersion: v1
 kind: Service
 metadata:
   name: external-sts
-  namespace: default
-  labels:
-    app: external-sts
 spec:
   selector:
     app: external-sts
   ports:
   - port: 9000
     targetPort: 9000
-    name: http
-  type: ClusterIP
 EOF
 
-kubectl wait deployment/external-sts -n default --for=condition=Available --timeout=120s
+kubectl wait deployment/external-sts --for=condition=Available --timeout=120s
 ```
 
 </details>
 
-**Verify the STS is running:**
-
-```bash
-kubectl logs -n default -l app=external-sts --tail=5
-# External STS started on port 9000
-#   POST /token      - RFC 8693 token exchange (JWT -> opaque)
-#   POST /introspect - RFC 7662 introspection (opaque -> claims)
-```
-
 ---
 
-## Step 4: Deploy MCP server (opaque token aware)
+## Step 4: Deploy MCP server
 
-This MCP server detects whether the incoming token is a JWT or opaque, and calls the external STS introspection endpoint to resolve opaque tokens.
+Detects JWT vs opaque tokens and calls the external STS introspection endpoint for opaque tokens.
 
 <details>
 <summary><strong>MCP Server YAML</strong></summary>
@@ -489,32 +372,25 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mcp-server-script
-  namespace: default
 data:
   server.py: |
-    """MCP server that handles opaque tokens via introspection."""
+    """MCP server with opaque token introspection."""
     from http.server import BaseHTTPRequestHandler, HTTPServer
     import json, sys, base64, urllib.request, urllib.parse
 
     INTROSPECT_URL = "http://external-sts.default.svc.cluster.local:9000/introspect"
 
-    def is_jwt(token):
-        """Check if token looks like a JWT (3 dot-separated base64 parts)."""
-        return token.count('.') == 2
+    def is_jwt(token): return token.count('.') == 2
 
     def decode_jwt_payload(token):
         try:
-            parts = token.split('.')
-            payload = parts[1]
+            payload = token.split('.')[1]
             padding = 4 - len(payload) % 4
-            if padding != 4:
-                payload += '=' * padding
+            if padding != 4: payload += '=' * padding
             return json.loads(base64.urlsafe_b64decode(payload))
-        except:
-            return None
+        except: return None
 
     def introspect_token(token):
-        """Call external STS introspection endpoint (RFC 7662)."""
         try:
             data = urllib.parse.urlencode({"token": token}).encode()
             req = urllib.request.Request(INTROSPECT_URL, data=data, method='POST')
@@ -525,130 +401,77 @@ data:
             return {"active": False, "error": str(e)}
 
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, format, *args):
-            pass
+        protocol_version = "HTTP/1.1"
+        def log_message(self, format, *args): pass
 
         def do_POST(self):
             auth = self.headers.get('Authorization', '')
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length).decode('utf-8')
-
-            # Analyze the token
-            token_info = {"type": "none", "claims": None}
+            body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode()
+            token_info = {"type": "none"}
             raw_token = ""
 
             if auth.startswith('Bearer '):
                 raw_token = auth[7:]
-
                 if is_jwt(raw_token):
-                    token_info["type"] = "jwt"
-                    token_info["claims"] = decode_jwt_payload(raw_token)
-                    sys.stderr.write(f"\n{'='*60}\n")
-                    sys.stderr.write(f"RECEIVED JWT TOKEN (unexpected in this lab!)\n")
-                    sys.stderr.write(f"  iss: {token_info['claims'].get('iss', 'N/A')}\n")
-                    sys.stderr.write(f"  sub: {token_info['claims'].get('sub', 'N/A')}\n")
-                    sys.stderr.write(f"{'='*60}\n\n")
+                    token_info = {"type": "jwt", "claims": decode_jwt_payload(raw_token)}
+                    sys.stderr.write(f"RECEIVED JWT (unexpected in this lab)\n")
                 else:
-                    token_info["type"] = "opaque"
-                    sys.stderr.write(f"\n{'='*60}\n")
-                    sys.stderr.write(f"RECEIVED OPAQUE TOKEN\n")
-                    sys.stderr.write(f"  Token: {raw_token[:20]}...{raw_token[-8:]}\n")
-                    sys.stderr.write(f"  Length: {len(raw_token)} chars\n")
-                    sys.stderr.write(f"  NOT a JWT (no dots, no embedded claims)\n")
-                    sys.stderr.write(f"\n  Calling introspection endpoint...\n")
-
                     intro = introspect_token(raw_token)
-                    token_info["introspection"] = intro
-
-                    if intro.get("active"):
-                        sys.stderr.write(f"  Introspection result: ACTIVE\n")
-                        sys.stderr.write(f"    sub: {intro.get('sub', 'N/A')}\n")
-                        sys.stderr.write(f"    username: {intro.get('username', 'N/A')}\n")
-                        sys.stderr.write(f"    iss: {intro.get('iss', 'N/A')}\n")
-                        sys.stderr.write(f"    original_issuer: {intro.get('original_issuer', 'N/A')}\n")
-                    else:
-                        sys.stderr.write(f"  Introspection result: NOT ACTIVE\n")
-                    sys.stderr.write(f"{'='*60}\n\n")
-
-                sys.stderr.flush()
-            else:
-                sys.stderr.write(f"No Bearer token in Authorization header\n")
+                    token_info = {"type": "opaque", "introspection": intro}
+                    status = "ACTIVE" if intro.get("active") else "NOT ACTIVE"
+                    sys.stderr.write(f"RECEIVED OPAQUE ({len(raw_token)} chars) -> introspect: {status}\n")
                 sys.stderr.flush()
 
-            # Handle MCP protocol
-            try:
-                req = json.loads(body)
-            except:
-                req = {}
-
-            method = req.get('method', '')
-            req_id = req.get('id')
+            try: req = json.loads(body)
+            except: req = {}
+            method, req_id = req.get('method', ''), req.get('id')
 
             if method == 'initialize':
                 resp = {"jsonrpc": "2.0", "id": req_id, "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "opaque-token-mcp", "version": "1.0"}
-                }}
+                    "serverInfo": {"name": "opaque-token-mcp", "version": "1.0"}}}
             elif method == 'notifications/initialized':
-                self.send_response(200)
-                self.end_headers()
-                return
+                self.send_response(200); self.end_headers(); return
             elif method == 'tools/list':
-                resp = {"jsonrpc": "2.0", "id": req_id, "result": {"tools": [{
-                    "name": "whoami",
-                    "description": "Shows the token type and resolved identity that reached this MCP server",
-                    "inputSchema": {"type": "object", "properties": {}}
-                }]}}
+                resp = {"jsonrpc": "2.0", "id": req_id, "result": {"tools": [
+                    {"name": "whoami", "description": "Shows token type and resolved identity",
+                     "inputSchema": {"type": "object", "properties": {}}}]}}
             elif method == 'tools/call':
-                result = {
-                    "token_type": token_info["type"],
-                    "token_preview": f"{raw_token[:20]}...{raw_token[-8:]}" if raw_token else "none",
-                    "token_length": len(raw_token),
+                result = {"token_type": token_info["type"], "token_length": len(raw_token),
                     "is_jwt": is_jwt(raw_token) if raw_token else False,
-                }
-
+                    "token_preview": f"{raw_token[:16]}...{raw_token[-8:]}" if raw_token else "none"}
                 if token_info["type"] == "opaque":
                     intro = token_info.get("introspection", {})
-                    result["introspection"] = {
-                        "active": intro.get("active", False),
-                        "sub": intro.get("sub"),
-                        "username": intro.get("username"),
-                        "iss": intro.get("iss"),
-                        "original_issuer": intro.get("original_issuer"),
-                    }
+                    result["introspection"] = {"active": intro.get("active"), "sub": intro.get("sub"),
+                        "username": intro.get("username"), "iss": intro.get("iss"),
+                        "original_issuer": intro.get("original_issuer")}
                     result["message"] = "Opaque token received. Identity resolved via RFC 7662 introspection."
                 elif token_info["type"] == "jwt":
-                    claims = token_info.get("claims", {})
-                    result["jwt_claims"] = {
-                        "iss": claims.get("iss"),
-                        "sub": claims.get("sub"),
-                    }
-                    result["message"] = "JWT received (unexpected in this lab -- exchange may not have happened)."
-
-                resp = {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}}
+                    c = token_info.get("claims", {})
+                    result["jwt_claims"] = {"iss": c.get("iss"), "sub": c.get("sub")}
+                    result["message"] = "JWT received (unexpected -- exchange may not have happened)."
+                resp = {"jsonrpc": "2.0", "id": req_id, "result": {
+                    "content": [{"type": "text", "text": json.dumps(result, indent=2)}]}}
             else:
-                resp = {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Unknown method: {method}"}}
+                resp = {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Unknown: {method}"}}
 
-            body_bytes = json.dumps(resp).encode()
+            out = json.dumps(resp).encode()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(body_bytes)))
+            self.send_header('Content-Length', str(len(out)))
             self.end_headers()
-            self.wfile.write(body_bytes)
+            self.wfile.write(out)
 
     if __name__ == '__main__':
-        server = HTTPServer(('', 80), Handler)
-        sys.stderr.write("Opaque-token MCP server started on port 80\n")
-        sys.stderr.write(f"  Introspection endpoint: {INTROSPECT_URL}\n")
+        sys.stderr.write(f"MCP server on :80 (introspects at {INTROSPECT_URL})\n")
         sys.stderr.flush()
-        server.serve_forever()
+        HTTPServer(('', 80), Handler).serve_forever()
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mcp-website-fetcher
-  namespace: default
 spec:
   replicas: 1
   selector:
@@ -680,35 +503,26 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mcp-website-fetcher
-  namespace: default
-  labels:
-    app: mcp-website-fetcher
 spec:
   selector:
     app: mcp-website-fetcher
   ports:
   - port: 80
     targetPort: 80
-    name: http
     appProtocol: agentgateway.dev/mcp
-  type: ClusterIP
 EOF
 
-kubectl wait deployment/mcp-website-fetcher -n default --for=condition=Available --timeout=120s
+kubectl wait deployment/mcp-website-fetcher --for=condition=Available --timeout=120s
 ```
 
 </details>
 
 ---
 
-## Step 5: Install Enterprise Agentgateway with STS enabled
-
-We keep the built-in STS enabled (required for the proxy to have exchange capabilities), but `STS_URI` in the next step will point to our external STS instead.
+## Step 5: Install Enterprise Agentgateway
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
-
-echo "${AGENTGATEWAY_LICENSE_KEY:?Set AGENTGATEWAY_LICENSE_KEY before running}"
 
 helm upgrade -i --create-namespace --namespace agentgateway-system \
   enterprise-agentgateway-crds \
@@ -734,21 +548,34 @@ kubectl rollout status deployment -n agentgateway-system -l app.kubernetes.io/in
 
 ---
 
-## Step 6: Create Gateway, Backend, HTTPRoute, and policies
+## Step 6: Create Gateway, Backend, Route, and Policy
 
-Key difference from Flow 13: **`STS_URI` points to the external STS** (not the built-in one), and **no `mcp.authentication`** on the policy (AGW cannot validate opaque tokens -- the MCP server handles validation via introspection).
+`STS_URI` points to the **external STS** (not the built-in one). `mcp.authentication` validates the **inbound Keycloak JWT** -- this is required so AGW can extract the JWT for exchange. After exchange, the opaque token is forwarded to the MCP server without validation.
 
 <details>
-<summary><strong>Gateway, Backend, Routes, and Policy YAML</strong></summary>
+<summary><strong>Gateway + Policy YAML</strong></summary>
 
 ```bash
 kubectl apply -f - <<'EOF'
-# Data plane parameters: STS_URI points to EXTERNAL STS (not built-in)
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-default-to-keycloak
+  namespace: keycloak
+spec:
+  from:
+  - group: enterpriseagentgateway.solo.io
+    kind: EnterpriseAgentgatewayPolicy
+    namespace: default
+  to:
+  - group: ""
+    kind: Service
+    name: keycloak
+---
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayParameters
 metadata:
   name: flow13b-params
-  namespace: default
 spec:
   env:
   - name: STS_URI
@@ -760,7 +587,6 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: flow13b-gateway
-  namespace: default
 spec:
   gatewayClassName: enterprise-agentgateway
   infrastructure:
@@ -780,7 +606,6 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
   name: mcp-backend
-  namespace: default
 spec:
   mcp:
     targets:
@@ -795,11 +620,9 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: mcp-route
-  namespace: default
 spec:
   parentRefs:
   - name: flow13b-gateway
-    namespace: default
   rules:
   - backendRefs:
     - group: agentgateway.dev
@@ -810,77 +633,66 @@ spec:
         type: PathPrefix
         value: /mcp
 ---
-# Policy: token exchange only -- NO mcp.authentication (can't validate opaque tokens)
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
   name: mcp-exchange-policy
-  namespace: default
 spec:
   targetRefs:
   - group: agentgateway.dev
     kind: AgentgatewayBackend
     name: mcp-backend
   backend:
+    mcp:
+      authentication:
+        issuer: "http://keycloak.keycloak.svc.cluster.local:8080/realms/flow13b-realm"
+        jwks:
+          backendRef:
+            name: keycloak
+            kind: Service
+            namespace: keycloak
+            port: 8080
+          jwksPath: realms/flow13b-realm/protocol/openid-connect/certs
+        audiences:
+        - account
+        - agw-client
+        mode: Strict
+        provider: Keycloak
     tokenExchange:
       mode: ExchangeOnly
 EOF
 
-kubectl wait gateway/flow13b-gateway -n default --for=condition=Programmed --timeout=120s
+kubectl wait gateway/flow13b-gateway --for=condition=Programmed --timeout=120s
+kubectl get enterpriseagentgatewaypolicy
 ```
 
 </details>
 
-**Verify policy is attached:**
-
-```bash
-kubectl get enterpriseagentgatewaypolicy -n default
-# NAME                   ACCEPTED   ATTACHED
-# mcp-exchange-policy    True       True
-```
-
 ---
 
-## Step 7: Port-forward and get a Keycloak token
+## Step 7: Get a token and test
 
 ```bash
 pkill -f "port-forward.*flow13b" 2>/dev/null || true
 sleep 1
-kubectl port-forward -n default svc/flow13b-gateway 8888:80 &
+kubectl port-forward svc/flow13b-gateway 8888:80 &
 sleep 2
-```
 
-```bash
+# Get a Keycloak JWT
 export USER_JWT=$(curl -s -X POST "${KEYCLOAK_URL}/realms/flow13b-realm/protocol/openid-connect/token" \
   -H "Host: keycloak.keycloak.svc.cluster.local:8080" \
   -d "username=testuser" -d "password=testuser" -d "grant_type=password" \
   -d "client_id=agw-client" -d "client_secret=agw-client-secret" | jq -r '.access_token')
 
-# Verify it's a JWT from Keycloak
-_p=$(echo "$USER_JWT" | cut -d. -f2 | tr '_-' '/+'); while [ $((${#_p} % 4)) -ne 0 ]; do _p="${_p}="; done
-echo "$_p" | base64 -d 2>/dev/null | jq '{iss, sub, preferred_username}'
-```
-
-**Expected:** `iss: http://keycloak.keycloak.svc.cluster.local:8080/realms/flow13b-realm`
-
----
-
-## Step 8: Test -- prove the MCP server receives an opaque token
-
-### 8.1 Send request and call the whoami tool
-
-```bash
+# Initialize MCP session
 MCP_URL="http://localhost:8888/mcp"
 HDR="Authorization: Bearer ${USER_JWT}"
-
-# Initialize and get session
-INIT=$(curl -s -i --max-time 15 -X POST "$MCP_URL" \
+INIT=$(curl -s -D /tmp/mcp-headers --max-time 15 -X POST "$MCP_URL" \
   -H "$HDR" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
-SID=$(echo "$INIT" | grep -i "^mcp-session-id:" | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r')
+SID=$(grep -i "mcp-session-id" /tmp/mcp-headers | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r\n')
 
-# Call whoami -- shows what token the MCP server actually received
-echo "=== Token that reached the MCP server ==="
+# Call whoami -- shows what token the MCP server received
 curl -s --max-time 15 -X POST "$MCP_URL" \
   -H "$HDR" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -H "Mcp-Session-Id: ${SID}" \
@@ -893,12 +705,11 @@ curl -s --max-time 15 -X POST "$MCP_URL" \
 ```json
 {
   "token_type": "opaque",
-  "token_preview": "a3f7b2c9e1d04f68...4f2a8b1c",
   "token_length": 64,
   "is_jwt": false,
   "introspection": {
     "active": true,
-    "sub": "faa04387-...",
+    "sub": "e6d41a7a-...",
     "username": "testuser",
     "iss": "external-sts",
     "original_issuer": "http://keycloak.keycloak.svc.cluster.local:8080/realms/flow13b-realm"
@@ -907,104 +718,43 @@ curl -s --max-time 15 -X POST "$MCP_URL" \
 }
 ```
 
-The MCP server confirms:
-- **`is_jwt: false`** -- not a JWT, no dots, no embedded claims
-- **`token_type: opaque`** -- a random hex string
-- **`introspection.active: true`** -- the external STS confirmed the token is valid
-- **`introspection.username: testuser`** -- identity resolved via introspection, not from the token itself
-- **`introspection.original_issuer`** -- traces back to Keycloak (the original IdP)
-
-### 8.2 Verify via server logs
+**Verify via logs:**
 
 ```bash
-echo "=== External STS logs (exchange) ==="
-kubectl logs -n default -l app=external-sts --tail=10
+kubectl logs -l app=external-sts --tail=5
+# TOKEN EXCHANGE: JWT (sub=e6d41a7a-...) -> opaque 459158f2... (1 active)
+# INTROSPECT: 459158f2... -> active (sub=e6d41a7a-...)
 
-echo ""
-echo "=== MCP server logs (opaque token received + introspection) ==="
-kubectl logs -n default -l app=mcp-website-fetcher --tail=15
-```
-
-**Expected STS logs:**
-
-```
-============================================================
-TOKEN EXCHANGE REQUEST
-  Input:  JWT from http://keycloak.keycloak.svc.cluster.local:8080/realms/flow13b-realm
-          sub = faa04387-...
-          preferred_username = testuser
-  Output: Opaque token a3f7b2c9e1d04f68...
-  Store:  1 active tokens
-============================================================
-```
-
-**Expected MCP server logs:**
-
-```
-============================================================
-RECEIVED OPAQUE TOKEN
-  Token: a3f7b2c9e1d04f68...4f2a8b1c
-  Length: 64 chars
-  NOT a JWT (no dots, no embedded claims)
-
-  Calling introspection endpoint...
-  Introspection result: ACTIVE
-    sub: faa04387-...
-    username: testuser
-    iss: external-sts
-    original_issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/flow13b-realm
-============================================================
+kubectl logs -l app=mcp-website-fetcher --tail=5
+# RECEIVED OPAQUE (64 chars) -> introspect: ACTIVE
 ```
 
 ---
 
-## What this proves
+## Key takeaways
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant AGW as Agent Gateway
-    participant STS as External STS
-    participant MCP as MCP Server
-
-    C->>AGW: Keycloak JWT
-    AGW->>STS: POST /token (subject_token=JWT)
-    STS-->>AGW: { access_token: "a3f7b2c9..." }
-
-    Note over AGW: Swaps JWT for opaque token
-
-    AGW->>MCP: Bearer a3f7b2c9... (NOT a JWT!)
-    MCP->>STS: POST /introspect (token=a3f7b2c9...)
-    STS-->>MCP: { active: true, sub: "faa04387..." }
-    MCP-->>AGW: MCP response
-    AGW-->>C: MCP response
-```
-
-**Key takeaways:**
-
-1. **The token is NOT a JWT** -- it's a 64-character hex string with no embedded claims, no signature, no dots
-2. **AGW cannot validate opaque tokens** -- there is no `mcp.authentication` on the policy (no JWKS to check against)
-3. **The MCP server resolves identity via introspection** -- it calls the external STS's `/introspect` endpoint (RFC 7662) on every request
-4. **The external STS is the source of truth** -- it stores the JWT claims in memory and returns them on introspection
-5. **Trade-off: network call per request** -- unlike JWT validation (local crypto check), opaque tokens require a round-trip to the STS on every request
-6. **Easy revocation** -- to revoke access, delete the token from the STS store. The next introspection call returns `active: false`. No waiting for JWT expiry.
+1. **Opaque, not JWT** -- 64-char hex string, no claims, no signature, no dots
+2. **AGW validates inbound JWT** -- `mcp.authentication` checks the Keycloak JWT so AGW can extract it for exchange
+3. **MCP server introspects** -- calls `/introspect` (RFC 7662) on every request to resolve identity
+4. **Trade-off: network hop** -- opaque tokens require a round-trip to the STS per request (vs local JWKS check for JWTs)
+5. **Easy revocation** -- delete token from STS store, next introspection returns `active: false`
 
 ---
 
 ## Cleanup
 
 ```bash
-pkill -f "port-forward.*keycloak" 2>/dev/null || true
-pkill -f "port-forward.*flow13b" 2>/dev/null || true
+pkill -f "port-forward" 2>/dev/null || true
 
-kubectl delete enterpriseagentgatewaypolicy mcp-exchange-policy -n default
-kubectl delete enterpriseagentgatewayparameters flow13b-params -n default
-kubectl delete httproute mcp-route -n default
-kubectl delete agentgatewaybackend mcp-backend -n default
-kubectl delete gateway flow13b-gateway -n default
-kubectl delete configmap external-sts-script mcp-server-script -n default
-kubectl delete deployment external-sts mcp-website-fetcher -n default
-kubectl delete service external-sts mcp-website-fetcher -n default
+kubectl delete enterpriseagentgatewaypolicy mcp-exchange-policy
+kubectl delete enterpriseagentgatewayparameters flow13b-params
+kubectl delete httproute mcp-route
+kubectl delete agentgatewaybackend mcp-backend
+kubectl delete gateway flow13b-gateway
+kubectl delete configmap external-sts-script mcp-server-script
+kubectl delete deployment external-sts mcp-website-fetcher
+kubectl delete service external-sts mcp-website-fetcher
+kubectl delete referencegrant allow-default-to-keycloak -n keycloak 2>/dev/null || true
 kubectl delete namespace keycloak
 helm uninstall enterprise-agentgateway -n agentgateway-system
 helm uninstall enterprise-agentgateway-crds -n agentgateway-system
@@ -1015,9 +765,9 @@ kubectl delete namespace agentgateway-system
 
 ## References
 
-- [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) -- STS configuration and Helm values
-- [Set up JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) -- JWT authentication policies
-- [RFC 8693 -- OAuth 2.0 Token Exchange](https://datatracker.ietf.org/doc/html/rfc8693) -- Token exchange standard
-- [RFC 7662 -- OAuth 2.0 Token Introspection](https://datatracker.ietf.org/doc/html/rfc7662) -- Introspection standard
-- [Flow 13 (built-in STS variant)](../flow13-gateway-mediated-token-exchange/) -- Same flow with JWT tokens
+- [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/)
+- [JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/)
+- [RFC 8693 -- Token Exchange](https://datatracker.ietf.org/doc/html/rfc8693)
+- [RFC 7662 -- Token Introspection](https://datatracker.ietf.org/doc/html/rfc7662)
+- [Flow 13 (built-in STS)](../flow13-gateway-mediated-token-exchange/)
 - [OBO Deep Dive -- FAQ: Why JWTs and Not Opaque Tokens?](../Agentgateway-AuthN-Patterns/Agentgateway-OBO-Token-Exchange.md#faq-why-jwts-and-not-opaque-tokens)
