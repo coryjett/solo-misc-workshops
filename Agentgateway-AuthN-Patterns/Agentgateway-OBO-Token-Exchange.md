@@ -23,8 +23,9 @@
    - [Deployment Examples](#deployment-examples)
 9. [Downstream Policy Enforcement](#downstream-policy-enforcement)
 10. [End-to-End Walkthrough](#end-to-end-walkthrough)
-11. [Glossary](#glossary)
-12. [Reference](#reference)
+11. [FAQ: Why JWTs and Not Opaque Tokens?](#faq-why-jwts-and-not-opaque-tokens)
+12. [Glossary](#glossary)
+13. [Reference](#reference)
 
 ---
 
@@ -1525,6 +1526,72 @@ sequenceDiagram
 **Result:** Full audit trail, per-agent policies, and Alice's identity preserved. The trade-off: the agent needs to know about the STS and integrate with the SDK.
 
 </details>
+
+---
+
+## FAQ: Why JWTs and Not Opaque Tokens?
+
+The built-in STS always issues **JWTs** (signed, self-contained tokens) — not opaque tokens (random strings that require introspection). This is a deliberate design choice.
+
+### JWT vs Opaque Token
+
+| | JWT | Opaque Token |
+|---|---|---|
+| **Contains claims?** | Yes — `iss`, `sub`, `act`, `aud`, `scope` embedded in the token | No — just a random reference string |
+| **Validation** | Local — verify signature against JWKS (no network call) | Remote — call the issuer's introspection endpoint on every request |
+| **Revocation** | Hard — token is valid until `exp` (no revocation list by default) | Easy — delete from issuer's store, next introspection fails |
+| **Size** | Larger (~500-1000 chars) | Smaller (~32-64 chars) |
+| **Privacy** | Claims visible to anyone with the token (base64-encoded, not encrypted) | Claims stay at the issuer |
+
+**Why AGW uses JWTs:** The gateway sits in the hot path — every MCP request passes through it. JWT validation is a local cryptographic check (microseconds), while opaque token introspection requires a network round-trip to the STS on every request (milliseconds + availability dependency). For a gateway handling high-throughput agent traffic, local validation is critical.
+
+### Can I Use Opaque Tokens with an External STS?
+
+**Partially.** If you use an external STS that issues opaque tokens, AGW's proxy will forward whatever token the STS returns. However, AGW's downstream validation (`mcp.authentication`, `traffic.jwtAuthentication`) only supports **JWKS-based JWT validation** — it cannot call an introspection endpoint. So you have two options:
+
+**Option A: External STS issues JWTs (recommended)**
+
+The external STS issues JWTs signed with its own key. AGW validates them via JWKS like normal. You get the benefits of an external STS (separate trust domain, custom claim logic) with local validation.
+
+**Option B: External STS issues opaque tokens, MCP server handles introspection**
+
+Skip AGW's downstream auth and let the MCP server validate opaque tokens itself:
+
+```
+┌────────┐   IdP JWT    ┌─────────────┐  opaque token  ┌─────────────┐
+│ Client │─────────────►│ Agent       │───────────────►│ MCP Server  │
+│        │              │ Gateway     │                │             │
+└────────┘              │             │                │ Calls STS   │
+                        │ Exchanges   │                │ introspect  │
+                        │ at external │                │ endpoint    │
+                        │ STS         │                │ per request │
+                        └──────┬──────┘                └──────┬──────┘
+                               │                              │
+                        ┌──────▼──────┐                       │
+                        │ External    │◄──────────────────────┘
+                        │ STS         │  POST /introspect
+                        │             │  token=<opaque>
+                        │ Issues      │  → { active: true,
+                        │ opaque      │    sub: "alice", ... }
+                        │ tokens      │
+                        └─────────────┘
+```
+
+Configuration changes vs the standard flow:
+
+1. **`EnterpriseAgentgatewayParameters`** — `STS_URI` points to the external STS token exchange endpoint
+2. **`EnterpriseAgentgatewayPolicy`** — set `tokenExchange.mode: ExchangeOnly` but **remove `mcp.authentication`** (AGW can't validate opaque tokens)
+3. **MCP server** — must call the external STS introspection endpoint (`POST /introspect` per [RFC 7662](https://datatracker.ietf.org/doc/html/rfc7662)) on every request to validate the opaque token and extract claims
+
+**Trade-offs of Option B:**
+
+- AGW no longer enforces auth on the downstream — it becomes a passthrough for the exchanged token
+- Every MCP server needs introspection logic + network access to the external STS
+- A network call per request on the hot path (introspection latency + STS availability dependency)
+- If the external STS goes down, all token validation fails (no local fallback)
+- Every MCP server must implement introspection independently (or use a shared library/sidecar)
+
+**If you need easy revocation** (the main reason to want opaque tokens), consider **short-lived JWTs** instead — set `tokenExchange.tokenExpiration` to a short duration (e.g., `5m`). You get the same practical benefit (tokens expire quickly, limiting the replay window) without needing introspection infrastructure.
 
 ---
 
