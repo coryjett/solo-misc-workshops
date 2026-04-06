@@ -20,14 +20,14 @@ Comprehensive audit of all authorization patterns supported by [Solo Enterprise 
 
 Step-by-step guides for setting up On-Behalf-Of token exchange with Keycloak and Solo Enterprise for Agent Gateway 2.1.x.
 
-- **[OBO Delegation](OBO-Complete-Guide-Delegation.md)** — STS issues OBO token with both `sub` (user) and `act` (agent). Requires `may_act` claim + actor token.
-- **[OBO Impersonation](OBO-Complete-Guide-Impersonation.md)** — STS issues OBO token with `sub` only (no actor). Swaps IdP token for AGW-signed token.
+- **[OBO Delegation](obo-token-exchange/OBO-Complete-Guide-Delegation.md)** — STS issues OBO token with both `sub` (user) and `act` (agent). Requires `may_act` claim + actor token.
+- **[OBO Impersonation](obo-token-exchange/OBO-Complete-Guide-Impersonation.md)** — STS issues OBO token with `sub` only (no actor). Swaps IdP token for AGW-signed token.
 
 ### Agent Gateway — OIDC Integration
 
 - **[OIDC Echo Server](Agentgateway-OIDC-Echo.md)** — OIDC auth with echo backend
 - **[OIDC MCP Server](Agentgateway-OIDC-MCP.md)** — OIDC auth for MCP tool access
-- **[OIDC MCP + OBO](Agentgateway-OIDC-MCP-OBO.md)** — OIDC auth with OBO token exchange for MCP
+- **[OIDC MCP + OBO](obo-token-exchange/Agentgateway-OIDC-MCP-OBO.md)** — OIDC auth with OBO token exchange for MCP
 
 ### Agent Gateway — Gateway-Mediated Token Exchange
 

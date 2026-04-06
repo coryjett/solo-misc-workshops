@@ -587,6 +587,6 @@ kubectl delete namespace kgateway-system
 ---
 
 **References**
-- Base: [Keycloak-Agentgateway-OIDC.md](./Keycloak-Agentgateway-OIDC.md)
+- Base: [Keycloak-Agentgateway-OIDC.md](../Keycloak-Agentgateway-OIDC.md)
 - Docs: [Enterprise Agentgateway](https://docs.solo.io/agentgateway/latest/), [Keycloak](https://www.keycloak.org/), [Gateway API](https://gateway-api.sigs.k8s.io/), [MCP](https://modelcontextprotocol.io/), [KAgent Tools](https://github.com/kagent-dev/tools)
 - OBO: [OBO-Complete-Guide-Delegation.md](./OBO-Complete-Guide-Delegation.md), [OBO-Complete-Guide-Impersonation.md](./OBO-Complete-Guide-Impersonation.md)
