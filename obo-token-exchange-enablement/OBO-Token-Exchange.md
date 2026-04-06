@@ -20,8 +20,9 @@ This guide takes you from foundational concepts to implementation. If you're new
 | 6 | [End-to-End Walkthrough](#end-to-end-walkthrough) | Concrete scenario with Alice, an agent, and an MCP server |
 | 7 | [STS Configuration](#sts-configuration) | Copy-paste deployment examples |
 | 8 | **Hands-on labs** | [Flow 13](../flow13-token-exchange/flow13-gateway-mediated-token-exchange/) (JWT) or [Flow 13b](../flow13-token-exchange/flow13b-external-sts-opaque-token/) (opaque) |
-| 9 | [External IdP / STS Provider Guide](#external-idp--sts-provider-guide) | Integrating with Okta, Entra ID, etc. |
-| 10 | [Troubleshooting](#troubleshooting) | Common errors and how to fix them |
+| 9 | [Customer Conversation Guide](#customer-conversation-guide) | Discovery questions, pattern selection, objection handling |
+| 10 | [External IdP / STS Provider Guide](#external-idp--sts-provider-guide) | Integrating with Okta, Entra ID, etc. |
+| 11 | [Troubleshooting](#troubleshooting) | Common errors and how to fix them |
 
 ---
 
@@ -30,6 +31,7 @@ This guide takes you from foundational concepts to implementation. If you're new
 1. [Prerequisites](#prerequisites)
 2. [Why Token Exchange?](#why-token-exchange)
 3. [Overview](#overview)
+   - [The Big Picture](#the-big-picture)
    - [How Token Exchange Relates to JWT Auth and MCP Auth](#how-token-exchange-relates-to-jwt-auth-and-mcp-auth)
 4. [How the STS Works](#how-the-sts-works)
 5. [Delegation (Dual Identity)](#delegation-dual-identity)
@@ -44,10 +46,11 @@ This guide takes you from foundational concepts to implementation. If you're new
 10. [Downstream Policy Enforcement](#downstream-policy-enforcement)
 11. [End-to-End Walkthrough](#end-to-end-walkthrough)
 12. [Troubleshooting](#troubleshooting)
-13. [FAQ: Why JWTs and Not Opaque Tokens?](#faq-why-jwts-and-not-opaque-tokens)
-14. [External IdP / STS Provider Guide](#external-idp--sts-provider-guide)
-15. [Glossary](#glossary)
-16. [Reference](#reference)
+13. [Customer Conversation Guide](#customer-conversation-guide)
+14. [FAQ: Why JWTs and Not Opaque Tokens?](#faq-why-jwts-and-not-opaque-tokens)
+15. [External IdP / STS Provider Guide](#external-idp--sts-provider-guide)
+16. [Glossary](#glossary)
+17. [Reference](#reference)
 
 ---
 
@@ -191,6 +194,56 @@ Problems:
 ## Overview
 
 Solo Enterprise for Agent Gateway includes a **built-in Security Token Service (STS)** that implements RFC 8693 (OAuth 2.0 Token Exchange). The STS runs on the control plane at port `7777` and enables agents and services to act on behalf of users through token delegation — without requiring your identity provider (IdP) to natively support RFC 8693.
+
+### The Big Picture
+
+Here's the high-level architecture showing how all the pieces fit together:
+
+```
+                                      AGENT GATEWAY CLUSTER
+                                ┌────────────────────────────────────────────────────────┐
+                                │                                                        │
+  ┌──────────┐                  │  ┌──────────────────────┐    ┌─────────────────────┐   │   ┌──────────────┐
+  │          │   1. Login       │  │   DATA PLANE         │    │  CONTROL PLANE      │   │   │              │
+  │  User    │ ◄───────────►    │  │   (Proxy)            │    │                     │   │   │  Downstream  │
+  │          │   (OIDC/OAuth)   │  │                      │    │  ┌───────────────┐  │   │   │  Service     │
+  └────┬─────┘                  │  │  Receives client JWT │    │  │  Built-in STS │  │   │   │  (MCP, API)  │
+       │                        │  │         │            │    │  │  (:7777)      │  │   │   │              │
+       │ 2. Request + JWT       │  │         │ 3. Exchange│    │  │               │  │   │   │  Validates   │
+       ▼                        │  │         ▼            │    │  │  Validates    │  │   │   │  OBO JWT     │
+  ┌──────────┐                  │  │  ┌──────────────┐    │    │  │  user JWT     │  │   │   │  against     │
+  │          │  ──────────────► │  │  │ Calls STS    │ ───┼──► │  │  (JWKS)       │  │   │   │  STS JWKS    │
+  │  Agent   │                  │  │  │ with user    │    │    │  │               │  │   │   │              │
+  │          │                  │  │  │ JWT as       │ ◄──┼─── │  │  Issues       │  │   │   │  sub=alice   │
+  └──────────┘                  │  │  │ subject_token│    │    │  │  OBO JWT      │  │   │   │  act=agent   │
+                                │  │  └──────┬───────┘    │    │  │  (sub+act)    │  │   │   │  (if deleg.) │
+                                │  │         │            │    │  └───────────────┘  │   │   │              │
+                                │  │         │ 4. Forward │    │                     │   │   └──────────────┘
+                                │  │         │    OBO JWT │    │  JWKS at            │   │          ▲
+                                │  │         ▼            │    │  /.well-known/      │   │          │
+                                │  │  ───────────────────────────────────────────────┼───┼──────────┘
+                                │  │                      │    │  jwks.json          │   │   5. OBO JWT
+                                │  └──────────────────────┘    └─────────────────────┘   │
+                                │                                                        │
+                                └────────────────────────────────────────────────────────┘
+
+  ┌──────────────┐
+  │              │
+  │  IdP         │  Keycloak, Okta, Entra ID, Auth0 — issues the original user JWT
+  │  (External)  │  STS fetches its JWKS to validate user tokens
+  │              │
+  └──────────────┘
+```
+
+**The flow in five steps:**
+
+1. **User authenticates** with an Identity Provider (Keycloak, Okta, etc.) via OIDC → gets a JWT
+2. **Agent sends a request** to Agent Gateway with the user's JWT in the `Authorization` header
+3. **Gateway proxy exchanges the token** — calls the built-in STS with the user's JWT as the `subject_token`
+4. **STS validates and issues an OBO JWT** — verifies the user's JWT against the IdP's JWKS, then signs a new token with `sub` (user) and optionally `act` (agent)
+5. **Downstream receives the OBO JWT** — validates it against the STS's JWKS (one issuer to trust, not every IdP)
+
+The result: the downstream service never sees the original IdP token, trusts a single issuer, and gets clean claims without IdP-specific noise.
 
 The STS supports two exchange modes that differ in whether the **agent's identity** is preserved in the resulting token:
 
@@ -1834,6 +1887,113 @@ When something isn't working, check these in order:
 ```
 
 > **Hands-on debugging:** The [Flow 13 lab](../flow13-token-exchange/flow13-gateway-mediated-token-exchange/) includes an `echo_token` MCP tool that returns the exact token the MCP server received — useful for verifying that exchange happened and the claims are correct.
+
+---
+
+## Customer Conversation Guide
+
+Use this section to qualify whether token exchange is the right pattern for a customer's architecture, and which mode to recommend.
+
+### Discovery Questions
+
+Ask these early in the conversation to understand the customer's requirements:
+
+| Question | Why It Matters |
+|----------|---------------|
+| **"Do your downstream services need to know who the user is?"** | If no — passthrough or static secrets may be sufficient. If yes — token exchange is needed. |
+| **"Do your downstream services need to know which agent made the call?"** | If yes — delegation (dual identity with `sub` + `act`). If no — impersonation is simpler. |
+| **"How many identity providers do you have?"** | Multiple IdPs is the strongest driver for token exchange — it unifies trust into a single STS issuer instead of every downstream trusting every IdP. |
+| **"Do you need per-user audit trails on downstream services?"** | If yes — you need the user's identity in the token. Token exchange preserves `sub` while cleaning up IdP-specific claims. |
+| **"Does your IdP support RFC 8693?"** | Determines whether to use the built-in STS, the IdP as an external STS, or a hybrid approach. See the [Provider Guide](#external-idp--sts-provider-guide). |
+| **"Do you have any token revocation requirements?"** | If they need instant revocation — discuss opaque tokens (external STS) or short-lived JWTs. See [FAQ: Why JWTs?](#faq-why-jwts-and-not-opaque-tokens). |
+| **"Are your agents running in Kubernetes?"** | K8s service account tokens are the natural actor token for delegation. Non-K8s agents need a different actor identity strategy. |
+| **"Do you want zero code changes to your agents?"** | If yes — gateway-mediated (`ExchangeOnly`) is the answer. Agent never knows the STS exists. |
+
+### When to Recommend Each Pattern
+
+```
+                  Does the downstream need to know WHO the user is?
+                  │
+                  ├─ NO → Does the downstream need any auth at all?
+                  │        │
+                  │        ├─ NO → Passthrough (no auth)
+                  │        │
+                  │        └─ YES → Static Secret Injection
+                  │                 (validate inbound JWT, replace with shared API key)
+                  │
+                  └─ YES → Does the downstream need to know WHICH AGENT made the call?
+                           │
+                           ├─ NO → Token Exchange: Impersonation
+                           │       │
+                           │       ├─ Want zero agent code changes?
+                           │       │   └─ YES → Gateway-Mediated (ExchangeOnly)
+                           │       │
+                           │       └─ Agent needs custom scopes/audience?
+                           │           └─ YES → Agent-Initiated (omit actor token)
+                           │
+                           └─ YES → Token Exchange: Delegation
+                                    │
+                                    └─ Agent-Initiated (include actor token)
+                                       Requires: may_act claim in IdP token
+                                                 + K8s SA token as actor
+```
+
+### Pattern Comparison for Customer Discussions
+
+| Pattern | User Identity? | Agent Identity? | Code Changes? | Complexity | Best For |
+|---------|---------------|-----------------|---------------|------------|----------|
+| **Passthrough** | IdP-dependent | No | None | Lowest | Downstream already trusts the IdP, no multi-IdP, no token cleanup needed |
+| **Static Secret** | No | No | None | Low | Downstream uses a shared API key (no per-user access control needed) |
+| **Impersonation (gateway-mediated)** | Yes | No | None | Medium | Most common — per-user identity downstream, zero agent changes |
+| **Impersonation (agent-initiated)** | Yes | No | SDK/HTTP | Medium | Agent needs control over scopes or audience |
+| **Delegation** | Yes | Yes | SDK/HTTP | Highest | Audit trails, per-agent policies, multi-agent environments |
+
+### Common Customer Scenarios
+
+**Scenario 1: "We have Okta for SSO and want our agents to call internal MCP tools with user context."**
+
+→ **Recommendation:** Gateway-mediated impersonation with AGW built-in STS.
+- Okta as IdP (inbound auth), AGW STS for exchange
+- `subjectValidator` points to Okta's JWKS
+- Zero agent code changes — proxy handles everything
+- Downstream MCP servers trust one issuer (the STS)
+
+**Scenario 2: "We need audit trails showing which agent accessed data on behalf of which user."**
+
+→ **Recommendation:** Agent-initiated delegation.
+- Requires `may_act` claim in user tokens (IdP configuration)
+- Agent integrates with `agentsts-adk` SDK
+- OBO tokens include both `sub` (user) and `act` (agent)
+- CEL RBAC can enforce per-agent policies
+
+**Scenario 3: "We have multiple IdPs (Okta for employees, Azure AD for partners) and want a unified trust model."**
+
+→ **Recommendation:** Gateway-mediated impersonation with AGW built-in STS.
+- Configure `subjectValidator` with multiple JWKS sources (or use a single IdP federation point)
+- All downstream services trust one issuer (the STS) regardless of which IdP the user came from
+- Eliminates the N×M trust problem (N IdPs × M downstreams)
+
+**Scenario 4: "We need instant token revocation for compliance."**
+
+→ **Recommendation:** Either short-lived JWTs (simplest) or external STS with opaque tokens (most control).
+- **Short-lived JWTs:** Set `tokenExchange.tokenExpiration` to `5m`. Tokens expire fast, no introspection needed. Gap: 5-minute replay window.
+- **Opaque tokens:** Use Ory Hydra or PingFederate as external STS. MCP servers call introspection per request. Trade-off: network call per request, STS availability dependency.
+
+**Scenario 5: "Our agents are not in Kubernetes."**
+
+→ **Recommendation:** Gateway-mediated impersonation (no actor token needed) or agent-initiated with a custom actor identity.
+- Gateway-mediated doesn't need an actor token — works with any agent platform
+- For delegation: the agent needs any JWT the STS can validate as an actor. Options: a short-lived JWT from a dedicated IdP client, a custom token service, or application-level API keys mapped to agent identities.
+
+### Objection Handling
+
+| Objection | Response |
+|-----------|----------|
+| "We already forward tokens — why add complexity?" | Token exchange is about trust boundaries. Forwarding works with one IdP and one downstream. At scale (multiple IdPs, multiple downstreams, multiple agents), each downstream must trust every IdP. Token exchange collapses this to one trust relationship. Also, forwarding leaks IdP-specific claims (`realm_access`, `session_state`) to every downstream. |
+| "Can't we just use mutual TLS instead?" | mTLS authenticates the **connection** (which service is calling), not the **user**. Token exchange authenticates the **user** (who requested the action). They're complementary — you can use mTLS between agent and gateway, and token exchange for user identity propagation. |
+| "Our IdP already does token exchange — why use AGW's STS?" | If your IdP supports RFC 8693, you can use it as an external STS (`STS_URI` → IdP endpoint). AGW's built-in STS is useful when: (a) your IdP doesn't support RFC 8693 (Auth0, older Okta), (b) you want the STS colocated with the gateway for latency, (c) you want to avoid IdP vendor lock-in on the exchange logic. |
+| "This seems like overkill for our use case." | Start with the simplest pattern. If your agent calls one downstream and the IdP token is fine as-is, use passthrough. Token exchange becomes valuable when you add: multiple agents, multiple downstreams, audit requirements, or multi-IdP environments. It's a spectrum — you can start simple and add exchange later without changing downstream services (just add the policy). |
+| "What about performance? Isn't an extra hop slow?" | The built-in STS runs in-cluster (microseconds of network latency). JWT signing is ~1ms. The bigger cost is NOT using exchange — without it, every downstream independently validates against every IdP's JWKS. With exchange, downstreams cache one JWKS. Also, gateway-mediated exchange adds no latency from the agent's perspective — the proxy handles it in the request path. |
 
 ---
 
