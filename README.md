@@ -10,6 +10,12 @@ Comprehensive audit of all authentication patterns supported by [Solo Enterprise
 
 - **[Authentication Patterns guide with diagrams](Agentgateway-AuthN-Patterns/)**
 
+### Agent Gateway — OBO Token Exchange Enablement
+
+Deep-dive enablement on OBO token exchange — how the built-in STS works, delegation vs impersonation, gateway-mediated vs agent-initiated exchange, external IdP/STS provider integration (Keycloak, Okta, Entra ID, Google Cloud STS, Auth0, Ory Hydra, PingFederate), and downstream policy enforcement.
+
+- **[OBO Token Exchange Enablement](obo-token-exchange-enablement/Agentgateway-OBO-Token-Exchange.md)**
+
 ### Agent Gateway — Authorization Patterns
 
 Comprehensive audit of all authorization patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/) — RBAC (MCP tool-level and LLM route access), rate limiting (LLM and MCP), guardrails (regex, moderation, Bedrock, Model Armor, webhook, multi-layered), and CORS.
