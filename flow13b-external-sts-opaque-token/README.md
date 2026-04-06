@@ -11,35 +11,33 @@ Variant of [Flow 13](../flow13-gateway-mediated-token-exchange/) that uses an **
 5. Agent Gateway forwards the **opaque token** to the MCP server. The original IdP token is never forwarded.
 6. The MCP server calls the external STS **introspection endpoint** to resolve the opaque token back to claims.
 
-```
-                              +-----------+
-                              |   OIDC    |
-                              | Provider  |
-                              | (Keycloak)|
-                              +-----+-----+
-                                    |
-                              1. User JWT
-                                    |
-+--------+     2. Bearer JWT  +-----v-----------+   4. Opaque token  +------------+
-| Client |-------------------->  Agent Gateway   |-------------------->  MCP Server |
-|        |                    |   (Proxy)        |                    |            |
-+--------+                    |                  |                    | 5. Calls   |
-                              |  Validates JWT   |                    |  /introspect|
-                              |  Exchanges at    |                    |  on ext STS |
-                              |  external STS    |                    +------+-----+
-                              |  (automatic)     |                           |
-                              +------------------+                           |
-                                       |                                     |
-                              3. Token Exchange                              |
-                                  (gateway-mediated)                         |
-                                       |                                     |
-                              +--------v---------+                           |
-                              |  External STS    |<--------------------------+
-                              |  (port 9000)     |   POST /introspect
-                              |                  |   token=<opaque>
-                              |  subject_token   |   -> { active: true,
-                              |  --> opaque hex   |      sub: "alice" }
-                              +------------------+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant KC as Keycloak<br/>(OIDC Provider)
+    participant AGW as Agent Gateway<br/>(Proxy)
+    participant STS as External STS<br/>(port 9000)
+    participant MCP as MCP Server
+
+    C->>KC: 1. Authenticate (username/password)
+    KC-->>C: User JWT (iss: Keycloak)
+
+    C->>AGW: 2. MCP request + Bearer JWT
+    AGW->>STS: 3. POST /token<br/>grant_type=token-exchange<br/>subject_token=<JWT>
+    STS-->>STS: Decode JWT, store claims<br/>Generate opaque token (hex)
+    STS-->>AGW: 4. { access_token: "a3f7b2c9..." }
+
+    Note over AGW: Replaces Authorization header<br/>with opaque token
+
+    AGW->>MCP: 5. MCP request + Bearer <opaque token>
+
+    Note over MCP: Not a JWT!<br/>No dots, no claims, can't decode
+
+    MCP->>STS: 6. POST /introspect<br/>token=a3f7b2c9...
+    STS-->>MCP: 7. { active: true, sub: "alice",<br/>username: "testuser" }
+
+    MCP-->>AGW: 8. MCP response
+    AGW-->>C: 9. MCP response
 ```
 
 ### Key differences from Flow 13
@@ -67,6 +65,9 @@ Variant of [Flow 13](../flow13-gateway-mediated-token-exchange/) that uses an **
 ## Step 1: Deploy Keycloak and PostgreSQL
 
 Same as [Flow 13 Step 1](../flow13-gateway-mediated-token-exchange/README.md#step-1-deploy-keycloak-and-postgresql).
+
+<details>
+<summary><strong>Keycloak + PostgreSQL YAML</strong></summary>
 
 ```bash
 kubectl create namespace keycloak 2>/dev/null || true
@@ -225,6 +226,8 @@ EOF
 kubectl wait -n keycloak statefulset/keycloak --for=condition=Ready --timeout=420s
 ```
 
+</details>
+
 ---
 
 ## Step 2: Configure Keycloak realm, client, and user
@@ -282,6 +285,9 @@ curl -s -X POST "${KEYCLOAK_URL}/admin/realms/flow13b-realm/users" \
 ## Step 3: Deploy the External STS
 
 A minimal Python server that implements RFC 8693 token exchange and RFC 7662 introspection. It accepts a user JWT, stores the claims in memory, and returns a random opaque token.
+
+<details>
+<summary><strong>External STS YAML</strong></summary>
 
 ```bash
 kubectl apply -n default -f - <<'EOF'
@@ -457,6 +463,8 @@ EOF
 kubectl wait deployment/external-sts -n default --for=condition=Available --timeout=120s
 ```
 
+</details>
+
 **Verify the STS is running:**
 
 ```bash
@@ -471,6 +479,9 @@ kubectl logs -n default -l app=external-sts --tail=5
 ## Step 4: Deploy MCP server (opaque token aware)
 
 This MCP server detects whether the incoming token is a JWT or opaque, and calls the external STS introspection endpoint to resolve opaque tokens.
+
+<details>
+<summary><strong>MCP Server YAML</strong></summary>
 
 ```bash
 kubectl apply -n default -f - <<'EOF'
@@ -686,6 +697,8 @@ EOF
 kubectl wait deployment/mcp-website-fetcher -n default --for=condition=Available --timeout=120s
 ```
 
+</details>
+
 ---
 
 ## Step 5: Install Enterprise Agentgateway with STS enabled
@@ -724,6 +737,9 @@ kubectl rollout status deployment -n agentgateway-system -l app.kubernetes.io/in
 ## Step 6: Create Gateway, Backend, HTTPRoute, and policies
 
 Key difference from Flow 13: **`STS_URI` points to the external STS** (not the built-in one), and **no `mcp.authentication`** on the policy (AGW cannot validate opaque tokens -- the MCP server handles validation via introspection).
+
+<details>
+<summary><strong>Gateway, Backend, Routes, and Policy YAML</strong></summary>
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -859,6 +875,8 @@ EOF
 kubectl wait gateway/flow13b-gateway -n default --for=condition=Programmed --timeout=120s
 ```
 
+</details>
+
 **Verify policy is attached:**
 
 ```bash
@@ -988,27 +1006,24 @@ RECEIVED OPAQUE TOKEN
 
 ## What this proves
 
-```
-+--------+                 +-------------------+                 +-------------+
-| Client |  Keycloak JWT   |   Agent Gateway   |  Opaque token   |  MCP Server |
-|        |---------------->|                   |---------------->|             |
-|        |                 |  1. Receives JWT   |                 | NOT a JWT!  |
-|        |                 |  2. Calls external |                 | Calls STS   |
-|        |                 |     STS /token     |                 | /introspect |
-|        |                 |  3. Gets opaque    |                 | to resolve  |
-|        |<----------------|     token back     |<----------------| identity    |
-+--------+                 +-------------------+                 +------+------+
-                                    |                                   |
-                           STS_URI = external STS                       |
-                           (not built-in :7777)                         |
-                                    |                                   |
-                           +--------v---------+                         |
-                           |  External STS    |<------------------------+
-                           |  (port 9000)     |  POST /introspect
-                           |                  |  token=a3f7b2c9...
-                           |  Stores claims   |  -> { active: true,
-                           |  in memory       |       sub: "faa04387..." }
-                           +------------------+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant AGW as Agent Gateway
+    participant STS as External STS
+    participant MCP as MCP Server
+
+    C->>AGW: Keycloak JWT
+    AGW->>STS: POST /token (subject_token=JWT)
+    STS-->>AGW: { access_token: "a3f7b2c9..." }
+
+    Note over AGW: Swaps JWT for opaque token
+
+    AGW->>MCP: Bearer a3f7b2c9... (NOT a JWT!)
+    MCP->>STS: POST /introspect (token=a3f7b2c9...)
+    STS-->>MCP: { active: true, sub: "faa04387..." }
+    MCP-->>AGW: MCP response
+    AGW-->>C: MCP response
 ```
 
 **Key takeaways:**
