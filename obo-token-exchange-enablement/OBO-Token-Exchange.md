@@ -113,6 +113,24 @@ Each part is Base64URL-encoded JSON. You can decode the payload to see the claim
 
 **How JWT validation works:** The receiver fetches the issuer's public keys from a **JWKS (JSON Web Key Set)** endpoint (e.g., `https://keycloak.example.com/.well-known/jwks.json`), then verifies the token's signature cryptographically. This is a **local operation** — no network call to the issuer per request. If the signature matches, the issuer matches, and the token isn't expired, it's valid.
 
+**JWKS caching and refresh:** The gateway does **not** call the IdP on every request. It caches the JWKS keys and refreshes them periodically:
+
+```
+Timeline:
+  t=0     Gateway starts, fetches JWKS from IdP ──► caches keys locally
+  t=0-5m  All JWT validation uses cached keys (no network calls)
+  t=5m    Cache expires ──► next request triggers a JWKS refetch
+  t=5m+   New keys cached, validation continues locally
+```
+
+In Solo Enterprise for Agent Gateway (Envoy-based data plane):
+- **Default cache duration: 5 minutes** — after 5 minutes, the cached JWKS expires and is refetched on the next request
+- Configurable via `cacheDuration` on the `RemoteJwks` spec (e.g., `cacheDuration: 10m` for less frequent refetching)
+- **`asyncFetch` option:** Pre-fetches JWKS in the main thread before the listener activates, so keys are ready when the first request arrives (avoids pausing initial requests). When enabled, refetching also happens in the background when the cache expires.
+- **Key rotation:** When an IdP rotates its signing keys, the new keys are picked up on the next cache refresh (within the `cacheDuration` window). There's no per-request overhead — hundreds of thousands of requests are validated against the same cached keyset.
+
+This is a critical difference from opaque tokens: JWT validation is a **local cryptographic check** (microseconds, no availability dependency), while opaque token introspection requires a **network round-trip to the IdP on every request** (milliseconds + the IdP must be available).
+
 > **Try it:** Paste any JWT into [jwt.io](https://jwt.io) to decode it. · **Spec:** [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519)
 
 ### What Is OIDC?
@@ -2011,7 +2029,7 @@ The built-in STS always issues **JWTs** (signed, self-contained tokens) — not 
 | **Size** | Larger (~500-1000 chars) | Smaller (~32-64 chars) |
 | **Privacy** | Claims visible to anyone with the token (base64-encoded, not encrypted) | Claims stay at the issuer |
 
-**Why AGW uses JWTs:** The gateway sits in the hot path — every MCP request passes through it. JWT validation is a local cryptographic check (microseconds), while opaque token introspection requires a network round-trip to the STS on every request (milliseconds + availability dependency). For a gateway handling high-throughput agent traffic, local validation is critical.
+**Why AGW uses JWTs:** The gateway sits in the hot path — every MCP request passes through it. JWT validation is a local cryptographic check (microseconds) against cached JWKS keys — the gateway fetches the IdP's public keys once and caches them for **5 minutes** (default, configurable via `cacheDuration`). During that window, every JWT is validated locally with zero network calls. When the cache expires, keys are refetched on the next request. Opaque token introspection, by contrast, requires a network round-trip to the STS on **every single request** (milliseconds + availability dependency). For a gateway handling high-throughput agent traffic, local validation with cached keys is critical.
 
 ### Can I Use Opaque Tokens with an External STS?
 
