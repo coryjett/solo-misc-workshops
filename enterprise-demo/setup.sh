@@ -202,18 +202,18 @@ if ! command -v arctl >/dev/null 2>&1; then
   curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
 fi
 
-# Scaffold
+# Port-forward Agent Registry (needed for arctl scaffold)
+kubectl port-forward svc/agentregistry 12121:12121 -n agentregistry &
+PF_PID=$!
+sleep 3
+
+# Scaffold in temp directory
+cd "${WORKDIR}"
 arctl mcp init python weather-tools --non-interactive \
   --description "Weather forecast MCP server" \
   --author "demo-user" \
-  --no-git \
-  2>/dev/null || true
-cd weather-tools 2>/dev/null || cd "${WORKDIR}"
-
-# If arctl created it in CWD, handle that
-if [ -d weather-tools ]; then
-  cd weather-tools
-fi
+  --no-git
+cd weather-tools
 
 # Replace example tools with weather tools
 rm -f src/tools/echo.py src/tools/sum.py 2>/dev/null || true
@@ -269,12 +269,8 @@ docker build -t weather-tools:latest .
 # Load into k3d
 k3d image import weather-tools:latest -c "${CLUSTER_NAME}"
 
-# Publish to Agent Registry
+# Publish to Agent Registry (port-forward already running from scaffold step)
 info "Publishing to Agent Registry..."
-kubectl port-forward svc/agentregistry 12121:12121 -n agentregistry &
-PF_PID=$!
-sleep 3
-
 arctl mcp publish . --type oci --package-id weather-tools:latest --overwrite 2>/dev/null || true
 
 # Deploy via Agent Registry
