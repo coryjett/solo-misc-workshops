@@ -443,7 +443,203 @@ spec:
         - 'apiKey.role == "agent" || apiKey.role == "admin"'
 EOF
 
+# Tracing Policy — export OTLP traces per-request to Solo Enterprise collector
+kubectl apply -f - <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: agw-to-collector
+  namespace: kagent
+spec:
+  from:
+    - group: agentgateway.dev
+      kind: AgentgatewayPolicy
+      namespace: agentgateway-system
+  to:
+    - group: ""
+      kind: Service
+      name: solo-enterprise-telemetry-collector
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: tracing
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+  - kind: Gateway
+    name: ai-gateway
+    group: gateway.networking.k8s.io
+  frontend:
+    tracing:
+      backendRef:
+        name: solo-enterprise-telemetry-collector
+        namespace: kagent
+        port: 4317
+      protocol: GRPC
+      randomSampling: "true"
+EOF
+
 ok "Agent Gateway routing + security configured"
+
+# ============================================================================
+# 7b. Patch telemetry collector to scrape AGW proxy Prometheus metrics
+# ============================================================================
+info "Patching telemetry collector for AGW metrics..."
+
+# Get the Helm-rendered collector config, add AGW Prometheus scraping
+if kubectl get configmap -n kagent solo-enterprise-telemetry-collector-config &>/dev/null; then
+  kubectl get configmap solo-enterprise-telemetry-collector-config -n kagent \
+    -o jsonpath='{.data.relay}' > /tmp/relay-current.yaml
+
+  if ! grep -q "prometheus/agw" /tmp/relay-current.yaml; then
+    python3 - /tmp/relay-current.yaml <<'PYEOF'
+import sys
+
+with open(sys.argv[1]) as f:
+    content = f.read()
+
+# 1. Add resource/agw_metrics processor (before resource/cluster_context)
+content = content.replace(
+    "\n  resource/cluster_context:",
+    """
+  resource/agw_metrics:
+    attributes:
+      - key: "cluster_name"
+        action: upsert
+        value: "solo-ai-demo"
+      - key: "service.name"
+        action: upsert
+        value: "ai-gateway"
+
+  resource/cluster_context:""")
+
+# 2. Add prometheus/agw receiver (before connectors: or service: section)
+receiver_block = """  prometheus/agw:
+    config:
+      scrape_configs:
+      - job_name: agentgateway-proxy
+        scrape_interval: 15s
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+            - agentgateway-system
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          action: keep
+          regex: ai-gateway
+        - source_labels: [__meta_kubernetes_pod_ip]
+          action: replace
+          target_label: __address__
+          regex: (.+)
+          replacement: $1:15020
+"""
+# Insert before connectors: or service: (whichever comes first after receivers)
+for anchor in ["\nconnectors:", "\nservice:"]:
+    if anchor in content:
+        content = content.replace(anchor, "\n" + receiver_block + anchor)
+        break
+
+# 3. Append metrics/agw pipeline at end of file
+content = content.rstrip() + """
+    metrics/agw:
+      receivers:
+        - prometheus/agw
+      processors:
+        - memory_limiter
+        - resource/agw_metrics
+        - batch
+      exporters:
+        - clickhouse/metrics
+"""
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+print("Patched collector config with AGW metrics scraping")
+PYEOF
+
+    kubectl create configmap solo-enterprise-telemetry-collector-config -n kagent \
+      --from-file=relay=/tmp/relay-current.yaml \
+      --dry-run=client -o yaml | kubectl apply -f -
+    kubectl delete pod -n kagent -l app=solo-enterprise-telemetry-collector --wait=false
+    ok "Telemetry collector patched for AGW metrics"
+  else
+    ok "Telemetry collector already has AGW metrics config"
+  fi
+  rm -f /tmp/relay-current.yaml
+else
+  warn "Telemetry collector configmap not found, skipping metrics patch"
+fi
+
+# ============================================================================
+# 7c. Deploy load generator for continuous AGW dashboard data
+# ============================================================================
+info "Deploying AGW load generator..."
+
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agw-load-generator
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agw-load-generator
+  template:
+    metadata:
+      labels:
+        app: agw-load-generator
+    spec:
+      containers:
+      - name: load-gen
+        image: curlimages/curl
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          GW="http://ai-gateway.agentgateway-system.svc.cluster.local:3000"
+          AUTH="Authorization: Bearer admin-key-99999"
+          CT="Content-Type: application/json"
+          ACC="Accept: application/json, text/event-stream"
+
+          CITIES="San_Francisco New_York Chicago Seattle Miami Denver Austin Portland Boston Los_Angeles"
+          STATES="CA NY IL WA FL CO TX OR MA GA"
+
+          echo "Starting AGW load generator..."
+          while true; do
+            CITY=$(echo $CITIES | tr " " "\n" | shuf | head -1 | tr "_" " ")
+            STATE=$(echo $STATES | tr " " "\n" | shuf | head -1)
+
+            SESSION=$(curl -s -D /dev/stderr "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" \
+              -d "{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1,\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"load-gen\",\"version\":\"1.0\"}}}" \
+              2>&1 1>/dev/null | grep -i mcp-session-id | tr -d "\r" | cut -d" " -f2)
+
+            if [ -n "$SESSION" ]; then
+              curl -s -o /dev/null "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" -H "mcp-session-id: $SESSION" \
+                -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":2,\"params\":{}}"
+              curl -s -o /dev/null "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" -H "mcp-session-id: $SESSION" \
+                -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"id\":3,\"params\":{\"name\":\"get_forecast\",\"arguments\":{\"city\":\"$CITY\"}}}"
+              curl -s -o /dev/null "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" -H "mcp-session-id: $SESSION" \
+                -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"id\":4,\"params\":{\"name\":\"get_alerts\",\"arguments\":{\"state\":\"$STATE\"}}}"
+              echo "$(date +%H:%M:%S) Session OK - forecast:$CITY alerts:$STATE"
+            else
+              echo "$(date +%H:%M:%S) Session failed, retrying..."
+            fi
+
+            sleep 10
+          done
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+EOF
+
+ok "AGW load generator deployed (1 session every 10s)"
 
 # ============================================================================
 # 8. Create kagent agent
