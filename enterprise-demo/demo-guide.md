@@ -630,9 +630,27 @@ kubectl get pods -n demo
 
 > **Show:** The newly published server in the catalog — navigate to it in the UI. Click the **Deployed** tab to see it running.
 
-### Create a Skill and Agent (5 min)
+### Create a Prompt, Skill, and Agent (5 min)
 
-> **Talk track:** "Agent Registry isn't just for MCP servers. It's a catalog for all your AI artifacts — skills, prompts, and complete agents. Let's create a skill and an agent that uses our weather MCP server."
+> **Talk track:** "Agent Registry isn't just for MCP servers. It's a catalog for all your AI artifacts — prompts, skills, and complete agents. Let's create all three and wire them together."
+
+**Create a prompt** — a reusable system prompt published to the registry:
+
+```bash
+# Write the prompt
+cat > weather-assistant-prompt.md << 'EOF'
+You are a friendly weather assistant. Use your tools to fetch
+real-time weather data before answering. Be concise but thorough.
+EOF
+
+# Publish to the registry
+arctl prompt publish weather-assistant-prompt.md \
+  --name weather-assistant-prompt \
+  --version 1.0.0 \
+  --description "System prompt for the weather assistant agent"
+```
+
+> **Show:** The prompt in the Agent Registry UI — `arctl prompt list` to verify.
 
 **Create a skill** — a reusable set of instructions for weather analysis:
 
@@ -646,14 +664,15 @@ arctl skill publish weather-analysis/ --push
 
 > **Show:** The skill in the Agent Registry UI under the Skills tab.
 
-**Create an agent** — wire together the model, MCP server, and skill:
+**Create an agent** — wire together the model, MCP server, prompt, and skill:
 
 ```bash
-# Scaffold an agent with OpenAI
+# Scaffold an agent with OpenAI, using the prompt as instructions
 arctl agent init adk python weather-assistant \
   --model-provider OpenAI \
   --model-name gpt-4o-mini \
-  --description "AI weather assistant with forecasts and alerts"
+  --description "AI weather assistant with forecasts and alerts" \
+  --instruction-file weather-assistant-prompt.md
 
 cd weather-assistant
 
@@ -673,9 +692,9 @@ arctl agent publish .
 
 ### Semantic Search (2 min)
 
-> **Talk track:** "Now that we have MCP servers, skills, and agents registered, developers can search by what they need, not by what they know exists."
+> **Talk track:** "Now that we have MCP servers, prompts, skills, and agents registered, developers can search by what they need, not by what they know exists."
 
-> **Show in the UI:** Type "weather" in the search bar. Our MCP server, skill, and agent all appear — developers can discover complete AI capabilities without knowing the exact names.
+> **Show in the UI:** Type "weather" in the search bar. Our MCP server, prompt, skill, and agent all appear — developers can discover complete AI capabilities without knowing the exact names.
 
 ### Key Takeaway (1 min)
 

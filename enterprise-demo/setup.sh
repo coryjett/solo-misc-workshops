@@ -275,6 +275,26 @@ arctl mcp publish . --type oci --package-id weather-tools:latest --overwrite 2>/
 
 cd "${WORKDIR}"
 
+# --- Create a Prompt ---
+info "Creating weather-assistant prompt..."
+cat > weather-assistant-prompt.md << 'PROMPTEOF'
+You are a friendly and knowledgeable weather assistant. You help users with:
+
+- Current weather forecasts for any city
+- Active weather alerts for US states
+- Travel recommendations based on weather conditions
+- Clothing suggestions for the day
+
+Always use your available tools to fetch real-time weather data before answering.
+Be concise but thorough. If a user asks about multiple cities, check each one.
+PROMPTEOF
+
+arctl prompt publish weather-assistant-prompt.md \
+  --name weather-assistant-prompt \
+  --version "1.0.0" \
+  --description "System prompt for the weather assistant agent" 2>/dev/null || true
+ok "Prompt published to Agent Registry"
+
 # --- Create a Skill ---
 info "Creating weather-analysis skill..."
 arctl skill init weather-analysis --no-git --force
@@ -304,27 +324,14 @@ ok "Skill published to Agent Registry"
 # --- Create an Agent with MCP server + Skill ---
 info "Creating weather-assistant agent..."
 
-# Write agent instructions
-cat > /tmp/weather-agent-instructions.md << 'INSTREOF'
-You are a friendly and knowledgeable weather assistant. You help users with:
-
-- Current weather forecasts for any city
-- Active weather alerts for US states
-- Travel recommendations based on weather conditions
-- Clothing suggestions for the day
-
-Always use your available tools to fetch real-time weather data before answering.
-Be concise but thorough. If a user asks about multiple cities, check each one.
-INSTREOF
-
 arctl agent init adk python weather-assistant \
   --model-provider OpenAI \
   --model-name gpt-4o-mini \
   --description "AI weather assistant with forecasts, alerts, and travel recommendations" \
-  --instruction-file /tmp/weather-agent-instructions.md \
+  --instruction-file "${WORKDIR}/weather-assistant-prompt.md" \
   --force 2>/dev/null || arctl agent init adk python weather-assistant \
   --description "AI weather assistant with forecasts, alerts, and travel recommendations" \
-  --instruction-file /tmp/weather-agent-instructions.md \
+  --instruction-file "${WORKDIR}/weather-assistant-prompt.md" \
   --force
 
 cd weather-assistant
@@ -344,7 +351,6 @@ arctl agent publish . 2>/dev/null || true
 ok "Agent published to Agent Registry"
 
 cd "${WORKDIR}"
-rm -f /tmp/weather-agent-instructions.md
 
 kill $PF_PID 2>/dev/null || true
 cd - >/dev/null
