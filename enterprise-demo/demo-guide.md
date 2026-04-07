@@ -618,7 +618,7 @@ kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80 &
 arctl mcp publish weather-tools/ --type oci --package-id weather-tools:latest
 
 # Deploy from the catalog to Kubernetes
-arctl deployments create demo-user/weather-tools \
+arctl deployments create weather-tools \
   --type mcp \
   --provider-id kubernetes-default \
   --namespace demo
@@ -1006,9 +1006,9 @@ kubectl get agent -n kagent
 
 | Product | Role | What It Did |
 |---------|------|-------------|
-| **Agent Registry** | Catalog & Discovery | The weather MCP server was scaffolded, published, and deployed from the catalog. Developers searched "weather" and found it. |
+| **Agent Registry** | Catalog & Discovery | MCP servers, prompts, skills, and agents were published to the catalog. Developers searched "weather" and found them. |
 | **Agent Gateway** | Routing & Security | Routed the MCP call, validated the API key, enforced RBAC, generated OTEL traces. Zero changes to the agent or MCP server. |
-| **kagent** | Agent Lifecycle | The agent was defined as a K8s resource (YAML), connected to tools via the gateway, and accessible through the Solo Enterprise chat UI. No custom code. |
+| **kagent** | Agent Lifecycle | The agent was defined as K8s resources (YAML), connected to tools via the gateway, and accessible through the Solo Enterprise chat UI. No custom code. |
 
 ### The Value: Each Product Works Alone, Better Together
 

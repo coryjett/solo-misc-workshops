@@ -346,6 +346,9 @@ arctl agent add-skill weather-analysis \
   --registry-skill-name weather-analysis \
   --project-dir . 2>/dev/null || true
 
+# Build agent Docker image
+arctl agent build . 2>/dev/null || true
+
 # Publish agent to registry
 arctl agent publish . 2>/dev/null || true
 ok "Agent published to Agent Registry"
@@ -353,9 +356,10 @@ ok "Agent published to Agent Registry"
 cd "${WORKDIR}"
 
 kill $PF_PID 2>/dev/null || true
-cd - >/dev/null
 
-# Deploy MCP server via K8s manifests (arctl deployments are unreliable)
+# --- Deploy MCP server to K8s ---
+# Note: `arctl deployments create` can deploy from the registry to K8s, but
+# for local k3d clusters we use kubectl directly for reliability (imagePullPolicy).
 kubectl apply -f - <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
