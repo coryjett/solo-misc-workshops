@@ -149,7 +149,7 @@ helm upgrade -i kagent-crds \
   -n kagent \
   --version "${KAGENT_ENT_VERSION}"
 
-# Workload plane
+# Workload plane — includes OBO skip + auth disable + real OpenAI key
 cat > /tmp/kagent.yaml <<EOF
 licensing:
   licenseKey: ${AGENTGATEWAY_LICENSE_KEY}
@@ -157,6 +157,11 @@ providers:
   default: openAI
   openAI:
     apiKey: ${OPENAI_API_KEY}
+oidc:
+  skipOBO: true
+  secret: "dummy-not-used"
+autoAuth:
+  enabled: false
 otel:
   tracing:
     enabled: true
@@ -175,16 +180,6 @@ helm upgrade -i kagent \
 
 rm -f /tmp/management.yaml /tmp/kagent.yaml
 
-# Skip OBO token handler (no OIDC provider in local demo)
-kubectl set env deployment/kagent-controller -n kagent -c controller SKIP_OBO=true
-kubectl set env deployment/solo-enterprise-ui -n kagent -c ui-backend SKIP_OBO=true
-
-# Patch OpenAI API key (Helm chart defaults to placeholder)
-kubectl patch secret kagent-openai -n kagent \
-  -p "{\"stringData\":{\"OPENAI_API_KEY\":\"${OPENAI_API_KEY}\"}}"
-
-# Restart to pick up changes
-kubectl rollout restart deployment/kagent-controller deployment/solo-enterprise-ui -n kagent
 kubectl rollout status deployment/kagent-controller -n kagent --timeout=120s
 kubectl rollout status deployment/solo-enterprise-ui -n kagent --timeout=120s
 
@@ -202,7 +197,7 @@ if ! command -v arctl >/dev/null 2>&1; then
   curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
 fi
 
-# Port-forward Agent Registry (needed for arctl scaffold)
+# Port-forward Agent Registry (needed for arctl scaffold + publish)
 kubectl port-forward svc/agentregistry 12121:12121 -n agentregistry &
 PF_PID=$!
 sleep 3
@@ -215,13 +210,14 @@ arctl mcp init python weather-tools --non-interactive \
   --no-git
 cd weather-tools
 
-# Replace example tools with weather tools
-rm -f src/tools/echo.py src/tools/sum.py 2>/dev/null || true
-
-cat > src/tools/weather.py << 'PYEOF'
-"""Weather tools for the demo MCP server."""
+# Replace the generated main.py with a simple FastMCP server
+# (arctl scaffold's DynamicMCPServer is incompatible with FastMCP 3.0)
+cat > src/main.py << 'PYEOF'
+"""Simple weather MCP server."""
 import random
-from core.server import mcp
+from fastmcp import FastMCP
+
+mcp = FastMCP(name="weather-tools")
 
 @mcp.tool()
 def get_forecast(city: str) -> str:
@@ -238,7 +234,7 @@ def get_forecast(city: str) -> str:
     return (
         f"Weather for {city}:\n"
         f"  Condition: {condition}\n"
-        f"  Temperature: {temp} F\n"
+        f"  Temperature: {temp}F\n"
         f"  Humidity: {humidity}%\n"
         f"  Wind: {random.randint(5, 20)} mph"
     )
@@ -261,6 +257,9 @@ def get_alerts(state: str) -> str:
     if state in alerts:
         return f"Active alerts for {state}:\n  {alerts[state]}"
     return f"No active weather alerts for {state}."
+
+if __name__ == "__main__":
+    mcp.run(transport="http", host="0.0.0.0", port=3000, path="/mcp")
 PYEOF
 
 # Build Docker image
@@ -269,23 +268,52 @@ docker build -t weather-tools:latest .
 # Load into k3d
 k3d image import weather-tools:latest -c "${CLUSTER_NAME}"
 
-# Publish to Agent Registry (port-forward already running from scaffold step)
+# Publish to Agent Registry
 info "Publishing to Agent Registry..."
 arctl mcp publish . --type oci --package-id weather-tools:latest --overwrite 2>/dev/null || true
-
-# Deploy via Agent Registry
-arctl deployments create demo-user/weather-tools \
-  --type mcp \
-  --provider-id kubernetes-default \
-  --namespace demo \
-  --version 0.1.0 2>/dev/null || true
 
 kill $PF_PID 2>/dev/null || true
 cd - >/dev/null
 
+# Deploy MCP server via K8s manifests (arctl deployments are unreliable)
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weather-tools
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: weather-tools
+  template:
+    metadata:
+      labels:
+        app: weather-tools
+    spec:
+      containers:
+      - name: weather-tools
+        image: weather-tools:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weather-tools
+  namespace: demo
+spec:
+  selector:
+    app: weather-tools
+  ports:
+  - port: 3000
+    targetPort: 3000
+EOF
+
 # Wait for pod
-kubectl -n demo wait --for=condition=ready pod -l app=demo-user-weather-tools --timeout=120s 2>/dev/null || \
-  sleep 15  # Fallback wait
+kubectl -n demo wait --for=condition=ready pod -l app=weather-tools --timeout=120s
 ok "MCP server deployed"
 
 # ============================================================================
@@ -313,11 +341,8 @@ EOF
 
 sleep 10
 
-# Get the MCP server service name (arctl-deployed)
-MCP_SVC=$(kubectl get svc -n demo -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "weather-tools")
-
 # Backend
-kubectl apply -f - <<EOF
+kubectl apply -f - <<'EOF'
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
@@ -328,7 +353,7 @@ spec:
     targets:
     - name: weather
       static:
-        host: ${MCP_SVC}.demo.svc.cluster.local
+        host: weather-tools.demo.svc.cluster.local
         port: 3000
         protocol: StreamableHTTP
 EOF
@@ -432,7 +457,7 @@ spec:
   apiKeySecretKey: OPENAI_API_KEY
 EOF
 
-# RemoteMCPServer
+# RemoteMCPServer — uses headersFrom for AGW API key auth
 kubectl apply -f - <<'EOF'
 apiVersion: kagent.dev/v1alpha2
 kind: RemoteMCPServer

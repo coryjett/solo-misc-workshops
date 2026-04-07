@@ -184,6 +184,11 @@ providers:
   default: openAI
   openAI:
     apiKey: ${OPENAI_API_KEY}
+oidc:
+  skipOBO: true
+  secret: "dummy-not-used"
+autoAuth:
+  enabled: false
 otel:
   tracing:
     enabled: true
@@ -206,22 +211,10 @@ helm upgrade -i kagent \
 
 # Verify
 kubectl -n kagent wait --for=condition=ready pod -l app.kubernetes.io/name=solo-enterprise-ui --timeout=300s
-
-# Skip OBO token handler (no OIDC provider in local demo)
-kubectl set env deployment/kagent-controller -n kagent -c controller SKIP_OBO=true
-kubectl set env deployment/solo-enterprise-ui -n kagent -c ui-backend SKIP_OBO=true
-
-# Patch OpenAI API key (Helm chart defaults to placeholder)
-kubectl patch secret kagent-openai -n kagent \
-  -p "{\"stringData\":{\"OPENAI_API_KEY\":\"${OPENAI_API_KEY}\"}}"
-
-# Restart to pick up changes
-kubectl rollout restart deployment/kagent-controller deployment/solo-enterprise-ui -n kagent
 kubectl rollout status deployment/kagent-controller -n kagent --timeout=120s
-kubectl rollout status deployment/solo-enterprise-ui -n kagent --timeout=120s
 ```
 
-> **Note:** `SKIP_OBO=true` disables the "on behalf of" token handler since there's no OIDC provider in the local demo. The `kagent-openai` secret must be patched because the Helm chart defaults it to a placeholder. For production, configure your OIDC provider (Keycloak, Okta, etc.) and remove the `SKIP_OBO` patches.
+> **Note:** `oidc.skipOBO: true` and `autoAuth.enabled: false` disable the OBO token handler and auto-auth since there's no OIDC provider in the local demo. The `providers.openAI.apiKey` in the Helm values ensures the real OpenAI key is used (the chart defaults to a placeholder). For production, configure your OIDC provider (Keycloak, Okta, etc.) and remove these overrides.
 
 ### 5. Create the Demo MCP Server
 
@@ -238,27 +231,21 @@ arctl mcp init python weather-tools --non-interactive \
   --no-git
 ```
 
-Replace the scaffolded tools with weather tools:
+Replace the scaffolded `src/main.py` with a simple FastMCP server (the arctl scaffold's `DynamicMCPServer` is incompatible with FastMCP 3.0):
 
 ```bash
-# Remove example tools
-rm weather-tools/src/tools/echo.py weather-tools/src/tools/sum.py
-
-# Create weather tools
-cat > weather-tools/src/tools/weather.py << 'PYEOF'
-"""Weather tools for the demo MCP server."""
-
+cat > weather-tools/src/main.py << 'PYEOF'
+"""Simple weather MCP server."""
 import random
-from core.server import mcp
+from fastmcp import FastMCP
 
+mcp = FastMCP(name="weather-tools")
 
 @mcp.tool()
 def get_forecast(city: str) -> str:
     """Get the current weather forecast for a city.
-
     Args:
         city: The city name (e.g., "San Francisco", "New York")
-
     Returns:
         A weather forecast for the specified city
     """
@@ -266,23 +253,19 @@ def get_forecast(city: str) -> str:
     temp = random.randint(55, 85)
     humidity = random.randint(30, 80)
     condition = random.choice(conditions)
-
     return (
         f"Weather for {city}:\n"
         f"  Condition: {condition}\n"
-        f"  Temperature: {temp} F\n"
+        f"  Temperature: {temp}F\n"
         f"  Humidity: {humidity}%\n"
         f"  Wind: {random.randint(5, 20)} mph"
     )
 
-
 @mcp.tool()
 def get_alerts(state: str) -> str:
     """Get active weather alerts for a US state.
-
     Args:
         state: Two-letter US state code (e.g., "CA", "NY")
-
     Returns:
         Active weather alerts for the specified state
     """
@@ -292,11 +275,13 @@ def get_alerts(state: str) -> str:
         "TX": "Severe Thunderstorm Warning: Large hail and damaging winds possible.",
         "NY": "Winter Weather Advisory: 3-5 inches of snow expected overnight.",
     }
-
     state = state.upper()
     if state in alerts:
         return f"Active alerts for {state}:\n  {alerts[state]}"
     return f"No active weather alerts for {state}."
+
+if __name__ == "__main__":
+    mcp.run(transport="http", host="0.0.0.0", port=3000, path="/mcp")
 PYEOF
 ```
 
@@ -313,7 +298,7 @@ k3d image import weather-tools:latest -c solo-ai-demo
 # kind load docker-image weather-tools:latest --name solo-ai-demo
 ```
 
-### 6. Publish and Deploy via Agent Registry
+### 6. Publish to Agent Registry and Deploy
 
 ```bash
 # Port-forward Agent Registry API
@@ -325,12 +310,45 @@ arctl mcp publish weather-tools/ \
   --package-id weather-tools:latest \
   --overwrite
 
-# Deploy to Kubernetes via Agent Registry
-arctl deployments create demo-user/weather-tools \
-  --type mcp \
-  --provider-id kubernetes-default \
-  --namespace demo \
-  --version 0.1.0
+# Deploy to Kubernetes via manifests (more reliable than arctl deployments)
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weather-tools
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: weather-tools
+  template:
+    metadata:
+      labels:
+        app: weather-tools
+    spec:
+      containers:
+      - name: weather-tools
+        image: weather-tools:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weather-tools
+  namespace: demo
+spec:
+  selector:
+    app: weather-tools
+  ports:
+  - port: 3000
+    targetPort: 3000
+EOF
+
+# Wait for pod
+kubectl -n demo wait --for=condition=ready pod -l app=weather-tools --timeout=120s
 ```
 
 > **Verify:** `kubectl get pods -n demo` — the weather-tools pod should be Running.
@@ -360,11 +378,8 @@ EOF
 sleep 10
 kubectl get gateway -n agentgateway-system
 
-# Get the service name of the arctl-deployed MCP server
-MCP_SVC=$(kubectl get svc -n demo -o jsonpath='{.items[0].metadata.name}')
-
 # Create MCP Backend pointing to the deployed server
-kubectl apply -f - <<EOF
+kubectl apply -f - <<'EOF'
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
@@ -375,7 +390,7 @@ spec:
     targets:
     - name: weather
       static:
-        host: ${MCP_SVC}.demo.svc.cluster.local
+        host: weather-tools.demo.svc.cluster.local
         port: 3000
         protocol: StreamableHTTP
 EOF
@@ -951,9 +966,9 @@ kubectl delete httproute weather-tools -n agentgateway-system
 kubectl delete agentgatewaybackend weather-tools -n agentgateway-system
 kubectl delete gateway ai-gateway -n agentgateway-system
 
-# Remove MCP server deployment (via Agent Registry)
-arctl deployments list
-arctl deployments delete <deployment-ID>
+# Remove MCP server deployment
+kubectl delete deployment weather-tools -n demo
+kubectl delete service weather-tools -n demo
 
 # Remove products (if desired)
 helm uninstall kagent -n kagent
