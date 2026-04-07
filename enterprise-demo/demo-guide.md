@@ -208,13 +208,20 @@ helm upgrade -i kagent \
 kubectl -n kagent wait --for=condition=ready pod -l app.kubernetes.io/name=solo-enterprise-ui --timeout=300s
 
 # Skip OBO token handler (no OIDC provider in local demo)
-kubectl patch configmap kagent-enterprise-config -n kagent \
-  --type merge -p '{"data":{"SKIP_OBO":"true"}}'
-kubectl rollout restart deployment/solo-enterprise-ui -n kagent
+kubectl set env deployment/kagent-controller -n kagent -c controller SKIP_OBO=true
+kubectl set env deployment/solo-enterprise-ui -n kagent -c ui-backend SKIP_OBO=true
+
+# Patch OpenAI API key (Helm chart defaults to placeholder)
+kubectl patch secret kagent-openai -n kagent \
+  -p "{\"stringData\":{\"OPENAI_API_KEY\":\"${OPENAI_API_KEY}\"}}"
+
+# Restart to pick up changes
+kubectl rollout restart deployment/kagent-controller deployment/solo-enterprise-ui -n kagent
+kubectl rollout status deployment/kagent-controller -n kagent --timeout=120s
 kubectl rollout status deployment/solo-enterprise-ui -n kagent --timeout=120s
 ```
 
-> **Note:** `SKIP_OBO=true` disables the "on behalf of" token handler since there's no OIDC provider in the local demo. For production, configure your OIDC provider (Keycloak, Okta, etc.) and remove this patch.
+> **Note:** `SKIP_OBO=true` disables the "on behalf of" token handler since there's no OIDC provider in the local demo. The `kagent-openai` secret must be patched because the Helm chart defaults it to a placeholder. For production, configure your OIDC provider (Keycloak, Okta, etc.) and remove the `SKIP_OBO` patches.
 
 ### 5. Create the Demo MCP Server
 
