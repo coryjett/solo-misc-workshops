@@ -12,13 +12,24 @@ You're a platform engineer building an AI-powered developer experience. You need
 
 This demo builds each layer progressively — by the end, you'll have a working agent calling MCP tools through a secured gateway, with full observability.
 
+## Quick Start
+
+```bash
+export OPENAI_API_KEY=sk-...
+export AGENTGATEWAY_LICENSE_KEY=eyJ...
+
+./setup.sh
+```
+
+The setup script provisions a k3d cluster and deploys everything end-to-end. See [setup.sh](setup.sh) for details.
+
 ## Prerequisites
 
 - `docker`, `kubectl`, `helm` installed
 - An OpenAI API key
 - An Agent Gateway Enterprise license key
 - ~8 GB RAM available (for local k3d/kind cluster)
-- ~45 minutes
+- ~45 minutes (manual) or ~10 minutes (automated via `setup.sh`)
 
 > **No cloud cluster required.** The demo guide includes provisioning a local k3d or kind cluster. Cloud clusters (GKE, EKS, AKS) also work.
 
@@ -27,39 +38,27 @@ This demo builds each layer progressively — by the end, you'll have a working 
 | Time | Section | Product | What You'll See |
 |------|---------|---------|-----------------|
 | 0:00 | [Part 1: Agent Registry](demo-guide.md#part-1-agent-registry-15-min) | Agent Registry | Scaffold, publish, and deploy MCP servers from the catalog |
-| 0:15 | [Part 2: Agent Gateway](demo-guide.md#part-2-agent-gateway-15-min) | Agent Gateway | Route MCP traffic, add JWT auth + tool-level RBAC, see traces in Solo Enterprise UI |
+| 0:15 | [Part 2: Agent Gateway](demo-guide.md#part-2-agent-gateway-15-min) | Agent Gateway | Route MCP traffic, add API key auth + RBAC, see traces in Solo Enterprise UI |
 | 0:30 | [Part 3: kagent](demo-guide.md#part-3-kagent-15-min) | kagent | Create an agent as YAML, connect to tools via AGW, chat in Solo Enterprise UI |
 | 0:40 | [Putting It All Together](demo-guide.md#putting-it-all-together-5-min) | All three | End-to-end flow, three UIs, each product's contribution |
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                                                                 │
-│                         Solo.io AI Platform                                      │
-│                                                                                 │
-│  ┌───────────────────┐    ┌───────────────────────┐    ┌──────────────────────┐ │
-│  │                   │    │                       │    │                      │ │
-│  │  Agent Registry   │    │   Agent Gateway       │    │   kagent             │ │
-│  │                   │    │                       │    │                      │ │
-│  │  "What tools      │    │  "How do I get there  │    │  "Run the agent"     │ │
-│  │   exist?"         │───►│   safely?"            │───►│                      │ │
-│  │                   │    │                       │    │  ┌──────────────┐    │ │
-│  │  ┌─────────────┐  │    │  ┌─────────────────┐  │    │  │   Agent      │    │ │
-│  │  │ MCP Servers │  │    │  │ Routing         │  │    │  │   "weather   │    │ │
-│  │  │ Agents      │  │    │  │ Authentication  │  │    │  │    assistant"│    │ │
-│  │  │ Skills      │  │    │  │ RBAC            │  │    │  │              │    │ │
-│  │  │ Prompts     │  │    │  │ Rate Limiting   │  │    │  │  Uses tools  │    │ │
-│  │  └─────────────┘  │    │  │ Guardrails      │  │    │  │  via AGW     │    │ │
-│  │                   │    │  │ Observability   │  │    │  └──────────────┘    │ │
-│  │  Catalog +        │    │  └─────────────────┘  │    │                      │ │
-│  │  Discovery +      │    │                       │    │  K8s-native          │ │
-│  │  Versioning       │    │  AI-native proxy      │    │  agent lifecycle     │ │
-│  │                   │    │  for all agent traffic │    │                      │ │
-│  └───────────────────┘    └───────────────────────┘    └──────────────────────┘ │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+![Solo.io AI Platform Architecture](architecture.svg)
+
+Three products, each answering a different question:
+
+- **Agent Registry** — *"What tools exist?"* — Catalog, discover, version, and deploy MCP servers
+- **Agent Gateway** — *"How do I get there safely?"* — Route, authenticate, authorize, rate-limit, and observe agent traffic
+- **kagent** — *"Run the agent"* — Kubernetes-native agent lifecycle with declarative YAML and GitOps
+
+## Files
+
+| File | Description |
+|------|-------------|
+| [demo-guide.md](demo-guide.md) | Full step-by-step walkthrough |
+| [setup.sh](setup.sh) | Automated setup script (provisions cluster + deploys everything) |
+| [architecture.svg](architecture.svg) | Architecture diagram |
 
 ---
 
