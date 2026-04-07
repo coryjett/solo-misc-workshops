@@ -659,7 +659,9 @@ arctl prompt publish weather-assistant-prompt.md \
 arctl skill init weather-analysis --no-git
 
 # Edit SKILL.md with analysis instructions, then publish
-arctl skill publish weather-analysis/ --push
+arctl skill publish weather-analysis/ \
+  --docker-image weather-analysis:latest \
+  --version 1.0.0
 ```
 
 > **Show:** The skill in the Agent Registry UI under the Skills tab.
@@ -668,21 +670,22 @@ arctl skill publish weather-analysis/ --push
 
 ```bash
 # Scaffold an agent with OpenAI, using the prompt as instructions
-arctl agent init adk python weather-assistant \
+arctl agent init adk python weatherassistant \
   --model-provider OpenAI \
   --model-name gpt-4o-mini \
   --description "AI weather assistant with forecasts and alerts" \
   --instruction-file weather-assistant-prompt.md
 
-cd weather-assistant
+cd weatherassistant
 
 # Add the MCP server from the registry
 arctl agent add-mcp weather-tools \
   --registry-server-name weather-tools \
   --registry-url http://localhost:12121
 
-# Add the skill
-arctl agent add-skill weather-analysis
+# Add the skill from the registry
+arctl agent add-skill weather-analysis \
+  --registry-skill-name weather-analysis
 
 # Publish the complete agent to the registry
 arctl agent publish .

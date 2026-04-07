@@ -318,23 +318,22 @@ You are a weather analysis expert. When given weather data, you:
 Always be specific and actionable. Use the weather tools to fetch current data before analyzing.
 SKILLEOF
 
-arctl skill publish weather-analysis/ --push 2>/dev/null || true
+arctl skill publish weather-analysis/ \
+  --docker-image weather-analysis:latest \
+  --version "1.0.0" 2>/dev/null || true
 ok "Skill published to Agent Registry"
 
 # --- Create an Agent with MCP server + Skill ---
 info "Creating weather-assistant agent..."
 
-arctl agent init adk python weather-assistant \
+rm -rf weatherassistant
+arctl agent init adk python weatherassistant \
   --model-provider OpenAI \
   --model-name gpt-4o-mini \
   --description "AI weather assistant with forecasts, alerts, and travel recommendations" \
-  --instruction-file "${WORKDIR}/weather-assistant-prompt.md" \
-  --force 2>/dev/null || arctl agent init adk python weather-assistant \
-  --description "AI weather assistant with forecasts, alerts, and travel recommendations" \
-  --instruction-file "${WORKDIR}/weather-assistant-prompt.md" \
-  --force
+  --instruction-file "${WORKDIR}/weather-assistant-prompt.md"
 
-cd weather-assistant
+cd weatherassistant
 
 # Add the MCP server from the registry
 arctl agent add-mcp weather-tools \
@@ -342,8 +341,9 @@ arctl agent add-mcp weather-tools \
   --registry-url http://localhost:12121 \
   --project-dir . 2>/dev/null || true
 
-# Add the skill
+# Add the skill from the registry
 arctl agent add-skill weather-analysis \
+  --registry-skill-name weather-analysis \
   --project-dir . 2>/dev/null || true
 
 # Publish agent to registry
