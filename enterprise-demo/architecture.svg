@@ -47,7 +47,7 @@
   <rect x="60" y="180" width="230" height="32" rx="6" fill="#2a2a52" stroke="#4338ca" stroke-width="0.5"/>
   <circle cx="78" cy="196" r="6" fill="#818cf8"/>
   <text x="92" y="200" fill="#e2e8f0" font-size="11">MCP Servers</text>
-  <text x="262" y="200" text-anchor="end" fill="#818cf8" font-size="10">363+</text>
+  <text x="262" y="200" text-anchor="end" fill="#818cf8" font-size="10">184+</text>
 
   <rect x="60" y="220" width="230" height="32" rx="6" fill="#2a2a52" stroke="#4338ca" stroke-width="0.5"/>
   <circle cx="78" cy="236" r="6" fill="#818cf8"/>

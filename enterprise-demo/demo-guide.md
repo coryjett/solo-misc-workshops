@@ -125,7 +125,7 @@ helm install agentregistry \
 kubectl -n agentregistry wait --for=condition=ready pod -l app.kubernetes.io/name=agentregistry --timeout=120s
 ```
 
-> **Note:** `disableBuiltinSeed=false` pre-loads 363 community MCP servers into the catalog so it looks populated for the demo. `enableAnonymousAuth=true` skips auth for the UI (demo only — not for production).
+> **Note:** `disableBuiltinSeed=false` pre-loads 184 community MCP servers into the catalog so it looks populated for the demo. `enableAnonymousAuth=true` skips auth for the UI (demo only — not for production).
 
 ### 3. Deploy Agent Gateway (Enterprise)
 
@@ -558,7 +558,7 @@ kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80 &
 
 **Open the Agent Registry UI** at `http://localhost:12121`.
 
-> **Show:** The catalog view — 363 community MCP servers pre-loaded. Browse, search, filter by type.
+> **Show:** The catalog view — 184 community MCP servers pre-loaded. Browse, search, filter by type.
 
 ### Register and Publish the Weather MCP Server (5 min)
 
