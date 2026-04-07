@@ -3,7 +3,8 @@
 # Solo.io AI Platform — End-to-End Demo Setup
 #
 # Provisions a k3d cluster and deploys Agent Registry, Agent Gateway Enterprise,
-# kagent Enterprise, a demo MCP server, AGW routing + security, and a kagent agent.
+# kagent Enterprise, a demo MCP server + skill + agent, AGW routing + security,
+# and a kagent agent.
 #
 # Prerequisites:
 #   - docker, kubectl, helm, curl installed
@@ -271,6 +272,79 @@ k3d image import weather-tools:latest -c "${CLUSTER_NAME}"
 # Publish to Agent Registry
 info "Publishing to Agent Registry..."
 arctl mcp publish . --type oci --package-id weather-tools:latest --overwrite 2>/dev/null || true
+
+cd "${WORKDIR}"
+
+# --- Create a Skill ---
+info "Creating weather-analysis skill..."
+arctl skill init weather-analysis --no-git --force
+
+cat > weather-analysis/SKILL.md << 'SKILLEOF'
+---
+name: weather-analysis
+description: Analyze weather data and provide travel recommendations
+version: "1.0"
+---
+
+# Weather Analysis Skill
+
+You are a weather analysis expert. When given weather data, you:
+
+1. **Summarize conditions** — Provide a clear, concise summary of current weather
+2. **Travel advisory** — Rate conditions for outdoor activities (Good / Fair / Poor)
+3. **What to wear** — Suggest appropriate clothing based on temperature and conditions
+4. **Alerts check** — Flag any active weather alerts and explain their impact
+
+Always be specific and actionable. Use the weather tools to fetch current data before analyzing.
+SKILLEOF
+
+arctl skill publish weather-analysis/ --push 2>/dev/null || true
+ok "Skill published to Agent Registry"
+
+# --- Create an Agent with MCP server + Skill ---
+info "Creating weather-assistant agent..."
+
+# Write agent instructions
+cat > /tmp/weather-agent-instructions.md << 'INSTREOF'
+You are a friendly and knowledgeable weather assistant. You help users with:
+
+- Current weather forecasts for any city
+- Active weather alerts for US states
+- Travel recommendations based on weather conditions
+- Clothing suggestions for the day
+
+Always use your available tools to fetch real-time weather data before answering.
+Be concise but thorough. If a user asks about multiple cities, check each one.
+INSTREOF
+
+arctl agent init adk python weather-assistant \
+  --model-provider OpenAI \
+  --model-name gpt-4o-mini \
+  --description "AI weather assistant with forecasts, alerts, and travel recommendations" \
+  --instruction-file /tmp/weather-agent-instructions.md \
+  --force 2>/dev/null || arctl agent init adk python weather-assistant \
+  --description "AI weather assistant with forecasts, alerts, and travel recommendations" \
+  --instruction-file /tmp/weather-agent-instructions.md \
+  --force
+
+cd weather-assistant
+
+# Add the MCP server from the registry
+arctl agent add-mcp weather-tools \
+  --registry-server-name weather-tools \
+  --registry-url http://localhost:12121 \
+  --project-dir . 2>/dev/null || true
+
+# Add the skill
+arctl agent add-skill weather-analysis \
+  --project-dir . 2>/dev/null || true
+
+# Publish agent to registry
+arctl agent publish . 2>/dev/null || true
+ok "Agent published to Agent Registry"
+
+cd "${WORKDIR}"
+rm -f /tmp/weather-agent-instructions.md
 
 kill $PF_PID 2>/dev/null || true
 cd - >/dev/null
@@ -746,9 +820,10 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Solo.io AI Platform — Demo Ready!     ${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "Resources:"
+echo "Agent Gateway Resources:"
 kubectl get gateway,httproute,agentgatewaybackend,agentgatewaypolicy -n agentgateway-system 2>/dev/null
 echo ""
+echo "kagent Resources:"
 kubectl get remotemcpserver,modelconfig,agent -n kagent 2>/dev/null
 echo ""
 echo "Port-forwards (run these in separate terminals):"

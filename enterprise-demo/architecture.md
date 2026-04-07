@@ -178,7 +178,7 @@ Developer workstation
 
 | Component | Namespace | Port | Purpose |
 |-----------|-----------|------|---------|
-| Agent Registry | agentregistry | 12121 | MCP server catalog + tool discovery |
+| Agent Registry | agentregistry | 12121 | Catalog for MCP servers, skills, agents + tool discovery |
 | AGW Controller | agentgateway-system | 9978 (xDS) | Translates Gateway API CRDs to proxy config |
 | AGW Proxy | agentgateway-system | 3000 | MCP-aware proxy with auth, routing, tracing |
 | kagent Controller | kagent | — | AI agent orchestration (Agent, ModelConfig CRDs) |

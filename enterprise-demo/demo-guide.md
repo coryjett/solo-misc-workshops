@@ -630,15 +630,56 @@ kubectl get pods -n demo
 
 > **Show:** The newly published server in the catalog — navigate to it in the UI. Click the **Deployed** tab to see it running.
 
+### Create a Skill and Agent (5 min)
+
+> **Talk track:** "Agent Registry isn't just for MCP servers. It's a catalog for all your AI artifacts — skills, prompts, and complete agents. Let's create a skill and an agent that uses our weather MCP server."
+
+**Create a skill** — a reusable set of instructions for weather analysis:
+
+```bash
+# Scaffold a skill
+arctl skill init weather-analysis --no-git
+
+# Edit SKILL.md with analysis instructions, then publish
+arctl skill publish weather-analysis/ --push
+```
+
+> **Show:** The skill in the Agent Registry UI under the Skills tab.
+
+**Create an agent** — wire together the model, MCP server, and skill:
+
+```bash
+# Scaffold an agent with OpenAI
+arctl agent init adk python weather-assistant \
+  --model-provider OpenAI \
+  --model-name gpt-4o-mini \
+  --description "AI weather assistant with forecasts and alerts"
+
+cd weather-assistant
+
+# Add the MCP server from the registry
+arctl agent add-mcp weather-tools \
+  --registry-server-name weather-tools \
+  --registry-url http://localhost:12121
+
+# Add the skill
+arctl agent add-skill weather-analysis
+
+# Publish the complete agent to the registry
+arctl agent publish .
+```
+
+> **Show:** The agent in the Agent Registry UI — click into it to see its MCP servers, skills, and configuration. Developers can now discover and deploy this entire agent from the catalog.
+
 ### Semantic Search (2 min)
 
-> **Talk track:** "Now that we have servers registered, developers can search by what they need, not by what they know exists."
+> **Talk track:** "Now that we have MCP servers, skills, and agents registered, developers can search by what they need, not by what they know exists."
 
-> **Show in the UI:** Type "weather" in the search bar. Our `demo-user/weather-tools` server appears alongside community weather servers from the catalog — developers can discover tools without knowing the exact name.
+> **Show in the UI:** Type "weather" in the search bar. Our MCP server, skill, and agent all appear — developers can discover complete AI capabilities without knowing the exact names.
 
 ### Key Takeaway (1 min)
 
-> **Talk track:** "Agent Registry is your single pane of glass for all AI artifacts. Platform teams curate what's approved, developers discover what they need, and anyone can deploy from the catalog. But discovery is just step one — how do we actually *route* traffic to these servers securely? That's where Agent Gateway comes in."
+> **Talk track:** "Agent Registry is your single pane of glass for all AI artifacts — MCP servers, skills, prompts, and agents. Platform teams curate what's approved, developers discover what they need, and anyone can deploy from the catalog. But discovery is just step one — how do we actually *route* traffic to these servers securely? That's where Agent Gateway comes in."
 
 ---
 
