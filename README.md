@@ -40,6 +40,12 @@ Step-by-step guides for setting up On-Behalf-Of token exchange with Keycloak and
 - **[Flow 13: Gateway-Mediated OIDC + Token Exchange with MCP](flow13-token-exchange/flow13-gateway-mediated-token-exchange/)** — End-to-end workshop: Keycloak OIDC auth with `ExchangeOnly` mode on `EnterpriseAgentgatewayPolicy`, AGW built-in STS (RFC 8693) automatically exchanges client JWT before forwarding to MCP backend — the client never calls the STS directly. Token-logging MCP server proves the STS-exchanged token (with `sub` + `act`) is what reaches the backend via `kubectl logs` and an `echo_token` tool. Covers `EnterpriseAgentgatewayParameters` (STS_URI/STS_AUTH_TOKEN), all three STS validators (subject/actor/api), and StreamableHTTP backend protocol.
 - **[Flow 13b: External STS with Opaque Token Exchange](flow13-token-exchange/flow13b-external-sts-opaque-token/)** — Variant using an external RFC 8693-compliant STS that returns opaque tokens instead of JWTs. MCP server resolves identity via RFC 7662 introspection. Demonstrates the trade-off between self-contained JWTs and revocable opaque tokens.
 
+### Solo.io AI Platform — End-to-End Demo
+
+45-minute guided demo of the Solo.io AI platform: **Agent Registry**, **Agent Gateway**, and **kagent**. Covers each product independently, then shows how they work together. Includes local k3d/kind cluster provisioning.
+
+- **[Enterprise Demo Guide](enterprise-demo/)**
+
 ### Agent Gateway — MCP Authentication
 
 - **[MCP Authentication API](agentgateway-enterprise/MCP-Authentication.md)** — How agentgateway adapts MCP OAuth traffic for authorization servers (Keycloak well-known endpoint rewriting, token validation, client registration proxying)
