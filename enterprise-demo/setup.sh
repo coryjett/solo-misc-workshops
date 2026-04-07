@@ -176,9 +176,16 @@ helm upgrade -i kagent \
 rm -f /tmp/management.yaml /tmp/kagent.yaml
 
 # Skip OBO token handler (no OIDC provider in local demo)
-kubectl patch configmap kagent-enterprise-config -n kagent \
-  --type merge -p '{"data":{"SKIP_OBO":"true"}}'
-kubectl rollout restart deployment/solo-enterprise-ui -n kagent
+kubectl set env deployment/kagent-controller -n kagent -c controller SKIP_OBO=true
+kubectl set env deployment/solo-enterprise-ui -n kagent -c ui-backend SKIP_OBO=true
+
+# Patch OpenAI API key (Helm chart defaults to placeholder)
+kubectl patch secret kagent-openai -n kagent \
+  -p "{\"stringData\":{\"OPENAI_API_KEY\":\"${OPENAI_API_KEY}\"}}"
+
+# Restart to pick up changes
+kubectl rollout restart deployment/kagent-controller deployment/solo-enterprise-ui -n kagent
+kubectl rollout status deployment/kagent-controller -n kagent --timeout=120s
 kubectl rollout status deployment/solo-enterprise-ui -n kagent --timeout=120s
 
 ok "kagent Enterprise deployed"
