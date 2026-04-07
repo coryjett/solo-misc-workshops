@@ -15,7 +15,6 @@ Deploy all three products before the demo starts. The demo itself walks through 
 - `docker`, `kubectl`, `helm` installed
 - An OpenAI API key (`export OPENAI_API_KEY=...`)
 - An Agent Gateway Enterprise license key (`export AGENTGATEWAY_LICENSE_KEY=...`)
-- Access to kagent Enterprise Helm charts (provided by Solo.io)
 - ~8 GB RAM available for the local cluster
 
 ### 0. Provision a Local Cluster
@@ -145,21 +144,63 @@ kubectl -n agentgateway-system wait --for=condition=ready pod -l app.kubernetes.
 
 ### 4. Deploy kagent (Enterprise)
 
-> **Note:** kagent Enterprise Helm charts require access credentials provided by Solo.io. Contact your Solo.io account team for chart access. The charts are distributed as OCI artifacts or via a private Helm repository.
+Solo Enterprise for kagent is installed in two parts: the **management plane** (UI, telemetry, federation) and the **workload plane** (agent controller, CRDs). Charts are publicly available as OCI artifacts.
+
+> **Full install docs:** https://docs.solo.io/kagent-enterprise/docs/latest/install/install-kagent/
 
 ```bash
-# Install CRDs
-helm install kagent-crds kagent-enterprise/kagent-enterprise-crds -n kagent
+export KAGENT_ENT_VERSION=0.3.12
 
-# Install workload plane (controller)
-helm install kagent kagent-enterprise/kagent-enterprise -n kagent
+# --- Management plane (Solo Enterprise UI) ---
+cat << EOF > management.yaml
+cluster: solo-ai-demo
+products:
+  kagent:
+    enabled: true
+  agentgateway:
+    enabled: true
+    namespace: agentgateway-system
+oidc:
+  issuer: ""
+EOF
 
-# Install management plane (UI)
-helm install kagent-mgmt kagent-enterprise/management -n kagent \
-  --set products.agentgateway.enabled=true \
-  --set products.agentgateway.namespace=agentgateway-system \
-  --set products.kagent.enabled=true
+helm upgrade -i kagent-mgmt \
+  oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
+  -n kagent --create-namespace \
+  --version ${KAGENT_ENT_VERSION} \
+  --values management.yaml
+
+# --- Workload plane (agent controller + CRDs) ---
+cat << EOF > kagent.yaml
+providers:
+  default: openAI
+  openAI:
+    apiKey: ${OPENAI_API_KEY}
+otel:
+  tracing:
+    enabled: true
+    exporter:
+      otlp:
+        endpoint: solo-enterprise-ui.kagent.svc.cluster.local:4317
+        insecure: true
+EOF
+
+helm upgrade -i kagent-crds \
+  oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise-crds \
+  -n kagent \
+  --version ${KAGENT_ENT_VERSION}
+
+helm upgrade -i kagent \
+  oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise \
+  -n kagent \
+  --version ${KAGENT_ENT_VERSION} \
+  --values kagent.yaml
+
+# Verify
+kubectl -n kagent wait --for=condition=ready pod -l app.kubernetes.io/name=solo-enterprise-ui --timeout=180s
 ```
+
+> **Note:** Setting `oidc.issuer: ""` uses the built-in auto IdP for testing. For production, configure your OIDC provider (Keycloak, Okta, etc.) — see the [Identity providers](https://docs.solo.io/kagent-enterprise/docs/latest/install/install-kagent/) guide.
 
 ### 5. Create the Demo MCP Server
 

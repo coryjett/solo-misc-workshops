@@ -17,7 +17,6 @@ This demo builds each layer progressively — by the end, you'll have a working 
 - `docker`, `kubectl`, `helm` installed
 - An OpenAI API key
 - An Agent Gateway Enterprise license key
-- Access to kagent Enterprise Helm charts (provided by Solo.io)
 - ~8 GB RAM available (for local k3d/kind cluster)
 - ~45 minutes
 
