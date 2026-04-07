@@ -21,6 +21,9 @@ export AGENTGATEWAY_LICENSE_KEY=eyJ...
 
 The script provisions the cluster, installs all products, builds and deploys the MCP server, configures AGW routing, and creates the kagent agent. Skip to **Part 1** when it completes.
 
+<details>
+<summary>Manual Setup Steps (click to expand)</summary>
+
 ### Prerequisites
 
 - `docker`, `kubectl`, `helm` installed
@@ -536,6 +539,8 @@ kubectl port-forward -n agentgateway-system svc/ai-gateway 3001:3000 &
 # Solo Enterprise UI — kagent + Agent Gateway dashboards (http://localhost:8080)
 kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80 &
 ```
+
+</details>
 
 ---
 
