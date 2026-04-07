@@ -134,13 +134,13 @@ kubectl -n agentregistry wait --for=condition=ready pod -l app.kubernetes.io/nam
 helm install enterprise-agentgateway-crds \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
   --namespace agentgateway-system \
-  --version v2.2.0
+  --version v2.3.0-rc.1
 
 # Install Agent Gateway
 helm install enterprise-agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
   --namespace agentgateway-system \
-  --version v2.2.0 \
+  --version v2.3.0-rc.1 \
   --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY \
   --set agentgateway.enabled=true
 
@@ -358,21 +358,16 @@ kubectl -n demo wait --for=condition=ready pod -l app=weather-tools --timeout=12
 ```bash
 # AGW telemetry — send OTEL traces to Solo Enterprise collector
 kubectl apply -f - <<'EOF'
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayParameters
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
 metadata:
   name: ai-gateway-params
   namespace: agentgateway-system
 spec:
-  env:
-  - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "http://solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317"
-  - name: OTEL_EXPORTER_OTLP_PROTOCOL
-    value: "grpc"
-  - name: OTEL_SERVICE_NAME
-    value: "agentgateway"
-  - name: OTEL_TRACES_EXPORTER
-    value: "otlp"
+  rawConfig:
+    config:
+      tracing:
+        otlpEndpoint: "http://solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317"
 EOF
 
 # Create the Gateway (HTTP listener + telemetry)
@@ -386,8 +381,8 @@ spec:
   gatewayClassName: enterprise-agentgateway
   infrastructure:
     parametersRef:
-      group: agentgateway.dev
-      kind: AgentgatewayParameters
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
       name: ai-gateway-params
   listeners:
   - name: mcp
@@ -680,8 +675,8 @@ spec:
   gatewayClassName: enterprise-agentgateway
   infrastructure:
     parametersRef:
-      group: agentgateway.dev
-      kind: AgentgatewayParameters
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
       name: ai-gateway-params        # OTEL tracing config
   listeners:
   - name: mcp

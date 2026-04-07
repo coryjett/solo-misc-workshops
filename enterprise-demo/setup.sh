@@ -40,7 +40,7 @@ ok "Prerequisites met"
 
 CLUSTER_NAME="${CLUSTER_NAME:-solo-ai-demo}"
 KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.3.12}"
-AGW_VERSION="${AGW_VERSION:-v2.2.0}"
+AGW_VERSION="${AGW_VERSION:-v2.3.0-rc.1}"
 
 # ============================================================================
 # 1. Provision k3d cluster
@@ -323,21 +323,16 @@ info "Configuring Agent Gateway routing..."
 
 # AGW telemetry — send OTEL traces to Solo Enterprise collector
 kubectl apply -f - <<'EOF'
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayParameters
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
 metadata:
   name: ai-gateway-params
   namespace: agentgateway-system
 spec:
-  env:
-  - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "http://solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317"
-  - name: OTEL_EXPORTER_OTLP_PROTOCOL
-    value: "grpc"
-  - name: OTEL_SERVICE_NAME
-    value: "agentgateway"
-  - name: OTEL_TRACES_EXPORTER
-    value: "otlp"
+  rawConfig:
+    config:
+      tracing:
+        otlpEndpoint: "http://solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317"
 EOF
 
 # Gateway
@@ -351,8 +346,8 @@ spec:
   gatewayClassName: enterprise-agentgateway
   infrastructure:
     parametersRef:
-      group: agentgateway.dev
-      kind: AgentgatewayParameters
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
       name: ai-gateway-params
   listeners:
   - name: mcp
