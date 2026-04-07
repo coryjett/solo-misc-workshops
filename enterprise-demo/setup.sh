@@ -480,6 +480,10 @@ spec:
       randomSampling: "true"
 EOF
 
+# Restart proxy pod so it initializes the tracer with the new policy
+kubectl delete pod -n agentgateway-system -l app.kubernetes.io/name=ai-gateway --wait=false 2>/dev/null
+sleep 10
+
 ok "Agent Gateway routing + security configured"
 
 # ============================================================================
