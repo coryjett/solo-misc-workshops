@@ -44,7 +44,7 @@ The setup script provisions a k3d cluster and deploys everything end-to-end. See
 
 ## Architecture
 
-![Solo.io AI Platform Architecture](architecture.png)
+![Solo.io AI Platform](platform-overview.png)
 
 Three products, each answering a different question:
 
@@ -52,13 +52,19 @@ Three products, each answering a different question:
 - **Agent Gateway** — *"How do I get there safely?"* — Route, authenticate, authorize, rate-limit, and observe agent traffic
 - **kagent** — *"Run the agent"* — Kubernetes-native agent lifecycle with declarative YAML and GitOps
 
+### Detailed Architecture
+
+![Architecture Diagram](architecture.png)
+
+See [architecture.md](architecture.md) for detailed data flows and component descriptions.
+
 ## Files
 
 | File | Description |
 |------|-------------|
 | [demo-guide.md](demo-guide.md) | Full step-by-step walkthrough |
 | [setup.sh](setup.sh) | Automated setup script (provisions cluster + deploys everything) |
-| [architecture.png](architecture.png) | Architecture diagram |
+| [architecture.md](architecture.md) | Detailed architecture, data flows, and component table |
 
 ---
 
