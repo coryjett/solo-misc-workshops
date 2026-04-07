@@ -17,6 +17,7 @@ This demo builds each layer progressively — by the end, you'll have a working 
 - `docker`, `kubectl`, `helm` installed
 - An OpenAI API key
 - An Agent Gateway Enterprise license key
+- Access to kagent Enterprise Helm charts (provided by Solo.io)
 - ~8 GB RAM available (for local k3d/kind cluster)
 - ~45 minutes
 
@@ -26,10 +27,10 @@ This demo builds each layer progressively — by the end, you'll have a working 
 
 | Time | Section | Product | What You'll See |
 |------|---------|---------|-----------------|
-| 0:00 | [Part 1: Agent Registry](#part-1-agent-registry) | Agent Registry | Catalog MCP servers, search, publish artifacts |
-| 0:15 | [Part 2: Agent Gateway](#part-2-agent-gateway) | Agent Gateway | Route MCP traffic, add auth + RBAC, see traces |
-| 0:30 | [Part 3: kagent](#part-3-kagent) | kagent | Create an agent, connect to tools via AGW, chat |
-| 0:40 | [Putting It All Together](#putting-it-all-together) | All three | End-to-end flow from registry → gateway → agent |
+| 0:00 | [Part 1: Agent Registry](demo-guide.md#part-1-agent-registry-15-min) | Agent Registry | Scaffold, publish, and deploy MCP servers from the catalog |
+| 0:15 | [Part 2: Agent Gateway](demo-guide.md#part-2-agent-gateway-15-min) | Agent Gateway | Route MCP traffic, add JWT auth + tool-level RBAC, see traces in Solo Enterprise UI |
+| 0:30 | [Part 3: kagent](demo-guide.md#part-3-kagent-15-min) | kagent | Create an agent as YAML, connect to tools via AGW, chat in Solo Enterprise UI |
+| 0:40 | [Putting It All Together](demo-guide.md#putting-it-all-together-5-min) | All three | End-to-end flow, three UIs, each product's contribution |
 
 ## Architecture
 

@@ -12,9 +12,10 @@ Deploy all three products before the demo starts. The demo itself walks through 
 
 ### Prerequisites
 
-- `kubectl`, `helm`, `docker` installed
+- `docker`, `kubectl`, `helm` installed
 - An OpenAI API key (`export OPENAI_API_KEY=...`)
-- An Agent Gateway Enterprise license key (saved as `license.yaml`)
+- An Agent Gateway Enterprise license key (`export AGENTGATEWAY_LICENSE_KEY=...`)
+- Access to kagent Enterprise Helm charts (provided by Solo.io)
 - ~8 GB RAM available for the local cluster
 
 ### 0. Provision a Local Cluster
@@ -80,13 +81,13 @@ kubectl get nodes
 ```
 Cluster ready:
 
-  ┌─────────────────────────────────────────────┐
-  │  solo-ai-demo (k3d or kind)                 │
-  │                                             │
-  │  Nodes: 1 server + 2 agents/workers         │
-  │  Ports: 8080 (HTTP), 8443 (HTTPS)           │
-  │  Traefik: disabled (AGW will handle routing)│
-  └─────────────────────────────────────────────┘
+  +-----------------------------------------+
+  |  solo-ai-demo (k3d or kind)             |
+  |                                         |
+  |  Nodes: 1 server + 2 agents/workers     |
+  |  Ports: 8080 (HTTP), 8443 (HTTPS)       |
+  |  Traefik: disabled (AGW handles routing) |
+  +-----------------------------------------+
 ```
 
 ### 1. Create Namespaces
@@ -99,133 +100,102 @@ kubectl create namespace kagent
 
 ### 2. Deploy Agent Registry
 
-```bash
-# Deploy PostgreSQL with pgvector (required for semantic search)
-kubectl apply -n agentregistry -f https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/examples/postgres-pgvector.yaml
-kubectl -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector --timeout=120s
+Agent Registry bundles its own PostgreSQL instance. For semantic search, override the bundled image to include pgvector.
 
-# Install Agent Registry
-helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+```bash
+helm install agentregistry \
+  oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --namespace agentregistry \
-  --set database.host=postgres-pgvector.agentregistry.svc.cluster.local \
-  --set database.password=agentregistry \
-  --set database.sslMode=disable \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+  --set config.enableAnonymousAuth="true" \
+  --set config.disableBuiltinSeed="false" \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32) \
+  --set database.postgres.vectorEnabled=true \
+  --set database.postgres.bundled.image.registry=docker.io \
+  --set database.postgres.bundled.image.repository=pgvector \
+  --set database.postgres.bundled.image.name=pgvector \
+  --set database.postgres.bundled.image.tag=pg18 \
+  --wait --timeout 180s
 
 # Verify
 kubectl -n agentregistry wait --for=condition=ready pod -l app.kubernetes.io/name=agentregistry --timeout=120s
 ```
 
+> **Note:** `disableBuiltinSeed=false` pre-loads 363 community MCP servers into the catalog so it looks populated for the demo. `enableAnonymousAuth=true` skips auth for the UI (demo only — not for production).
+
 ### 3. Deploy Agent Gateway (Enterprise)
 
 ```bash
 # Install CRDs
-helm install enterprise-agentgateway-crds solo/enterprise-agentgateway-crds \
-  --namespace agentgateway-system
+helm install enterprise-agentgateway-crds \
+  oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
+  --namespace agentgateway-system \
+  --version v2.2.0
 
 # Install Agent Gateway
-helm install enterprise-agentgateway solo/enterprise-agentgateway \
+helm install enterprise-agentgateway \
+  oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
   --namespace agentgateway-system \
-  --set-file licenseKey=license.yaml \
-  --values agw-values.yaml
+  --version v2.2.0 \
+  --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY \
+  --set agentgateway.enabled=true
+
+# Verify
+kubectl -n agentgateway-system wait --for=condition=ready pod -l app.kubernetes.io/name=enterprise-agentgateway --timeout=120s
 ```
-
-<details>
-<summary><strong>agw-values.yaml</strong></summary>
-
-```yaml
-# Agent Gateway Helm values for demo
-tokenExchange:
-  enabled: true
-  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
-  tokenExpiration: 24h
-  subjectValidator:
-    validatorType: remote
-    remoteConfig:
-      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/demo/protocol/openid-connect/certs"
-  actorValidator:
-    validatorType: k8s
-  apiValidator:
-    validatorType: remote
-    remoteConfig:
-      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/demo/protocol/openid-connect/certs"
-```
-
-</details>
 
 ### 4. Deploy kagent (Enterprise)
+
+> **Note:** kagent Enterprise Helm charts require access credentials provided by Solo.io. Contact your Solo.io account team for chart access. The charts are distributed as OCI artifacts or via a private Helm repository.
 
 ```bash
 # Install CRDs
 helm install kagent-crds kagent-enterprise/kagent-enterprise-crds -n kagent
 
 # Install workload plane (controller)
-helm install kagent kagent-enterprise/kagent-enterprise -n kagent \
-  -f kagent-values-workload.yaml
+helm install kagent kagent-enterprise/kagent-enterprise -n kagent
 
 # Install management plane (UI)
 helm install kagent-mgmt kagent-enterprise/management -n kagent \
-  -f kagent-values-mgmt.yaml
+  --set products.agentgateway.enabled=true \
+  --set products.agentgateway.namespace=agentgateway-system \
+  --set products.kagent.enabled=true
 ```
 
-### 5. Deploy the Demo MCP Server
+### 5. Create the Demo MCP Server
 
-We'll use a simple weather MCP server for the demo. This gives us a concrete, easy-to-understand tool.
+We use Agent Registry's scaffold to create a real MCP server, then deploy it via the registry's Kubernetes integration.
 
 ```bash
-kubectl apply -f demo-mcp-server.yaml
+# Install arctl CLI
+curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
+
+# Create an MCP server project
+arctl mcp init python weather-mcp
+
+# Build the Docker image
+arctl mcp build weather-mcp -t weather-mcp
 ```
 
-<details>
-<summary><strong>demo-mcp-server.yaml</strong></summary>
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: weather-mcp
-  namespace: default
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: weather-mcp
-  template:
-    metadata:
-      labels:
-        app: weather-mcp
-    spec:
-      containers:
-      - name: weather-mcp
-        image: ghcr.io/modelcontextprotocol/servers/everything:latest
-        ports:
-        - containerPort: 3001
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: weather-mcp
-  namespace: default
-spec:
-  selector:
-    app: weather-mcp
-  ports:
-  - port: 80
-    targetPort: 3001
-```
-
-</details>
+> **k3d only:** Load the image into your k3d cluster (since it was built locally, not pushed to a registry):
+> ```bash
+> k3d image import weather-mcp:0.1.0 -c solo-ai-demo
+> ```
+>
+> **kind only:**
+> ```bash
+> kind load docker-image weather-mcp:0.1.0 --name solo-ai-demo
+> ```
 
 ### 6. Port-Forwards (for the demo)
 
 ```bash
-# Agent Registry UI
+# Agent Registry UI (http://localhost:12121)
 kubectl port-forward -n agentregistry svc/agentregistry 12121:12121 &
 
-# Agent Gateway proxy
+# Agent Gateway proxy (http://localhost:8080 — or use k3d loadbalancer)
 kubectl port-forward -n agentgateway-system svc/agentgateway-proxy 8080:80 &
 
-# kagent UI
+# Solo Enterprise UI — kagent + Agent Gateway dashboards (http://localhost:8081)
 kubectl port-forward -n kagent svc/solo-enterprise-ui 8081:80 &
 ```
 
@@ -243,14 +213,14 @@ kubectl port-forward -n kagent svc/solo-enterprise-ui 8081:80 &
 Without Agent Registry:
 
   Developer A                    Developer B                    Developer C
-  ┌──────────┐                  ┌──────────┐                  ┌──────────┐
-  │ npm      │                  │ Docker   │                  │ GitHub   │
-  │ registry │                  │ Hub      │                  │ repo     │
-  │          │                  │          │                  │          │
-  │ @mcp/    │                  │ mcp-     │                  │ internal/│
-  │ postgres │                  │ server:  │                  │ crm-mcp  │
-  │          │                  │ latest   │                  │          │
-  └──────────┘                  └──────────┘                  └──────────┘
+  +----------+                  +----------+                  +----------+
+  | npm      |                  | Docker   |                  | GitHub   |
+  | registry |                  | Hub      |                  | repo     |
+  |          |                  |          |                  |          |
+  | @mcp/    |                  | mcp-     |                  | internal/|
+  | postgres |                  | server:  |                  | crm-mcp  |
+  |          |                  | latest   |                  |          |
+  +----------+                  +----------+                  +----------+
        ?                             ?                             ?
    "What version?"            "Is this approved?"           "How do I connect?"
 ```
@@ -261,79 +231,90 @@ Without Agent Registry:
 
 **Open the Agent Registry UI** at `http://localhost:12121`.
 
-> **Show:** The catalog view — browse available artifacts, search, filter by type.
+> **Show:** The catalog view — 363 community MCP servers pre-loaded. Browse, search, filter by type.
 
 ```
 With Agent Registry:
 
-  ┌──────────────────────────────────────────────────────┐
-  │                   Agent Registry                      │
-  │                                                      │
-  │  ┌────────────┐  ┌────────────┐  ┌────────────┐    │
-  │  │ weather    │  │ postgres   │  │ crm-tools  │    │
-  │  │ MCP Server │  │ MCP Server │  │ MCP Server │    │
-  │  │            │  │            │  │            │    │
-  │  │ v1.2.0     │  │ v3.1.0     │  │ v2.0.1     │    │
-  │  │ ★ Approved │  │ ★ Approved │  │ ⚠ Review   │    │
-  │  │ npm        │  │ Docker     │  │ HTTP       │    │
-  │  └────────────┘  └────────────┘  └────────────┘    │
-  │                                                      │
-  │  🔍 Search: "query database"  →  postgres MCP       │
-  │                                                      │
-  └──────────────────────────────────────────────────────┘
+  +------------------------------------------------------+
+  |                   Agent Registry                      |
+  |                                                      |
+  |  +------------+  +------------+  +------------+      |
+  |  | weather    |  | postgres   |  | crm-tools  |      |
+  |  | MCP Server |  | MCP Server |  | MCP Server |      |
+  |  |            |  |            |  |            |      |
+  |  | v1.2.0     |  | v3.1.0     |  | v2.0.1     |      |
+  |  | Approved   |  | Approved   |  | Review     |      |
+  |  | npm        |  | Docker     |  | HTTP       |      |
+  |  +------------+  +------------+  +------------+      |
+  |                                                      |
+  |  Search: "query database"  -->  postgres MCP         |
+  |                                                      |
+  +------------------------------------------------------+
 ```
 
-### Register the Weather MCP Server (5 min)
+### Register and Publish the Weather MCP Server (5 min)
 
-> **Talk track:** "Let's register our weather MCP server so the rest of the team can discover it."
+> **Talk track:** "We just built a weather MCP server using Agent Registry's scaffold. Let's publish it to the catalog so the rest of the team can discover and deploy it."
 
-**Option A: Via the UI**
-1. Click **"Add Artifact"** → **MCP Server**
-2. Fill in:
-   - **Name:** `weather-tools`
-   - **Description:** "Weather data — current conditions, forecasts, and alerts"
-   - **Type:** HTTP/SSE endpoint
-   - **URL:** `http://weather-mcp.default.svc.cluster.local:80`
-3. Click **Save**
-
-**Option B: Via the CLI**
 ```bash
-# Install the arctl CLI
-curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
-
-# Register the MCP server
-arctl server add weather-tools \
-  --description "Weather data — current conditions, forecasts, and alerts" \
-  --url http://weather-mcp.default.svc.cluster.local:80 \
-  --protocol streamable-http
+# Publish to the registry catalog
+arctl mcp publish weather-mcp --docker-url docker.io/demo
 ```
 
-> **Show:** The newly registered server in the catalog with its metadata.
+> **Show:** The newly published server in the catalog — navigate to it in the UI.
+
+```bash
+# Verify it appears in the catalog
+arctl mcp list
+```
+
+Expected output:
+```
+NAME                  VERSION   TYPE   PUBLISHED   DEPLOYED   UPDATED
+demo/weather-mcp      0.1.0     oci    True        False      5s
+
+Showing 1-1 of 1 servers (364 total with community servers).
+```
+
+### Deploy the MCP Server to Kubernetes (3 min)
+
+> **Talk track:** "Now that it's in the catalog, anyone on the team can deploy it to their cluster with a single command. No Dockerfiles to hunt for, no YAML to write — Agent Registry handles it."
+
+```bash
+arctl deployments create demo/weather-mcp \
+  --type mcp \
+  --provider-id kubernetes-default \
+  --namespace default \
+  --version 0.1.0
+```
+
+```bash
+# Verify it's running
+kubectl get pods | grep weather-mcp
+```
+
+> **Show:** The deployment in the Agent Registry UI under the **Deployed** tab.
 
 ### Semantic Search (2 min)
 
 > **Talk track:** "Now that we have servers registered, developers can search by what they need, not by what they know exists."
 
-```bash
-# Search by capability, not by name
-arctl search "get weather forecast"
-```
-
-> **Show:** The search returns the weather-tools server based on the description match — developers don't need to know the exact name.
+> **Show in the UI:** Type "get weather forecast" in the search bar. The weather-tools server appears based on the description match — developers don't need to know the exact name.
 
 ### Key Takeaway (1 min)
 
-> **Talk track:** "Agent Registry is your single pane of glass for all AI artifacts. Platform teams curate what's approved, developers discover what they need. But discovery is just step one — how do we actually *route* traffic to these servers securely? That's where Agent Gateway comes in."
+> **Talk track:** "Agent Registry is your single pane of glass for all AI artifacts. Platform teams curate what's approved, developers discover what they need, and anyone can deploy from the catalog. But discovery is just step one — how do we actually *route* traffic to these servers securely? That's where Agent Gateway comes in."
 
 ```
 What we built in Part 1:
 
-  ┌───────────────────┐
-  │  Agent Registry    │
-  │                   │
-  │  weather-tools ✓  │   ← Registered and discoverable
-  │  (MCP Server)     │
-  └───────────────────┘
+  +-------------------+
+  |  Agent Registry    |
+  |                   |
+  |  weather-mcp  OK  |   <-- Registered, published, deployed
+  |  (MCP Server)     |
+  +-------------------+
 ```
 
 ---
@@ -349,10 +330,10 @@ What we built in Part 1:
 ```
 Without Agent Gateway:
 
-  Agent A ──────────────────────► MCP Server 1
-  Agent B ──────────────────────► MCP Server 2     No auth, no limits,
-  Agent C ──────────────────────► MCP Server 1     no traces, no control
-  Agent D ──────────────────────► MCP Server 3
+  Agent A --------------------------> MCP Server 1
+  Agent B --------------------------> MCP Server 2     No auth, no limits,
+  Agent C --------------------------> MCP Server 1     no traces, no control
+  Agent D --------------------------> MCP Server 3
 ```
 
 ### The Solution: An AI-Native Proxy (3 min)
@@ -362,19 +343,19 @@ Without Agent Gateway:
 ```
 With Agent Gateway:
 
-                        ┌────────────────────────────────┐
-                        │        Agent Gateway            │
-                        │                                │
-  Agent A ──────►       │  ┌──────────┐  ┌───────────┐  │  ──────► MCP Server 1
-  Agent B ──────►       │  │ Routing  │  │ RBAC      │  │  ──────► MCP Server 2
-  Agent C ──────►       │  │ Auth     │  │ Rate Limit│  │  ──────► MCP Server 3
-  Agent D ──────►       │  │ Traces   │  │ Guardrails│  │
-                        │  └──────────┘  └───────────┘  │
-                        │                                │
-                        │  Single entry point            │
-                        │  Full visibility               │
-                        │  Policy enforcement            │
-                        └────────────────────────────────┘
+                        +--------------------------------+
+                        |        Agent Gateway            |
+                        |                                |
+  Agent A ------>       |  +----------+  +-----------+  |  ------> MCP Server 1
+  Agent B ------>       |  | Routing  |  | RBAC      |  |  ------> MCP Server 2
+  Agent C ------>       |  | Auth     |  | Rate Limit|  |  ------> MCP Server 3
+  Agent D ------>       |  | Traces   |  | Guardrails|  |
+                        |  +----------+  +-----------+  |
+                        |                                |
+                        |  Single entry point            |
+                        |  Full visibility               |
+                        |  Policy enforcement            |
+                        +--------------------------------+
 ```
 
 ### Configure the Gateway and Route (5 min)
@@ -478,55 +459,50 @@ spec:
             port: 7777
           jwksPath: .well-known/jwks.json
       rbac:
-      - tool: "get_weather"
+      - tool: "echo"
         celExpression: 'claims.sub != ""'
-      - tool: "set_alert"
-        celExpression: 'claims.groups.exists(g, g == "admin")'
 EOF
 ```
 
-> **Talk track:** "Now `get_weather` requires any authenticated user, but `set_alert` requires the `admin` group. This is tool-level RBAC — not just 'can you access the server' but 'can you call this specific tool.'"
+> **Talk track:** "Now `echo` requires any authenticated user. You can add per-tool policies — for example, requiring the `admin` group to call destructive tools. This is tool-level RBAC — not just 'can you access the server' but 'can you call this specific tool.'"
 
 ```
 Security Policy:
 
-  ┌────────────────────────────────────────────────────┐
-  │  EnterpriseAgentgatewayPolicy                      │
-  │                                                    │
-  │  Authentication: JWT (Strict mode)                 │
-  │  ├─ Issuer: AGW STS                               │
-  │  └─ JWKS: /.well-known/jwks.json                  │
-  │                                                    │
-  │  RBAC (per-tool):                                  │
-  │  ├─ get_weather → any authenticated user ✓         │
-  │  └─ set_alert   → admin group only 🔒             │
-  └────────────────────────────────────────────────────┘
+  +----------------------------------------------------+
+  |  EnterpriseAgentgatewayPolicy                      |
+  |                                                    |
+  |  Authentication: JWT (Strict mode)                 |
+  |  +-- Issuer: AGW built-in STS                      |
+  |  +-- JWKS: /.well-known/jwks.json (5-min cache)   |
+  |                                                    |
+  |  RBAC (per-tool):                                  |
+  |  +-- echo       --> any authenticated user  OK     |
+  |  +-- set_alert  --> admin group only  (locked)     |
+  +----------------------------------------------------+
 ```
 
-### Observability (2 min)
+### Show the Solo Enterprise UI — Agent Gateway Dashboards (2 min)
 
-> **Talk track:** "Every request through Agent Gateway generates OpenTelemetry traces. You can see exactly which agent called which tool, how long it took, and whether it succeeded."
+**Open the Solo Enterprise UI** at `http://localhost:8081` and navigate to **Agent Gateway**.
 
-```bash
-# Show Agent Gateway logs — MCP requests are visible
-kubectl logs -n agentgateway-system deploy/agentgateway-proxy --tail=20
-```
+> **Talk track:** "Every request through Agent Gateway generates OpenTelemetry traces. The Solo Enterprise UI gives you pre-built dashboards for LLM traffic, MCP tool calls, cost tracking, and more."
 
-> **Show:** Grafana dashboard (if deployed) or Agent Gateway traces showing:
-> - Request path (agent → gateway → MCP server)
-> - Latency per tool call
-> - Auth decisions (allowed/denied)
+> **Show:**
+> - **MCP dashboard** — request rate by tool name, error rates, latency
+> - **LLM dashboard** — token usage by model, cost tracking
+> - **Traces** — drill into a specific request to see the full path: agent -> gateway -> MCP server
 
 ```
 Observability:
 
-  Agent ──► AGW ──► MCP Server
-    │        │         │
-    │        │         └─ Response time: 45ms
-    │        └─ Auth: ✓ JWT valid, sub=alice
-    └─ Trace ID: abc123
+  Agent --> AGW --> MCP Server
+    |        |         |
+    |        |         +-- Response time: 45ms
+    |        +-- Auth: OK JWT valid, sub=alice
+    +-- Trace ID: abc123
 
-  All visible in Grafana / Solo Enterprise UI dashboards
+  All visible in Solo Enterprise UI dashboards
 ```
 
 ### Key Takeaway (1 min)
@@ -536,14 +512,14 @@ Observability:
 ```
 What we built in Parts 1 + 2:
 
-  ┌───────────────────┐     ┌───────────────────────┐
-  │  Agent Registry    │     │   Agent Gateway        │
-  │                   │     │                       │
-  │  weather-tools ✓  │────►│  /weather route ✓     │──► weather-mcp
-  │  (discoverable)   │     │  JWT auth ✓           │    (backend)
-  │                   │     │  Tool-level RBAC ✓    │
-  └───────────────────┘     │  OTEL traces ✓        │
-                            └───────────────────────┘
+  +-------------------+     +-----------------------+
+  |  Agent Registry    |     |   Agent Gateway        |
+  |                   |     |                       |
+  |  weather-mcp  OK  |---->|  /weather route OK    |--> weather-mcp
+  |  (discoverable)   |     |  JWT auth OK          |    (backend)
+  |                   |     |  Tool-level RBAC OK   |
+  +-------------------+     |  OTEL traces OK       |
+                            +-----------------------+
 ```
 
 ---
@@ -560,14 +536,14 @@ What we built in Parts 1 + 2:
 Without kagent:
 
   main.py (Agent A)          server.js (Agent B)         notebook.ipynb (Agent C)
-  ┌──────────────────┐      ┌──────────────────┐        ┌──────────────────┐
-  │ import openai    │      │ const OpenAI =   │        │ from langchain   │
-  │ import mcp_sdk   │      │   require(...)   │        │ import Agent     │
-  │                  │      │                  │        │                  │
-  │ # 200 lines of   │      │ // 300 lines of  │        │ # Different      │
-  │ # boilerplate    │      │ // boilerplate   │        │ # framework      │
-  │ # per agent      │      │ // per agent     │        │ # per team       │
-  └──────────────────┘      └──────────────────┘        └──────────────────┘
+  +------------------+      +------------------+        +------------------+
+  | import openai    |      | const OpenAI =   |        | from langchain   |
+  | import mcp_sdk   |      |   require(...)   |        | import Agent     |
+  |                  |      |                  |        |                  |
+  | # 200 lines of   |      | // 300 lines of  |        | # Different      |
+  | # boilerplate    |      | // boilerplate   |        | # framework      |
+  | # per agent      |      | // per agent     |        | # per team       |
+  +------------------+      +------------------+        +------------------+
 ```
 
 ### The Solution: Agents as Kubernetes Resources (3 min)
@@ -578,19 +554,19 @@ Without kagent:
 With kagent:
 
   agent.yaml
-  ┌──────────────────────────────────────┐
-  │ apiVersion: kagent.dev/v1alpha2      │
-  │ kind: Agent                          │
-  │ metadata:                            │
-  │   name: weather-assistant            │
-  │ spec:                                │
-  │   modelConfig: gpt-model             │   ← Which LLM
-  │   systemMessage: "You are a..."      │   ← Personality
-  │   tools:                             │   ← What it can do
-  │   - mcpServer: weather-tools         │
-  └──────────────────────────────────────┘
+  +--------------------------------------+
+  | apiVersion: kagent.dev/v1alpha2      |
+  | kind: Agent                          |
+  | metadata:                            |
+  |   name: weather-assistant            |
+  | spec:                                |
+  |   modelConfig: gpt-model             |   <-- Which LLM
+  |   systemMessage: "You are a..."      |   <-- Personality
+  |   tools:                             |   <-- What it can do
+  |   - mcpServer: weather-tools         |
+  +--------------------------------------+
 
-  kubectl apply -f agent.yaml   ← Done. Agent is live.
+  kubectl apply -f agent.yaml   <-- Done. Agent is live.
 ```
 
 ### Step 1: Configure the Model (2 min)
@@ -622,12 +598,12 @@ EOF
 ```
 LLM traffic routing:
 
-  kagent agent ──► Agent Gateway ──► OpenAI API
+  kagent agent --> Agent Gateway --> OpenAI API
                    (:3001/v1)
-                   │
-                   ├─ Rate limiting (tokens/min)
-                   ├─ Cost tracking (input/output tokens)
-                   └─ OTEL traces (model, latency, tokens)
+                   |
+                   +-- Rate limiting (tokens/min)
+                   +-- Cost tracking (input/output tokens)
+                   +-- OTEL traces (model, latency, tokens)
 ```
 
 ### Step 2: Connect the MCP Server (2 min)
@@ -651,12 +627,12 @@ EOF
 ```
 MCP traffic routing:
 
-  kagent agent ──► Agent Gateway ──► weather-mcp backend
+  kagent agent --> Agent Gateway --> weather-mcp backend
                    (/weather)
-                   │
-                   ├─ JWT auth ✓
-                   ├─ Tool-level RBAC ✓
-                   └─ OTEL traces ✓
+                   |
+                   +-- JWT auth OK
+                   +-- Tool-level RBAC OK
+                   +-- OTEL traces OK
 ```
 
 ### Step 3: Create the Agent (3 min)
@@ -693,31 +669,32 @@ EOF
 ```
 What we just created:
 
-  ┌──────────────────────────────────────────────────┐
-  │  Agent: weather-assistant                        │
-  │                                                  │
-  │  Model: gpt-4o-mini (via AGW → OpenAI)          │
-  │  Tools: weather-tools (via AGW → weather-mcp)   │
-  │  System: "You are a helpful weather assistant"   │
-  └──────────────────────────────────────────────────┘
+  +--------------------------------------------------+
+  |  Agent: weather-assistant                        |
+  |                                                  |
+  |  Model: gpt-4o-mini (via AGW --> OpenAI)         |
+  |  Tools: weather-tools (via AGW --> weather-mcp)  |
+  |  System: "You are a helpful weather assistant"   |
+  +--------------------------------------------------+
 ```
 
-### Step 4: Use the Agent (3 min)
+### Step 4: Use the Agent via the Solo Enterprise UI (3 min)
 
-**Open the kagent UI** at `http://localhost:8081`.
+**Open the Solo Enterprise UI** at `http://localhost:8081` and navigate to **kagent** > **Agents** > **weather-assistant**.
 
-1. Navigate to **Agents** → **weather-assistant**
-2. Open the **Chat** panel
-3. Type: **"What's the weather in San Francisco?"**
+1. Open the **Chat** panel
+2. Type: **"What's the weather in San Francisco?"**
 
 > **Show:** The agent:
 > 1. Receives the question
-> 2. Calls the `get_weather` tool via Agent Gateway
+> 2. Calls the `echo` tool via Agent Gateway
 > 3. Agent Gateway validates the JWT, checks RBAC, logs the trace
 > 4. Weather MCP server returns data
 > 5. Agent formats and returns the response
 
-> **Talk track:** "That one chat message just exercised the entire stack. The agent called a tool registered in Agent Registry, routed through Agent Gateway with JWT auth and RBAC, and the weather MCP server returned the data."
+> **Talk track:** "That one chat message just exercised the entire stack. The agent called a tool registered in Agent Registry, routed through Agent Gateway with JWT auth and RBAC, and the weather MCP server returned the data. Let's see that in the Solo Enterprise UI traces."
+
+> **Show in the Solo Enterprise UI:** Navigate to **Agent Gateway** > **Traces** — find the trace for this request and show the spans: agent -> gateway -> MCP server.
 
 ---
 
@@ -726,59 +703,67 @@ What we just created:
 ### The Full Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                                                                     │
-│  "What's the weather in San Francisco?"                                             │
-│                                                                                     │
-│  ┌──────────┐    ┌──────────────┐    ┌─────────────────────┐    ┌───────────────┐  │
-│  │          │    │              │    │                     │    │               │  │
-│  │  User    │───►│  kagent      │───►│  Agent Gateway      │───►│  Weather      │  │
-│  │          │    │  Agent       │    │                     │    │  MCP Server   │  │
-│  │          │    │              │    │  1. Validate JWT ✓  │    │               │  │
-│  │          │    │  1. Receive  │    │  2. Check RBAC ✓    │    │  1. Look up   │  │
-│  │          │◄───│     question │◄───│  3. Route to MCP    │◄───│     weather   │  │
-│  │          │    │  2. Call LLM │    │  4. Log trace       │    │  2. Return    │  │
-│  │          │    │  3. Use tool │    │  5. Return response │    │     data      │  │
-│  │          │    │  4. Format   │    │                     │    │               │  │
-│  │          │    │     response │    │                     │    │               │  │
-│  └──────────┘    └──────────────┘    └─────────────────────┘    └───────────────┘  │
-│                         │                      │                                    │
-│                         │                      │                                    │
-│                         ▼                      ▼                                    │
-│                  ┌──────────────┐    ┌─────────────────────┐                        │
-│                  │ Agent        │    │  Observability      │                        │
-│                  │ Registry     │    │                     │                        │
-│                  │              │    │  Traces: agent →    │                        │
-│                  │ weather-     │    │    gateway → MCP    │                        │
-│                  │ tools ✓      │    │  Latency: 45ms      │                        │
-│                  │ (discovered) │    │  Auth: sub=alice ✓  │                        │
-│                  └──────────────┘    └─────────────────────┘                        │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------------------------------+
+|                                                                                     |
+|  "What's the weather in San Francisco?"                                             |
+|                                                                                     |
+|  +----------+    +--------------+    +---------------------+    +---------------+  |
+|  |          |    |              |    |                     |    |               |  |
+|  |  User    |--->|  kagent      |--->|  Agent Gateway      |--->|  Weather      |  |
+|  |          |    |  Agent       |    |                     |    |  MCP Server   |  |
+|  |          |    |              |    |  1. Validate JWT OK |    |               |  |
+|  |          |    |  1. Receive  |    |  2. Check RBAC OK   |    |  1. Look up   |  |
+|  |          |<---|     question |<---|  3. Route to MCP    |<---|     weather   |  |
+|  |          |    |  2. Call LLM |    |  4. Log trace       |    |  2. Return    |  |
+|  |          |    |  3. Use tool |    |  5. Return response |    |     data      |  |
+|  |          |    |  4. Format   |    |                     |    |               |  |
+|  |          |    |     response |    |                     |    |               |  |
+|  +----------+    +--------------+    +---------------------+    +---------------+  |
+|                         |                      |                                    |
+|                         |                      |                                    |
+|                         v                      v                                    |
+|                  +--------------+    +---------------------+                        |
+|                  | Agent        |    |  Observability      |                        |
+|                  | Registry     |    |                     |                        |
+|                  |              |    |  Traces: agent -->  |                        |
+|                  | weather-     |    |    gateway --> MCP   |                        |
+|                  | tools OK     |    |  Latency: 45ms      |                        |
+|                  | (discovered) |    |  Auth: sub=alice OK |                        |
+|                  +--------------+    +---------------------+                        |
+|                                                                                     |
++-------------------------------------------------------------------------------------+
 ```
+
+### The Three UIs
+
+| UI | URL | What It Shows |
+|----|-----|---------------|
+| **Agent Registry** | `http://localhost:12121` | MCP server catalog, semantic search, deployment status |
+| **Solo Enterprise UI — Agent Gateway** | `http://localhost:8081` (AGW tab) | LLM/MCP dashboards, cost tracking, OTEL traces, route status |
+| **Solo Enterprise UI — kagent** | `http://localhost:8081` (kagent tab) | Agent list, chat interface, tool execution, agent configuration |
 
 ### What Each Product Contributed
 
 | Product | Role | What It Did |
 |---------|------|-------------|
-| **Agent Registry** | Catalog & Discovery | The weather MCP server was registered, versioned, and discoverable. Developers searched "weather" and found it. |
+| **Agent Registry** | Catalog & Discovery | The weather MCP server was scaffolded, published, and deployed from the catalog. Developers searched "weather" and found it. |
 | **Agent Gateway** | Routing & Security | Routed the MCP call, validated the JWT, enforced tool-level RBAC, generated OTEL traces. Zero changes to the agent or MCP server. |
-| **kagent** | Agent Lifecycle | The agent was defined as a K8s resource (YAML), connected to tools via the gateway, and accessible through a chat UI. No custom code. |
+| **kagent** | Agent Lifecycle | The agent was defined as a K8s resource (YAML), connected to tools via the gateway, and accessible through the Solo Enterprise chat UI. No custom code. |
 
 ### The Value: Each Product Works Alone, Better Together
 
 ```
 Standalone value:
 
-  Agent Registry alone    → Central catalog for your MCP servers
-  Agent Gateway alone     → Secure proxy for any agent-to-tool traffic
-  kagent alone            → K8s-native agent lifecycle management
+  Agent Registry alone    --> Central catalog for your MCP servers
+  Agent Gateway alone     --> Secure proxy for any agent-to-tool traffic
+  kagent alone            --> K8s-native agent lifecycle management
 
 Combined value:
 
-  Registry + Gateway      → Discover tools AND route to them securely
-  Gateway + kagent        → Agents use tools through a governed proxy
-  All three               → Full platform: discover → secure → run
+  Registry + Gateway      --> Discover tools AND route to them securely
+  Gateway + kagent        --> Agents use tools through a governed proxy
+  All three               --> Full platform: discover --> secure --> run
 ```
 
 ### What to Demo Next
@@ -791,7 +776,7 @@ Depending on audience interest, you can extend the demo with:
 | **Rate limiting** | +5 min | Add a rate limit policy — show an agent getting throttled after too many calls. |
 | **Guardrails** | +5 min | Add a regex or moderation guardrail — show blocked content. |
 | **Multi-agent** | +10 min | Create a second agent with different tool permissions — show RBAC in action. |
-| **Observability deep-dive** | +5 min | Walk through Grafana dashboards — LLM cost, tool call latency, agent activity. |
+| **Observability deep-dive** | +5 min | Walk through Solo Enterprise UI dashboards — LLM cost, tool call latency, agent activity. |
 
 ---
 
@@ -807,7 +792,10 @@ kubectl delete enterpriseagentgatewaypolicy weather-security
 kubectl delete httproute weather-route
 kubectl delete agentgatewaybackend weather-backend
 kubectl delete gateway demo-gateway -n agentgateway-system
-kubectl delete -f demo-mcp-server.yaml
+
+# Remove MCP server deployment (via Agent Registry)
+arctl deployments list
+arctl deployments delete <deployment-ID>
 
 # Remove products (if desired)
 helm uninstall kagent-mgmt -n kagent
@@ -827,8 +815,9 @@ k3d cluster delete solo-ai-demo
 ## Reference
 
 - [Agent Registry](https://aregistry.ai/) — Catalog for MCP servers, agents, skills
+- [Agent Registry Docs](https://aregistry.ai/docs/quickstart/) — Get started with arctl
 - [Agent Gateway Docs](https://docs.solo.io/agentgateway/2.2.x/) — AI-native proxy
-- [kagent Docs](https://docs.solo.io/agentgateway/2.2.x/) — K8s-native agent framework
+- [kagent Docs](https://kagent.dev/) — K8s-native agent framework
 - [Authentication Patterns](../Agentgateway-AuthN-Patterns/) — 14 auth patterns for AGW
 - [Authorization Patterns](../Agentgateway-AuthZ-Patterns/) — RBAC, rate limiting, guardrails
 - [OBO Token Exchange Enablement](../obo-token-exchange-enablement/) — Deep-dive on token exchange
