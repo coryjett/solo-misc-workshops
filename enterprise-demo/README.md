@@ -44,7 +44,7 @@ The setup script provisions a k3d cluster and deploys everything end-to-end. See
 
 ## Architecture
 
-![Solo.io AI Platform Architecture](architecture.svg)
+![Solo.io AI Platform Architecture](architecture.png)
 
 Three products, each answering a different question:
 
@@ -58,7 +58,7 @@ Three products, each answering a different question:
 |------|-------------|
 | [demo-guide.md](demo-guide.md) | Full step-by-step walkthrough |
 | [setup.sh](setup.sh) | Automated setup script (provisions cluster + deploys everything) |
-| [architecture.svg](architecture.svg) | Architecture diagram |
+| [architecture.png](architecture.png) | Architecture diagram |
 
 ---
 
