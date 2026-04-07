@@ -587,7 +587,7 @@ kubectl get pods -n demo
 
 > **Talk track:** "Now that we have servers registered, developers can search by what they need, not by what they know exists."
 
-> **Show in the UI:** Type "get weather forecast" in the search bar. The weather-tools server appears based on the description match — developers don't need to know the exact name.
+> **Show in the UI:** Type "weather" in the search bar. Our `demo-user/weather-tools` server appears alongside community weather servers from the catalog — developers can discover tools without knowing the exact name.
 
 ### Key Takeaway (1 min)
 
