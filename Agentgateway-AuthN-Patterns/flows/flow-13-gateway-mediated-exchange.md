@@ -13,9 +13,9 @@ Uses AGW's built-in token exchange server (`enterprise-agentgateway:7777`). Conf
 
 ![Built-in STS](../images/13-gateway-mediated-builtin.png)
 
-### Variant B: External STS
+### Variant B: External STS (Entra ID)
 
-Uses an external RFC 8693-compliant STS. The gateway exchanges the IdP token for a new token signed by the external STS. Decouples the IdP from downstream services and works with any compliant STS. Best for environments with an existing enterprise STS or cross-domain trust requirements.
+Uses Microsoft Entra ID (Azure AD) as an external token exchange provider. The gateway exchanges the IdP token via Entra's OBO flow (`urn:ietf:params:oauth:grant-type:jwt-bearer`). Configured via `EntraTokenExchangeConfig` on the policy. Currently Entra is the only supported external provider; generic RFC 8693 external STS is not yet supported.
 
 ![External STS](../images/13-gateway-mediated-external.png)
 

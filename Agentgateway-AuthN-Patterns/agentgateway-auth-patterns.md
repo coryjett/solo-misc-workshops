@@ -21,7 +21,7 @@ Clients authenticate with a static API key instead of OIDC. Gateway validates th
 
 ## Basic Auth (RFC 7617)
 
-Clients authenticate with username and password (Base64-encoded in the Authorization header). Gateway validates credentials against hashed values stored in Kubernetes secrets. Useful for legacy integrations or simple service-to-service auth.
+Clients authenticate with username and password (Base64-encoded in the `Authorization` header). Gateway validates credentials against APR1/bcrypt-hashed values stored either inline in the `EnterpriseAgentgatewayPolicy` (`users` field) or via `secretRef` referencing a Kubernetes secret containing an htpasswd file. The two storage methods are mutually exclusive.
 
 > **Docs:** [Basic Auth](https://docs.solo.io/agentgateway/2.2.x/security/extauth/basic/)
 > **API:** [BasicAuthentication](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#basicauthentication)
@@ -32,9 +32,9 @@ Clients authenticate with username and password (Base64-encoded in the Authoriza
 
 ## BYO External Auth (gRPC Ext Auth Service)
 
-Delegate authentication to your own external authorization service via gRPC. The gateway sends auth check requests to your service, which returns allow/deny decisions. Supports custom logic, enterprise IdPs, or multi-factor checks.
+Delegate authentication to your own external authorization service using the Envoy `ext_authz` gRPC protocol (supports both gRPC and HTTP). The gateway sends `CheckRequest` RPCs to your service, which returns allow/deny decisions. Supports custom logic, enterprise IdPs, or multi-factor checks.
 
-> **Docs:** [External Auth](https://docs.solo.io/agentgateway/2.2.x/security/extauth/)
+> **Docs:** [BYO Ext Auth Service](https://docs.solo.io/agentgateway/2.2.x/security/extauth/byo-ext-auth-service/)
 > **API:** [EnterpriseAgentgatewayExtAuth](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewayextauth)
 
 ![BYO External Auth](images/10-byo-ext-auth.png)
@@ -55,12 +55,12 @@ MCP clients (like Claude Code, VS Code extensions) that don't have pre-registere
 
 Two independent TLS features that can be used separately or combined for end-to-end TLS:
 
-- **FrontendTLS (inbound mTLS):** Clients authenticate by presenting an X.509 certificate during the TLS handshake. The gateway validates the client certificate against a trusted CA root configured in the listener's `TLSConfig.root`. No application-layer credentials needed — the TLS handshake itself is the authentication. If the client cert is invalid or missing, the connection is refused at the TLS layer (no HTTP reached).
+- **FrontendTLS (inbound mTLS):** Clients authenticate by presenting an X.509 certificate during the TLS handshake. The gateway validates the client certificate against a trusted CA root configured in the listener's `TLSConfig.root` field (proto) / `spec.tls.frontend.default.validation.caCertificateRefs` (Gateway resource). Two mTLS modes are supported: `Strict` (default — reject invalid/missing certs) and `AllowInsecureFallback` (accept connections even without a valid client cert). No application-layer credentials needed — the TLS handshake itself is the authentication.
 
-- **BackendTLSPolicy (outbound TLS origination):** The gateway originates a new TLS connection to the backend, verifying the backend's server certificate against `caCertificateRefs` (ConfigMap) or `wellKnownCACertificates: System`. Used when backends only accept TLS connections (in-cluster or external services).
+- **BackendTLS (outbound TLS origination):** The gateway originates a new TLS connection to the backend. Configured either as a standalone Kubernetes `BackendTLSPolicy` resource (applied to Services) or inline via the `BackendTLS` field in `EnterpriseAgentgatewayPolicy`. Verifies the backend's server certificate against `caCertificateRefs` (ConfigMap) or `wellKnownCACertificates: System`. Used when backends only accept TLS connections (in-cluster or external services).
 
 > **Docs:** [Set up mTLS (FrontendTLS)](https://docs.solo.io/agentgateway/2.2.x/setup/listeners/mtls/) · [BackendTLS](https://docs.solo.io/agentgateway/2.2.x/security/backendtls/)
-> **API:** [TLSConfig](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#tlsconfig) · [BackendTLSPolicy](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#backendtls)
+> **API:** [FrontendTLS](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#frontendtls) · [BackendTLS](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#backendtls)
 
 ![Mutual TLS](images/mtls.png)
 
@@ -68,10 +68,10 @@ Two independent TLS features that can be used separately or combined for end-to-
 
 ## Passthrough Token
 
-Client already has the correct token (from its own OIDC flow or API key). Gateway forwards it directly to the backend — no validation or exchange performed.
+Inbound auth policies (JWT, API key) validate and strip the client's original `Authorization` header. Passthrough backend auth re-attaches the validated token to the outbound request so it is forwarded to the backend as-is. Useful for federated identity environments where clients are already authenticated to the upstream provider.
 
 > **Docs:** [API Keys — Passthrough Token](https://docs.solo.io/agentgateway/2.2.x/llm/api-keys/)
-> **API:** [AIBackend](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#aibackend)
+> **API:** [BackendAuth](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#backendauth)
 
 ![Passthrough Token](images/5-passthrough.png)
 
@@ -79,7 +79,7 @@ Client already has the correct token (from its own OIDC flow or API key). Gatewa
 
 ## Standard OIDC Authentication
 
-User authenticates via OIDC provider (Authorization Code Flow), receives a bearer JWT, and uses it for all subsequent requests to the Agent Gateway.
+Client obtains a JWT from an external OIDC provider (e.g., via Authorization Code Flow) and presents it as a bearer token. The gateway validates the JWT against the provider's JWKS endpoint — it does not participate in the OIDC flow itself. A separate `OidcPolicy` exists for gateway-initiated Authorization Code Flow.
 
 > **Docs:** [JWT Auth for MCP Services](https://docs.solo.io/agentgateway/2.2.x/mcp/mcp-access/) · [Set up JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) · [Set up Keycloak as IdP](https://docs.solo.io/agentgateway/2.2.x/security/extauth/oauth/keycloak/)
 > **API:** [JWTAuthentication](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#jwtauthentication)
@@ -116,9 +116,9 @@ Uses AGW's built-in token exchange server. Configured via `ExchangeOnly` mode. I
 
 ![Built-in STS](images/13-gateway-mediated-builtin.png)
 
-### Variant B: External STS
+### Variant B: External STS (Entra ID)
 
-Uses an external RFC 8693-compliant STS. Decouples the IdP from downstream services.
+Uses Microsoft Entra ID (Azure AD) as an external token exchange provider via Entra's OBO flow. Currently Entra is the only supported external provider.
 
 ![External STS](images/13-gateway-mediated-external.png)
 
@@ -155,7 +155,7 @@ Agent exchanges the user's JWT for a new OBO token via RFC 8693, but without an 
 Validate the inbound OIDC JWT, inspect a claim (sub, team, tier), then use a CEL transformation to inject a per-user or per-group static opaque token. Enables differentiated backend access based on identity attributes.
 
 > **Docs:** [CEL Transformations](https://docs.solo.io/agentgateway/2.2.x/traffic-management/transformations/) · [JWT Auth for MCP Services](https://docs.solo.io/agentgateway/2.2.x/mcp/mcp-access/)
-> **API:** [EnterpriseAgentgatewayPolicyTraffic](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewaytrafficpolicy)
+> **API:** [EnterpriseAgentgatewayPolicyBackend](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewaybackendpolicy) · [EnterpriseAgentgatewayPolicyTraffic](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewaytrafficpolicy)
 
 ![Claim-Based Token Mapping](images/7-claim-based-mapping.png)
 
@@ -163,10 +163,10 @@ Validate the inbound OIDC JWT, inspect a claim (sub, team, tier), then use a CEL
 
 ## Static Secret Injection (Shared Credential)
 
-Gateway validates inbound auth (JWT or API key), then replaces it with a static backend credential from a Kubernetes secret. All users share the same upstream token.
+Inbound auth (JWT or API key policy) validates the client independently. A separate backend auth policy (`secretRef`) injects a static credential from a Kubernetes secret into the outbound `Authorization` header. These are two independent policy layers — inbound validation and backend credential injection are configured separately. All users share the same upstream token.
 
 > **Docs:** [API Keys — Manage API Keys](https://docs.solo.io/agentgateway/2.2.x/llm/api-keys/)
-> **API:** [AIBackend](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#aibackend)
+> **API:** [BackendAuth](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#backendauth)
 
 ![Static Secret Injection](images/6-static-secret.png)
 
@@ -178,7 +178,7 @@ Gateway validates inbound auth (JWT or API key), then replaces it with a static 
 
 ## Elicitation (Credential Gathering for Upstream APIs)
 
-When the agent needs to call an upstream API requiring OAuth credentials that don't exist yet. The gateway returns an elicitation URL; the user completes an out-of-band OAuth flow to provide the credentials.
+When a request needs to call an upstream API on behalf of a user but no upstream OAuth token is available yet, the gateway triggers an elicitation. The proxy returns the **elicitation URL** to the client with a `PENDING` status. The user opens that URL in the **Solo Enterprise UI** to complete the upstream OAuth flow with the external provider. Once the elicitation is `COMPLETED`, the client retries the original request and the gateway injects the stored upstream token.
 
 > **Docs:** [Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/elicitations/) · [About OBO & Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/about/)
 > **API:** [TokenExchangeMode](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#tokenexchangemode)

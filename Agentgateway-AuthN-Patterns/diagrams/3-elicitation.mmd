@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant Client as Client
+    participant AGW as Agentgateway Proxy
+    participant STS as Token Exchange Server (STS)
+    participant UI as Solo Enterprise UI
+    participant OAuth as External OAuth Provider
+    participant API as Upstream API
+
+    Client->>AGW: Request (needs upstream OAuth token)
+    AGW->>STS: Request upstream token
+    STS->>AGW: Return elicitation URL (PENDING)
+    AGW->>Client: Return elicitation URL (PENDING)
+    Client->>UI: Open the elicitation URL and authorize
+    UI->>OAuth: Redirect for OAuth authorization
+    OAuth->>UI: Redirect back with authorization code
+    UI->>STS: Complete elicitation with authorization code
+    STS->>STS: Store token, update elicitation (COMPLETED)
+    Client->>AGW: Retry request
+    AGW->>STS: Fetch stored token
+    STS->>AGW: Return stored token
+    AGW->>API: Forward request and inject stored OAuth token
+    API-->>AGW: Response
+    AGW-->>Client: Result
