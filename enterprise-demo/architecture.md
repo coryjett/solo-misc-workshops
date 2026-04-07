@@ -1,5 +1,7 @@
 # Solo.io AI Platform — Architecture
 
+![Architecture Diagram](architecture.png)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                    k3d Cluster: solo-ai-demo                            │

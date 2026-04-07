@@ -52,9 +52,7 @@ Three products, each answering a different question:
 - **Agent Gateway** — *"How do I get there safely?"* — Route, authenticate, authorize, rate-limit, and observe agent traffic
 - **kagent** — *"Run the agent"* — Kubernetes-native agent lifecycle with declarative YAML and GitOps
 
-### Detailed Architecture
-
-![Architecture Diagram](architecture.png)
+![Architecture](architecture-overview.png)
 
 See [architecture.md](architecture.md) for detailed data flows and component descriptions.
 
