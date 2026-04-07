@@ -174,6 +174,13 @@ helm upgrade -i kagent \
   --wait --timeout 300s
 
 rm -f /tmp/management.yaml /tmp/kagent.yaml
+
+# Skip OBO token handler (no OIDC provider in local demo)
+kubectl patch configmap kagent-enterprise-config -n kagent \
+  --type merge -p '{"data":{"SKIP_OBO":"true"}}'
+kubectl rollout restart deployment/solo-enterprise-ui -n kagent
+kubectl rollout status deployment/solo-enterprise-ui -n kagent --timeout=120s
+
 ok "kagent Enterprise deployed"
 
 # ============================================================================

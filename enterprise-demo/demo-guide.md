@@ -206,9 +206,15 @@ helm upgrade -i kagent \
 
 # Verify
 kubectl -n kagent wait --for=condition=ready pod -l app.kubernetes.io/name=solo-enterprise-ui --timeout=300s
+
+# Skip OBO token handler (no OIDC provider in local demo)
+kubectl patch configmap kagent-enterprise-config -n kagent \
+  --type merge -p '{"data":{"SKIP_OBO":"true"}}'
+kubectl rollout restart deployment/solo-enterprise-ui -n kagent
+kubectl rollout status deployment/solo-enterprise-ui -n kagent --timeout=120s
 ```
 
-> **Note:** Setting `oidc.issuer: ""` uses the built-in auto IdP for testing. For production, configure your OIDC provider (Keycloak, Okta, etc.).
+> **Note:** `SKIP_OBO=true` disables the "on behalf of" token handler since there's no OIDC provider in the local demo. For production, configure your OIDC provider (Keycloak, Okta, etc.) and remove this patch.
 
 ### 5. Create the Demo MCP Server
 
