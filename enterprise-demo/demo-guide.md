@@ -356,7 +356,26 @@ kubectl -n demo wait --for=condition=ready pod -l app=weather-tools --timeout=12
 ### 7. Configure Agent Gateway Routing and Security
 
 ```bash
-# Create the Gateway (HTTP listener)
+# AGW telemetry — send OTEL traces to Solo Enterprise collector
+kubectl apply -f - <<'EOF'
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: ai-gateway-params
+  namespace: agentgateway-system
+spec:
+  env:
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317"
+  - name: OTEL_EXPORTER_OTLP_PROTOCOL
+    value: "grpc"
+  - name: OTEL_SERVICE_NAME
+    value: "agentgateway"
+  - name: OTEL_TRACES_EXPORTER
+    value: "otlp"
+EOF
+
+# Create the Gateway (HTTP listener + telemetry)
 kubectl apply -f - <<'EOF'
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -365,6 +384,11 @@ metadata:
   namespace: agentgateway-system
 spec:
   gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: agentgateway.dev
+      kind: AgentgatewayParameters
+      name: ai-gateway-params
   listeners:
   - name: mcp
     port: 3000
@@ -654,6 +678,11 @@ metadata:
   name: ai-gateway
 spec:
   gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: agentgateway.dev
+      kind: AgentgatewayParameters
+      name: ai-gateway-params        # OTEL tracing config
   listeners:
   - name: mcp
     port: 3000
