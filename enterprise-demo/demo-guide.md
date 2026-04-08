@@ -496,7 +496,7 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 ### Key Takeaway (1 min)
 
-> **Talk track:** "Agent Gateway gives you a single control point for all agent traffic. Auth, RBAC, rate limiting, guardrails, and observability — without changing your agents or MCP servers. Now let's actually *use* this by creating an agent."
+> **Talk track:** "Agent Gateway gives you a single control point for all agent traffic. Auth, RBAC, rate limiting, guardrails, and observability — without changing your agents or MCP servers. Now let's actually *run* an agent — we published one to the registry in Part 1, but now we'll deploy it as a live Kubernetes resource with kagent."
 
 ---
 
