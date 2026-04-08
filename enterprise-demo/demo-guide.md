@@ -537,8 +537,8 @@ metadata:
 spec:
   provider: OpenAI
   model: gpt-4o-mini
-  apiKeySecret: kagent-openai
-  apiKeySecretKey: OPENAI_API_KEY
+  apiKeySecret: demo-keys
+  apiKeySecretKey: openai-api-key
 EOF
 ```
 
