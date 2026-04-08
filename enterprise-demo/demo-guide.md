@@ -688,6 +688,9 @@ Depending on audience interest, you can extend the demo with:
 ## Cleanup
 
 ```bash
+# Remove local files created during the workshop
+rm -rf weather-tools/ weather-analysis/ weatherassistant/ weather-assistant-prompt.md
+
 # Remove demo resources
 kubectl delete agent weather-assistant -n kagent
 kubectl delete remotemcpserver weather-tools -n kagent
