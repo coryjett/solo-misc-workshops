@@ -229,6 +229,8 @@ cd ..
 ```
 
 > **Show:** The agent in the Agent Registry UI — click into it to see its MCP servers, skills, and configuration. Developers can now discover and deploy this entire agent from the catalog.
+>
+> **Note:** The `add-mcp` and `add-skill` commands wire the agent to registry entries — this is catalog metadata for discovery, not a runtime connection. The actual runtime wiring (agent → Agent Gateway → MCP server) happens in Part 3 with kagent.
 
 ### Semantic Search (2 min)
 
