@@ -6,14 +6,12 @@ graph TD
     OPENAI["OpenAI API · gpt-4o-mini"]
     AGW_PROXY["AGW Proxy :3000<br/>MCP-aware routing<br/>API Key Auth · RBAC · Tracing"]
     USER["User / curl"]
-    LOADGEN["Load Generator<br/>1 session / 10s"]
     WEATHER["Weather Tools MCP Server<br/>FastMCP :3000<br/>get_forecast · get_alerts"]
     AR["Agent Registry :12121<br/>MCP server · prompt · skill · agent catalog<br/>Tool discovery + semantic search"]
 
     KAGENT -->|"LLM inference"| OPENAI
     KAGENT -->|"MCP via RemoteMCPServer"| AGW_PROXY
     USER -->|"MCP request · Bearer auth"| AGW_PROXY
-    LOADGEN -->|"MCP traffic"| AGW_PROXY
     AGW_PROXY -->|"Streamable HTTP /weather/mcp"| WEATHER
     AR -.->|"publish + deploy"| WEATHER
 
@@ -23,7 +21,7 @@ graph TD
     classDef registry fill:#3a2a1a,stroke:#ff9800,color:#e0e0e0,stroke-width:2px
     classDef demo fill:#1a1a2e,stroke:#7c7caa,color:#e0e0e0,stroke-width:2px
 
-    class USER,LOADGEN,OPENAI external
+    class USER,OPENAI external
     class AGW_PROXY gateway
     class KAGENT,UI kagentStyle
     class AR registry
