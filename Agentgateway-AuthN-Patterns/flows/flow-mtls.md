@@ -9,6 +9,25 @@ Two independent TLS features that can be used separately or combined for end-to-
 > **Docs:** [Set up mTLS (FrontendTLS)](https://docs.solo.io/agentgateway/2.2.x/setup/listeners/mtls/) · [BackendTLS](https://docs.solo.io/agentgateway/2.2.x/security/backendtls/)
 > **API:** [FrontendTLS](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#frontendtls) · [BackendTLS](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#backendtls)
 
+### How it works
+
+**Inbound: FrontendTLS (mTLS)**
+
+1. **Client initiates TLS handshake** → `ClientHello` → Agent Gateway
+2. **Gateway responds** with `ServerHello` + server certificate + `CertificateRequest` (trusted CA list)
+3. **Client presents its X.509 certificate** + `CertificateVerify` → Agent Gateway
+4. **Gateway validates the client certificate** against the configured CA root (`TLSConfig.root`)
+5. **If the client cert is valid:** mTLS session is established → client requests flow over the encrypted channel
+6. **If the client cert is invalid or missing:** TLS handshake fails (connection refused — no HTTP layer reached). In `AllowInsecureFallback` mode, connections without valid certs are still accepted.
+
+**Outbound: BackendTLS (TLS Origination)**
+
+7. **Gateway initiates a new TLS connection** → `TLS ClientHello` → Backend Service (TLS-only)
+8. **Backend presents its server certificate** → Agent Gateway
+9. **Gateway verifies the backend certificate** against `caCertificateRefs` (ConfigMap) or `wellKnownCACertificates: System`
+10. **Gateway forwards the request** over the new TLS connection → Backend
+11. **Backend responds** (encrypted) → Agent Gateway → Client
+
 ![Diagram](../images/mtls.png)
 
 Back to [Auth Patterns overview](../README.md)

@@ -5,6 +5,33 @@ Two sequential user-facing OAuth flows orchestrated by the gateway. First, the u
 > **Docs:** [About OBO & Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/about/) · [Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/elicitations/)
 > **API:** [TokenExchangeMode](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#tokenexchangemode)
 
+### How it works
+
+**Phase 1 — Downstream OIDC Authentication**
+
+1. **Client requests a resource** → Agent Gateway
+2. **Gateway returns 302 redirect** to the downstream IdP (OIDC Authorization Code Flow)
+3. **User authenticates** with the IdP → IdP returns an authorization code
+4. **Client sends callback with code** → Gateway exchanges the code for a JWT + id_token at the IdP
+5. **Client is now authenticated** with the downstream JWT
+
+**Phase 2 — Upstream Credential Gathering (Elicitation)**
+
+6. **Client sends request** (with downstream JWT) to an upstream API that requires separate OAuth credentials → Agent Gateway
+7. **Gateway requests an upstream token** → Token Exchange Server (STS)
+8. **STS returns elicitation URL** (status: `PENDING`) → Gateway
+9. **Gateway returns elicitation URL** (status: `PENDING`) → Client
+10. **User opens the elicitation URL** in the Solo Enterprise UI → Solo Enterprise UI redirects to the upstream OAuth provider
+11. **User authorizes access** at the upstream provider → provider returns an authorization code → Solo Enterprise UI completes the elicitation with the code
+12. **STS stores the upstream token** (status: `COMPLETED`)
+
+**Phase 3 — Authenticated Request with Upstream Token**
+
+13. **Client retries the original request** (with downstream JWT) → Gateway
+14. **Gateway fetches stored upstream token** from the STS
+15. **Gateway forwards the request** to the upstream API, injecting the upstream OAuth token
+16. **Upstream API responds** → Gateway returns the result to the client
+
 ![Diagram](../images/4-double-oauth.png)
 
 Back to [Auth Patterns overview](../README.md)
