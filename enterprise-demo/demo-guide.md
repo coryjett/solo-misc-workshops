@@ -8,9 +8,7 @@
 
 ## Setup (Before the Demo)
 
-Deploy all three products before the demo starts. The demo itself walks through *using* them.
-
-A fully automated setup script is available: **[`setup.sh`](setup.sh)**. Run it with:
+Run the setup script to provision the cluster and install all three products:
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -19,219 +17,44 @@ export AGENTGATEWAY_LICENSE_KEY=eyJ...
 ./setup.sh
 ```
 
-The script provisions the cluster, installs all products, builds and deploys the MCP server, configures AGW routing, and creates the kagent agent. Skip to **Part 1** when it completes.
+The script installs Agent Registry, Agent Gateway, and kagent. The demo itself walks through *building, publishing, and deploying* on top of them.
 
-<details>
-<summary>Manual Setup Steps (click to expand)</summary>
+When setup completes, verify the UIs are accessible:
+- **Agent Registry:** http://localhost:12121
+- **Solo Enterprise UI:** http://localhost:8080
 
-### Prerequisites
+---
 
-- `docker`, `kubectl`, `helm` installed
-- An OpenAI API key (`export OPENAI_API_KEY=...`)
-- An Agent Gateway Enterprise license key (`export AGENTGATEWAY_LICENSE_KEY=...`)
-- ~8 GB RAM available for the local cluster
+## Part 1: Agent Registry (15 min)
 
-### 0. Provision a Local Cluster
+> **Goal:** Show how Agent Registry solves the "where are my MCP servers?" problem.
 
-You can use either **k3d** (lightweight k3s in Docker) or **kind** (Kubernetes in Docker). k3d is recommended — it's faster to start and uses fewer resources.
+### The Problem (2 min)
 
-**Option A: k3d (recommended)**
+> **Talk track:** "In most organizations, MCP servers are scattered everywhere — some on npm, some as Docker images, some as internal HTTP endpoints. Every developer has to manually find, configure, and connect to them. There's no central catalog, no versioning, no governance."
 
-```bash
-# Install k3d (if not already installed)
-curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+### The Solution: A Central Catalog (3 min)
 
-# Create a cluster with enough resources for all three products
-k3d cluster create solo-ai-demo \
-  --servers 1 \
-  --agents 2 \
-  --port "8080:80@loadbalancer" \
-  --port "8443:443@loadbalancer" \
-  --k3s-arg "--disable=traefik@server:0" \
-  --wait
+> **Talk track:** "Agent Registry gives you a single place to discover, publish, and manage all your AI artifacts — MCP servers, agents, skills, and prompts."
 
-# Verify
-kubectl cluster-info
-kubectl get nodes
-```
+**Open the Agent Registry UI** at `http://localhost:12121`.
 
-> **Note:** `--disable=traefik` prevents k3s's built-in ingress from conflicting with Agent Gateway's Envoy-based proxy. The `--port` flags map host ports 8080/8443 to the cluster's load balancer so you can reach services without port-forwarding.
+> **Show:** The catalog view — 183 community MCP servers pre-loaded. Browse, search, filter by type.
 
-**Option B: kind**
+### Build and Publish the Weather MCP Server (5 min)
+
+> **Talk track:** "Let's build a real MCP server from scratch using Agent Registry's CLI, then publish it to the catalog."
+
+**Step 1 — Scaffold the MCP server:**
 
 ```bash
-# Install kind (if not already installed)
-# macOS
-brew install kind
-# Linux
-go install sigs.k8s.io/kind@latest
-
-# Create a cluster config
-cat > kind-config.yaml <<'EOF'
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 30080
-    hostPort: 8080
-    protocol: TCP
-  - containerPort: 30443
-    hostPort: 8443
-    protocol: TCP
-- role: worker
-- role: worker
-EOF
-
-# Create the cluster
-kind create cluster --name solo-ai-demo --config kind-config.yaml
-
-# Verify
-kubectl cluster-info
-kubectl get nodes
-```
-
-### 1. Create Namespaces and Install Gateway API CRDs
-
-```bash
-kubectl create namespace agentregistry
-kubectl create namespace agentgateway-system
-kubectl create namespace kagent
-kubectl create namespace demo
-
-# Gateway API CRDs (required by Agent Gateway)
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
-```
-
-### 2. Deploy Agent Registry
-
-Agent Registry bundles its own PostgreSQL instance. For semantic search, override the bundled image to include pgvector.
-
-```bash
-helm install agentregistry \
-  oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --namespace agentregistry \
-  --set config.enableAnonymousAuth="true" \
-  --set config.disableBuiltinSeed="false" \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32) \
-  --set database.postgres.vectorEnabled=true \
-  --set database.postgres.bundled.image.registry=docker.io \
-  --set database.postgres.bundled.image.repository=pgvector \
-  --set database.postgres.bundled.image.name=pgvector \
-  --set database.postgres.bundled.image.tag=pg18 \
-  --wait --timeout 300s
-
-# Verify
-kubectl -n agentregistry wait --for=condition=ready pod -l app.kubernetes.io/name=agentregistry --timeout=120s
-```
-
-> **Note:** `disableBuiltinSeed=false` pre-loads 183 community MCP servers into the catalog so it looks populated for the demo. `enableAnonymousAuth=true` skips auth for the UI (demo only — not for production).
-
-### 3. Deploy Agent Gateway (Enterprise)
-
-```bash
-# Install CRDs
-helm install enterprise-agentgateway-crds \
-  oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
-  --namespace agentgateway-system \
-  --version v2.3.0-rc.1
-
-# Install Agent Gateway
-helm install enterprise-agentgateway \
-  oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
-  --namespace agentgateway-system \
-  --version v2.3.0-rc.1 \
-  --set-string licensing.licenseKey=$AGENTGATEWAY_LICENSE_KEY \
-  --set agentgateway.enabled=true
-
-# Verify
-kubectl -n agentgateway-system wait --for=condition=ready pod -l app.kubernetes.io/name=enterprise-agentgateway --timeout=120s
-```
-
-### 4. Deploy kagent (Enterprise)
-
-Solo Enterprise for kagent is installed in two parts: the **management plane** (UI, telemetry, federation) and the **workload plane** (agent controller, CRDs). All charts are publicly available OCI artifacts.
-
-> **Full install docs:** https://docs.solo.io/kagent-enterprise/docs/latest/install/install-kagent/
-
-```bash
-export KAGENT_ENT_VERSION=0.3.12
-
-# --- Management plane (Solo Enterprise UI) ---
-cat << 'EOF' > /tmp/management.yaml
-cluster: solo-ai-demo
-products:
-  kagent:
-    enabled: true
-  agentgateway:
-    enabled: true
-    namespace: agentgateway-system
-oidc:
-  issuer: ""
-EOF
-
-helm upgrade -i kagent-mgmt \
-  oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
-  -n kagent --create-namespace \
-  --version ${KAGENT_ENT_VERSION} \
-  --values /tmp/management.yaml
-
-# --- Workload plane (agent controller + CRDs) ---
-cat << EOF > /tmp/kagent.yaml
-licensing:
-  licenseKey: ${AGENTGATEWAY_LICENSE_KEY}
-providers:
-  default: openAI
-  openAI:
-    apiKey: ${OPENAI_API_KEY}
-oidc:
-  skipOBO: true
-  secret: "dummy-not-used"
-autoAuth:
-  enabled: false
-otel:
-  tracing:
-    enabled: true
-    exporter:
-      otlp:
-        endpoint: solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317
-        insecure: true
-EOF
-
-helm upgrade -i kagent-crds \
-  oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise-crds \
-  -n kagent \
-  --version ${KAGENT_ENT_VERSION}
-
-helm upgrade -i kagent \
-  oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise \
-  -n kagent \
-  --version ${KAGENT_ENT_VERSION} \
-  --values /tmp/kagent.yaml
-
-# Verify
-kubectl -n kagent wait --for=condition=ready pod -l app.kubernetes.io/name=solo-enterprise-ui --timeout=300s
-kubectl rollout status deployment/kagent-controller -n kagent --timeout=120s
-```
-
-> **Note:** `oidc.skipOBO: true` and `autoAuth.enabled: false` disable the OBO token handler and auto-auth since there's no OIDC provider in the local demo. The `providers.openAI.apiKey` in the Helm values ensures the real OpenAI key is used (the chart defaults to a placeholder). For production, configure your OIDC provider (Keycloak, Okta, etc.) and remove these overrides.
-
-### 5. Create the Demo MCP Server
-
-We use Agent Registry's scaffold to create a real MCP server, then deploy it via the registry's Kubernetes integration.
-
-```bash
-# Install arctl CLI
-curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
-
-# Create an MCP server project
 arctl mcp init python weather-tools --non-interactive \
   --description "Weather forecast MCP server" \
   --author "demo-user" \
   --no-git
 ```
 
-Replace the scaffolded `src/main.py` with a simple FastMCP server (the arctl scaffold's `DynamicMCPServer` is incompatible with FastMCP 3.0):
+**Step 2 — Replace the generated code with a simple FastMCP server:**
 
 ```bash
 cat > weather-tools/src/main.py << 'PYEOF'
@@ -285,32 +108,27 @@ if __name__ == "__main__":
 PYEOF
 ```
 
-Build the Docker image and load it into the cluster:
+**Step 3 — Build the Docker image and load into the cluster:**
 
 ```bash
-# Build the image
 docker build -t weather-tools:latest weather-tools/
-
-# k3d: load into cluster
 k3d image import weather-tools:latest -c solo-ai-demo
-
-# kind: load into cluster
-# kind load docker-image weather-tools:latest --name solo-ai-demo
 ```
 
-### 6. Publish to Agent Registry and Deploy
+**Step 4 — Publish to Agent Registry:**
 
 ```bash
-# Port-forward Agent Registry API
-kubectl port-forward svc/agentregistry 12121:12121 -n agentregistry &
-
-# Publish the MCP server to the catalog
 arctl mcp publish weather-tools/ \
   --type oci \
   --package-id weather-tools:latest \
   --overwrite
+```
 
-# Deploy to Kubernetes via manifests (more reliable than arctl deployments)
+> **Show:** Navigate to the Agent Registry UI — the weather-tools server now appears in the catalog.
+
+**Step 5 — Deploy the MCP server to Kubernetes:**
+
+```bash
 kubectl apply -f - <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -351,285 +169,6 @@ EOF
 kubectl -n demo wait --for=condition=ready pod -l app=weather-tools --timeout=120s
 ```
 
-> **Verify:** `kubectl get pods -n demo` — the weather-tools pod should be Running.
-
-### 7. Configure Agent Gateway Routing and Security
-
-```bash
-# AGW telemetry — send OTEL traces to Solo Enterprise collector
-kubectl apply -f - <<'EOF'
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayParameters
-metadata:
-  name: ai-gateway-params
-  namespace: agentgateway-system
-spec:
-  rawConfig:
-    config:
-      tracing:
-        otlpEndpoint: "http://solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317"
-EOF
-
-# Create the Gateway (HTTP listener + telemetry)
-kubectl apply -f - <<'EOF'
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: ai-gateway
-  namespace: agentgateway-system
-spec:
-  gatewayClassName: enterprise-agentgateway
-  infrastructure:
-    parametersRef:
-      group: enterpriseagentgateway.solo.io
-      kind: EnterpriseAgentgatewayParameters
-      name: ai-gateway-params
-  listeners:
-  - name: mcp
-    port: 3000
-    protocol: HTTP
-    allowedRoutes:
-      namespaces:
-        from: All
-EOF
-
-# Wait for the Gateway to be programmed
-sleep 10
-kubectl get gateway -n agentgateway-system
-
-# Create MCP Backend pointing to the deployed server
-kubectl apply -f - <<'EOF'
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayBackend
-metadata:
-  name: weather-tools
-  namespace: agentgateway-system
-spec:
-  mcp:
-    targets:
-    - name: weather
-      static:
-        host: weather-tools.demo.svc.cluster.local
-        port: 3000
-        protocol: StreamableHTTP
-EOF
-
-# Create the HTTPRoute
-kubectl apply -f - <<'EOF'
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: weather-tools
-  namespace: agentgateway-system
-spec:
-  parentRefs:
-  - name: ai-gateway
-    sectionName: mcp
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /weather
-    backendRefs:
-    - group: agentgateway.dev
-      kind: AgentgatewayBackend
-      name: weather-tools
-EOF
-
-# Create API Key secret for auth
-kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: Secret
-metadata:
-  name: demo-api-keys
-  namespace: agentgateway-system
-stringData:
-  agent-key: |
-    {
-      "key": "demo-key-12345",
-      "metadata": {
-        "role": "agent",
-        "name": "weather-agent"
-      }
-    }
-  admin-key: |
-    {
-      "key": "admin-key-99999",
-      "metadata": {
-        "role": "admin",
-        "name": "admin-user"
-      }
-    }
-EOF
-
-# Create Security Policy (API Key auth + RBAC)
-kubectl apply -f - <<'EOF'
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayPolicy
-metadata:
-  name: weather-security
-  namespace: agentgateway-system
-spec:
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: weather-tools
-  traffic:
-    apiKeyAuthentication:
-      mode: Strict
-      secretRef:
-        name: demo-api-keys
-    authorization:
-      action: Allow
-      policy:
-        matchExpressions:
-        - 'apiKey.role == "agent" || apiKey.role == "admin"'
-EOF
-
-# Verify
-kubectl get gateway,httproute,agentgatewaybackend,agentgatewaypolicy -n agentgateway-system
-```
-
-### 8. Create the kagent Agent
-
-```bash
-# Create secrets for the agent
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: demo-keys
-  namespace: kagent
-stringData:
-  openai-api-key: "${OPENAI_API_KEY}"
-  agw-api-key: "Bearer demo-key-12345"
-EOF
-
-# ModelConfig — OpenAI model
-kubectl apply -f - <<'EOF'
-apiVersion: kagent.dev/v1alpha2
-kind: ModelConfig
-metadata:
-  name: gpt-4o-mini
-  namespace: kagent
-spec:
-  provider: OpenAI
-  model: gpt-4o-mini
-  apiKeySecret: kagent-openai
-  apiKeySecretKey: OPENAI_API_KEY
-EOF
-
-# RemoteMCPServer — connects to weather-tools via Agent Gateway
-kubectl apply -f - <<'EOF'
-apiVersion: kagent.dev/v1alpha2
-kind: RemoteMCPServer
-metadata:
-  name: weather-tools
-  namespace: kagent
-spec:
-  url: http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp
-  protocol: STREAMABLE_HTTP
-  description: "Weather forecast and alerts MCP server"
-  headersFrom:
-  - name: Authorization
-    valueFrom:
-      name: demo-keys
-      key: agw-api-key
-      type: Secret
-EOF
-
-# Wait for RemoteMCPServer to discover tools
-sleep 10
-kubectl get remotemcpserver -n kagent
-
-# Agent
-kubectl apply -f - <<'EOF'
-apiVersion: kagent.dev/v1alpha2
-kind: Agent
-metadata:
-  name: weather-assistant
-  namespace: kagent
-spec:
-  type: Declarative
-  description: "An AI assistant that can check weather forecasts and alerts"
-  declarative:
-    modelConfig: gpt-4o-mini
-    systemMessage: |
-      You are a helpful weather assistant. You can check weather forecasts
-      for cities and weather alerts for US states. Use the available tools
-      to answer weather-related questions.
-    tools:
-    - type: McpServer
-      mcpServer:
-        name: weather-tools
-        kind: RemoteMCPServer
-        apiGroup: kagent.dev
-        toolNames:
-        - get_forecast
-        - get_alerts
-EOF
-
-# Verify agent is ready
-sleep 20
-kubectl get agent -n kagent
-```
-
-### 9. Port-Forwards (for the demo)
-
-```bash
-# Agent Registry UI (http://localhost:12121)
-kubectl port-forward -n agentregistry svc/agentregistry 12121:12121 &
-
-# Agent Gateway proxy (http://localhost:3001)
-kubectl port-forward -n agentgateway-system svc/ai-gateway 3001:3000 &
-
-# Solo Enterprise UI — kagent + Agent Gateway dashboards (http://localhost:8080)
-kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80 &
-```
-
-</details>
-
----
-
-## Part 1: Agent Registry (15 min)
-
-> **Goal:** Show how Agent Registry solves the "where are my MCP servers?" problem.
-
-### The Problem (2 min)
-
-> **Talk track:** "In most organizations, MCP servers are scattered everywhere — some on npm, some as Docker images, some as internal HTTP endpoints. Every developer has to manually find, configure, and connect to them. There's no central catalog, no versioning, no governance."
-
-### The Solution: A Central Catalog (3 min)
-
-> **Talk track:** "Agent Registry gives you a single place to discover, publish, and manage all your AI artifacts — MCP servers, agents, skills, and prompts."
-
-**Open the Agent Registry UI** at `http://localhost:12121`.
-
-> **Show:** The catalog view — 183 community MCP servers pre-loaded. Browse, search, filter by type.
-
-### Register and Publish the Weather MCP Server (5 min)
-
-> **Talk track:** "We just built a weather MCP server using Agent Registry's scaffold. Let's publish it to the catalog so the rest of the team can discover and deploy it."
-
-> **Show:** The CLI workflow — `arctl mcp init` scaffolds, `arctl mcp publish` registers, `arctl deployments create` deploys to K8s.
-
-```bash
-# This was already done in setup, but show the commands:
-arctl mcp publish weather-tools/ --type oci --package-id weather-tools:latest
-
-# Deploy from the catalog to Kubernetes
-arctl deployments create weather-tools \
-  --type mcp \
-  --provider-id kubernetes-default \
-  --namespace demo
-
-# Verify
-arctl deployments list
-kubectl get pods -n demo
-```
-
-> **Show:** The newly published server in the catalog — navigate to it in the UI. Click the **Deployed** tab to see it running.
-
 ### Create a Prompt, Skill, and Agent (5 min)
 
 > **Talk track:** "Agent Registry isn't just for MCP servers. It's a catalog for all your AI artifacts — prompts, skills, and complete agents. Let's create all three and wire them together."
@@ -637,13 +176,11 @@ kubectl get pods -n demo
 **Create a prompt** — a reusable system prompt published to the registry:
 
 ```bash
-# Write the prompt
 cat > weather-assistant-prompt.md << 'EOF'
 You are a friendly weather assistant. Use your tools to fetch
 real-time weather data before answering. Be concise but thorough.
 EOF
 
-# Publish to the registry
 arctl prompt publish weather-assistant-prompt.md \
   --name weather-assistant-prompt \
   --version 1.0.0 \
@@ -655,10 +192,8 @@ arctl prompt publish weather-assistant-prompt.md \
 **Create a skill** — a reusable set of instructions for weather analysis:
 
 ```bash
-# Scaffold a skill
 arctl skill init weather-analysis --no-git
 
-# Edit SKILL.md with analysis instructions, then publish
 arctl skill publish weather-analysis/ \
   --docker-image weather-analysis:latest \
   --version 1.0.0
@@ -669,7 +204,6 @@ arctl skill publish weather-analysis/ \
 **Create an agent** — wire together the model, MCP server, prompt, and skill:
 
 ```bash
-# Scaffold an agent with OpenAI, using the prompt as instructions
 arctl agent init adk python weatherassistant \
   --model-provider OpenAI \
   --model-name gpt-4o-mini \
@@ -687,8 +221,11 @@ arctl agent add-mcp weather-tools \
 arctl agent add-skill weather-analysis \
   --registry-skill-name weather-analysis
 
-# Publish the complete agent to the registry
+# Build and publish the complete agent
+arctl agent build .
 arctl agent publish .
+
+cd ..
 ```
 
 > **Show:** The agent in the Agent Registry UI — click into it to see its MCP servers, skills, and configuration. Developers can now discover and deploy this entire agent from the catalog.
@@ -719,41 +256,59 @@ arctl agent publish .
 
 ### Configure the Gateway and Route (5 min)
 
-> **Talk track:** "Let's walk through the Gateway API resources that were set up to route traffic to our weather MCP server."
+> **Talk track:** "Let's configure Agent Gateway to route traffic to our weather MCP server."
 
-**Show the Gateway resources:**
+**Step 1 — Create the Gateway with telemetry:**
 
 ```bash
-kubectl get gateway,httproute,agentgatewaybackend -n agentgateway-system
-```
+# AGW telemetry — send OTEL traces to Solo Enterprise collector
+kubectl apply -f - <<'EOF'
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: ai-gateway-params
+  namespace: agentgateway-system
+spec:
+  rawConfig:
+    config:
+      tracing:
+        otlpEndpoint: "http://solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317"
+EOF
 
-**Step 1 — The Gateway (listener):**
-
-```yaml
+kubectl apply -f - <<'EOF'
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: ai-gateway
+  namespace: agentgateway-system
 spec:
   gatewayClassName: enterprise-agentgateway
   infrastructure:
     parametersRef:
       group: enterpriseagentgateway.solo.io
       kind: EnterpriseAgentgatewayParameters
-      name: ai-gateway-params        # OTEL tracing config
+      name: ai-gateway-params
   listeners:
   - name: mcp
     port: 3000
     protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+EOF
+
+sleep 10
 ```
 
-**Step 2 — The MCP Backend (upstream target):**
+**Step 2 — Create the MCP Backend (upstream target):**
 
-```yaml
+```bash
+kubectl apply -f - <<'EOF'
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
   name: weather-tools
+  namespace: agentgateway-system
 spec:
   mcp:
     targets:
@@ -762,15 +317,18 @@ spec:
         host: weather-tools.demo.svc.cluster.local
         port: 3000
         protocol: StreamableHTTP
+EOF
 ```
 
-**Step 3 — The HTTPRoute (path-based routing):**
+**Step 3 — Create the HTTPRoute (path-based routing):**
 
-```yaml
+```bash
+kubectl apply -f - <<'EOF'
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: weather-tools
+  namespace: agentgateway-system
 spec:
   parentRefs:
   - name: ai-gateway
@@ -784,30 +342,51 @@ spec:
     - group: agentgateway.dev
       kind: AgentgatewayBackend
       name: weather-tools
+EOF
 ```
 
-**Test the route (without auth):**
+**Verify the resources:**
 
 ```bash
-curl -s http://localhost:3001/weather/mcp -X POST \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+kubectl get gateway,httproute,agentgatewaybackend -n agentgateway-system
 ```
-
-> **Expected:** `api key authentication failure: no API Key found` — auth is already enforced!
 
 ### Add Security: API Key Auth + RBAC (3 min)
 
-> **Talk track:** "We've already added API key authentication with role-based access control. Let me show you how it works."
+> **Talk track:** "Now let's add security — API key authentication with role-based access control."
 
-**Show the security policy:**
+**Create the API keys:**
 
-```yaml
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-api-keys
+  namespace: agentgateway-system
+stringData:
+  agent-key: |
+    {
+      "key": "demo-key-12345",
+      "metadata": { "role": "agent", "name": "weather-agent" }
+    }
+  admin-key: |
+    {
+      "key": "admin-key-99999",
+      "metadata": { "role": "admin", "name": "admin-user" }
+    }
+EOF
+```
+
+**Create the security policy:**
+
+```bash
+kubectl apply -f - <<'EOF'
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
 metadata:
   name: weather-security
+  namespace: agentgateway-system
 spec:
   targetRefs:
   - group: gateway.networking.k8s.io
@@ -823,9 +402,66 @@ spec:
       policy:
         matchExpressions:
         - 'apiKey.role == "agent" || apiKey.role == "admin"'
+EOF
 ```
 
-> **Talk track:** "The API keys carry metadata — each key has a `role` field. The authorization policy uses CEL expressions to check that the caller has the `agent` or `admin` role. You can write any CEL expression — require specific roles for specific tools, check custom metadata fields, time-based access, and more."
+> **Talk track:** "The API keys carry metadata — each key has a `role` field. The authorization policy uses CEL expressions to check that the caller has the `agent` or `admin` role."
+
+**Create the tracing policy:**
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: agw-to-collector
+  namespace: kagent
+spec:
+  from:
+    - group: agentgateway.dev
+      kind: AgentgatewayPolicy
+      namespace: agentgateway-system
+  to:
+    - group: ""
+      kind: Service
+      name: solo-enterprise-telemetry-collector
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: tracing
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+  - kind: Gateway
+    name: ai-gateway
+    group: gateway.networking.k8s.io
+  frontend:
+    tracing:
+      backendRef:
+        name: solo-enterprise-telemetry-collector
+        namespace: kagent
+        port: 4317
+      protocol: GRPC
+      randomSampling: "true"
+EOF
+```
+
+**Restart the proxy to pick up the tracing config:**
+
+```bash
+kubectl delete pod -n agentgateway-system -l app.kubernetes.io/name=ai-gateway --wait=false
+sleep 10
+```
+
+**Update the port-forward** (the proxy pod restarted):
+
+```bash
+# Kill the old port-forward and restart it
+kill $(lsof -ti:3001) 2>/dev/null || true
+kubectl port-forward -n agentgateway-system svc/ai-gateway 3001:3000 &>/dev/null &
+sleep 2
+```
 
 **Demo the auth in action:**
 
@@ -836,13 +472,6 @@ curl -s http://localhost:3001/weather/mcp -X POST \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
-# With wrong key — blocked
-curl -s http://localhost:3001/weather/mcp -X POST \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "Authorization: Bearer wrong-key" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
-
 # With valid key — success!
 curl -s http://localhost:3001/weather/mcp -X POST \
   -H "Content-Type: application/json" \
@@ -851,7 +480,7 @@ curl -s http://localhost:3001/weather/mcp -X POST \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
-> **Talk track:** "No key? Rejected. Wrong key? Rejected. Valid key with the right role? The MCP server initializes. This is the same auth that our kagent agent uses — it sends its API key through the Authorization header, and Agent Gateway validates it before forwarding to the MCP server."
+> **Talk track:** "No key? Rejected. Valid key with the right role? The MCP server initializes. This is the same auth that our kagent agent will use."
 
 ### Show the Solo Enterprise UI — Agent Gateway Dashboards (2 min)
 
@@ -861,7 +490,6 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 > **Show:**
 > - **MCP dashboard** — request rate by tool name, error rates, latency
-> - **LLM dashboard** — token usage by model, cost tracking
 > - **Traces** — drill into a specific request to see the full path: agent -> gateway -> MCP server
 
 ### Key Takeaway (1 min)
@@ -882,18 +510,90 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 > **Talk track:** "With kagent, an agent is just a YAML file. You define the model, the system prompt, and which MCP tools it can use. Apply it to the cluster, and it's running."
 
-```yaml
-# agent.yaml — that's the entire agent definition
+### Step 1: Configure the Model (2 min)
+
+```bash
+# Create secrets for the agent
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-keys
+  namespace: kagent
+stringData:
+  openai-api-key: "${OPENAI_API_KEY}"
+  agw-api-key: "Bearer demo-key-12345"
+EOF
+
+# ModelConfig — OpenAI model
+kubectl apply -f - <<'EOF'
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: gpt-4o-mini
+  namespace: kagent
+spec:
+  provider: OpenAI
+  model: gpt-4o-mini
+  apiKeySecret: kagent-openai
+  apiKeySecretKey: OPENAI_API_KEY
+EOF
+```
+
+> **Talk track:** "The ModelConfig tells kagent which LLM to use. The API key is stored in a Kubernetes Secret — no credentials in your agent definition."
+
+### Step 2: Connect the MCP Server via Agent Gateway (2 min)
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: weather-tools
+  namespace: kagent
+spec:
+  url: http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp
+  protocol: STREAMABLE_HTTP
+  description: "Weather forecast and alerts MCP server"
+  headersFrom:
+  - name: Authorization
+    valueFrom:
+      name: demo-keys
+      key: agw-api-key
+      type: Secret
+EOF
+```
+
+> **Talk track:** "The RemoteMCPServer points to the Agent Gateway route we created in Part 2 — not directly to the MCP server. The `headersFrom` field injects the API key from a Kubernetes Secret. The agent never connects to backends directly. All traffic flows through the gateway."
+
+**Wait for tool discovery:**
+
+```bash
+sleep 15
+kubectl get remotemcpserver weather-tools -n kagent
+```
+
+> **Talk track:** "The kagent controller automatically connected to the MCP server through Agent Gateway, authenticated with the API key, and discovered the available tools: `get_forecast` and `get_alerts`."
+
+### Step 3: Create the Agent (3 min)
+
+```bash
+kubectl apply -f - <<'EOF'
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
   name: weather-assistant
+  namespace: kagent
 spec:
   type: Declarative
+  description: "An AI assistant that can check weather forecasts and alerts"
   declarative:
-    modelConfig: gpt-4o-mini          # Which LLM
-    systemMessage: "You are a..."      # Personality
-    tools:                             # What it can do
+    modelConfig: gpt-4o-mini
+    systemMessage: |
+      You are a helpful weather assistant. You can check weather forecasts
+      for cities and weather alerts for US states. Use the available tools
+      to answer weather-related questions.
+    tools:
     - type: McpServer
       mcpServer:
         name: weather-tools
@@ -902,71 +602,16 @@ spec:
         toolNames:
         - get_forecast
         - get_alerts
-```
+EOF
 
-> **Talk track:** "Apply it, and it's live: `kubectl apply -f agent.yaml`. No Docker images, no custom code, no framework lock-in."
-
-### Step 1: Configure the Model (2 min)
-
-**Show the ModelConfig:**
-
-```bash
-kubectl get modelconfig -n kagent
-```
-
-```yaml
-apiVersion: kagent.dev/v1alpha2
-kind: ModelConfig
-metadata:
-  name: gpt-4o-mini
-spec:
-  provider: OpenAI
-  model: gpt-4o-mini
-  apiKeySecret: kagent-openai
-  apiKeySecretKey: OPENAI_API_KEY
-```
-
-### Step 2: Connect the MCP Server (2 min)
-
-**Show the RemoteMCPServer:**
-
-```bash
-kubectl get remotemcpserver -n kagent
-```
-
-```yaml
-apiVersion: kagent.dev/v1alpha2
-kind: RemoteMCPServer
-metadata:
-  name: weather-tools
-spec:
-  url: http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp
-  protocol: STREAMABLE_HTTP
-  headersFrom:
-  - name: Authorization
-    valueFrom:
-      name: demo-keys
-      key: agw-api-key
-      type: Secret
-```
-
-> **Talk track:** "The RemoteMCPServer points to the Agent Gateway route we created in Part 2 — not directly to the MCP server. The `headersFrom` field injects the API key from a Kubernetes Secret. The agent never connects to backends directly. All traffic flows through the gateway."
-
-**Show the discovered tools:**
-
-```bash
-kubectl get remotemcpserver weather-tools -n kagent -o yaml | tail -20
-```
-
-> **Talk track:** "The kagent controller automatically connected to the MCP server through Agent Gateway, authenticated with the API key, and discovered the available tools: `get_forecast` and `get_alerts`."
-
-### Step 3: Show the Agent (3 min)
-
-```bash
+# Wait for agent to be ready
+sleep 20
 kubectl get agent -n kagent
 ```
 
 > **Show:** The agent is `ACCEPTED: True` and `READY: True`.
+
+> **Talk track:** "That's the entire agent definition. Apply it, and it's live. No Docker images, no custom code, no framework lock-in."
 
 ### Step 4: Use the Agent via the Solo Enterprise UI (3 min)
 
@@ -1048,10 +693,11 @@ kubectl delete agent weather-assistant -n kagent
 kubectl delete remotemcpserver weather-tools -n kagent
 kubectl delete modelconfig gpt-4o-mini -n kagent
 kubectl delete secret demo-keys -n kagent
-kubectl delete agentgatewaypolicy weather-security -n agentgateway-system
+kubectl delete agentgatewaypolicy weather-security tracing -n agentgateway-system
 kubectl delete httproute weather-tools -n agentgateway-system
 kubectl delete agentgatewaybackend weather-tools -n agentgateway-system
 kubectl delete gateway ai-gateway -n agentgateway-system
+kubectl delete referencegrant agw-to-collector -n kagent
 
 # Remove MCP server deployment
 kubectl delete deployment weather-tools -n demo
