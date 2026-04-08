@@ -704,8 +704,8 @@ kubectl delete agentgatewaybackend weather-tools -n agentgateway-system
 kubectl delete gateway ai-gateway -n agentgateway-system
 kubectl delete referencegrant agw-to-collector -n kagent
 
-# Remove MCP server deployment
-kubectl delete deployment weather-tools -n demo
+# Remove MCP server and load generator
+kubectl delete deployment weather-tools agw-load-generator -n demo
 kubectl delete service weather-tools -n demo
 
 # Remove products (if desired)

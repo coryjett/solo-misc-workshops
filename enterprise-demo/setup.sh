@@ -203,7 +203,76 @@ else
 fi
 
 # ============================================================================
-# 7. Start port-forwards
+# 7. Deploy load generator (silently retries until AGW + MCP server are ready)
+# ============================================================================
+info "Deploying AGW load generator..."
+
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agw-load-generator
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agw-load-generator
+  template:
+    metadata:
+      labels:
+        app: agw-load-generator
+    spec:
+      containers:
+      - name: load-gen
+        image: curlimages/curl
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          GW="http://ai-gateway.agentgateway-system.svc.cluster.local:3000"
+          AUTH="Authorization: Bearer admin-key-99999"
+          CT="Content-Type: application/json"
+          ACC="Accept: application/json, text/event-stream"
+
+          CITIES="San_Francisco New_York Chicago Seattle Miami Denver Austin Portland Boston Los_Angeles"
+          STATES="CA NY IL WA FL CO TX OR MA GA"
+
+          echo "Starting AGW load generator..."
+          while true; do
+            CITY=$(echo $CITIES | tr " " "\n" | shuf | head -1 | tr "_" " ")
+            STATE=$(echo $STATES | tr " " "\n" | shuf | head -1)
+
+            SESSION=$(curl -s -D /dev/stderr "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" \
+              -d "{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1,\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"load-gen\",\"version\":\"1.0\"}}}" \
+              2>&1 1>/dev/null | grep -i mcp-session-id | tr -d "\r" | cut -d" " -f2)
+
+            if [ -n "$SESSION" ]; then
+              curl -s -o /dev/null "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" -H "mcp-session-id: $SESSION" \
+                -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":2,\"params\":{}}"
+              curl -s -o /dev/null "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" -H "mcp-session-id: $SESSION" \
+                -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"id\":3,\"params\":{\"name\":\"get_forecast\",\"arguments\":{\"city\":\"$CITY\"}}}"
+              curl -s -o /dev/null "$GW/weather/mcp" -H "$CT" -H "$ACC" -H "$AUTH" -H "mcp-session-id: $SESSION" \
+                -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"id\":4,\"params\":{\"name\":\"get_alerts\",\"arguments\":{\"state\":\"$STATE\"}}}"
+              echo "$(date +%H:%M:%S) Session OK - forecast:$CITY alerts:$STATE"
+            else
+              echo "$(date +%H:%M:%S) Waiting for AGW + MCP server..."
+            fi
+
+            sleep 10
+          done
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+EOF
+
+ok "Load generator deployed (retries every 10s until AGW route is configured)"
+
+# ============================================================================
+# 8. Start port-forwards
 # ============================================================================
 echo ""
 echo -e "${GREEN}========================================${NC}"
