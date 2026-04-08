@@ -836,18 +836,13 @@ echo ""
 echo "kagent Resources:"
 kubectl get remotemcpserver,modelconfig,agent -n kagent 2>/dev/null
 echo ""
-echo "Port-forwards (run these in separate terminals):"
+echo "Starting port-forwards..."
+kubectl port-forward -n agentregistry svc/agentregistry 12121:12121 &>/dev/null &
+kubectl port-forward -n agentgateway-system svc/ai-gateway 3001:3000 &>/dev/null &
+kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80 &>/dev/null &
+sleep 2
 echo ""
-echo "  # Agent Registry UI"
-echo "  kubectl port-forward -n agentregistry svc/agentregistry 12121:12121"
-echo ""
-echo "  # Agent Gateway proxy"
-echo "  kubectl port-forward -n agentgateway-system svc/ai-gateway 3001:3000"
-echo ""
-echo "  # Solo Enterprise UI (kagent + AGW dashboards)"
-echo "  kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80"
-echo ""
-echo "UIs:"
+echo "UIs (port-forwards running in background):"
 echo "  Agent Registry:     http://localhost:12121"
 echo "  Solo Enterprise UI: http://localhost:8080"
 echo "  AGW proxy (curl):   http://localhost:3001"
