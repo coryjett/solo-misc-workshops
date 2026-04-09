@@ -247,24 +247,33 @@ info "Step 3: Authenticate with JWT (simulating completed OAuth flow)..."
 USER_JWT=$(get_user_token "${KEYCLOAK_URL}" "${KEYCLOAK_REALM}" "${KEYCLOAK_CLIENT}" "${KEYCLOAK_SECRET}" \
   "testuser" "testuser" "keycloak.keycloak.svc.cluster.local:8080")
 
-INIT=$(curl -s -D /tmp/mcp-headers --max-time 15 -X POST "http://localhost:8888/mcp" \
+INIT=$(curl -s -D /tmp/mcp-headers --max-time 10 -X POST "http://localhost:8888/mcp" \
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' 2>/dev/null || true)
 SID=$(grep -i "mcp-session-id" /tmp/mcp-headers 2>/dev/null | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r\n')
+
+# Parse SSE data if present
+SSE_DATA=$(echo "$INIT" | grep '^data: ' | sed 's/^data: //' | head -1)
 
 if [[ -n "$SID" ]]; then
   ok "MCP session created: ${SID}"
+  [[ -n "$SSE_DATA" ]] && echo "$SSE_DATA" | jq . 2>/dev/null
 
-  RESULT=$(curl -s --max-time 15 -X POST "http://localhost:8888/mcp" \
+  RESULT=$(curl -s --max-time 10 -X POST "http://localhost:8888/mcp" \
     -H "Authorization: Bearer ${USER_JWT}" \
     -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
     -H "Mcp-Session-Id: ${SID}" \
-    -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"hello","arguments":{}},"id":3}' \
-    | sed 's/^data: //')
-  echo "MCP response: $(echo "$RESULT" | jq -r '.result.content[0].text' 2>/dev/null)"
+    -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"hello","arguments":{}},"id":3}' 2>/dev/null || true)
+  RESULT_DATA=$(echo "$RESULT" | grep '^data: ' | sed 's/^data: //' | head -1)
+  [[ -z "$RESULT_DATA" ]] && RESULT_DATA="$RESULT"
+  echo "MCP response: $(echo "$RESULT_DATA" | jq -r '.result.content[0].text' 2>/dev/null)"
+elif [[ -n "$SSE_DATA" ]]; then
+  ok "MCP server responded (no session ID in headers)"
+  echo "$SSE_DATA" | jq . 2>/dev/null || echo "$SSE_DATA"
 else
   warn "Could not establish MCP session"
+  [[ -n "$INIT" ]] && echo "$INIT"
 fi
 
 echo ""

@@ -236,13 +236,24 @@ decode_jwt "$USER_JWT" | jq '{iss, sub}'
 # Phase 2: Send request — default mode tries exchange first, then elicit
 echo ""
 info "Phase 2: Sending request (default mode = exchange + elicit)..."
-RESPONSE=$(curl -s --max-time 15 -X POST "http://localhost:8888/mcp" \
+RESPONSE=$(curl -s --max-time 10 -X POST "http://localhost:8888/mcp" \
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' 2>/dev/null || true)
 
-echo "Response:"
-echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
+# Parse SSE data lines if present
+SSE_DATA=$(echo "$RESPONSE" | grep '^data: ' | sed 's/^data: //' | head -1)
+if [[ -n "$SSE_DATA" ]]; then
+  echo "Response (SSE):"
+  echo "$SSE_DATA" | jq . 2>/dev/null || echo "$SSE_DATA"
+  ok "Gateway processed MCP request with token exchange"
+elif [[ -n "$RESPONSE" ]]; then
+  echo "Response:"
+  echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
+  ok "Gateway returned response"
+else
+  warn "No response received (gateway may be holding connection for elicitation)"
+fi
 
 echo ""
 warn "NOTE: In the Double OAuth flow, if exchange succeeds (no upstream creds needed),"

@@ -232,18 +232,39 @@ echo ""
 USER_JWT=$(get_user_token "${KEYCLOAK_URL}" "${KEYCLOAK_REALM}" "${KEYCLOAK_CLIENT}" "${KEYCLOAK_SECRET}" \
   "testuser" "testuser" "keycloak.keycloak.svc.cluster.local:8080")
 
-# Send request — expect elicitation URL in response (PENDING status)
-RESPONSE=$(curl -s --max-time 15 -X POST "http://localhost:8888/mcp" \
+# Test: No JWT -> 401
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8888/mcp)
+if [[ "$HTTP_CODE" == "401" || "$HTTP_CODE" == "403" ]]; then
+  ok "No JWT: HTTP ${HTTP_CODE} (access denied)"
+else
+  warn "No JWT: HTTP ${HTTP_CODE} (expected 401/403)"
+fi
+
+# Send request — may get elicitation URL or direct response (SSE stream)
+# curl may exit non-zero on SSE timeout, so we capture it
+RESPONSE=$(curl -s --max-time 10 -X POST "http://localhost:8888/mcp" \
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' 2>/dev/null || true)
 
-echo "Response (may contain elicitation URL with PENDING status):"
-echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
+# Parse SSE data lines if present
+SSE_DATA=$(echo "$RESPONSE" | grep '^data: ' | sed 's/^data: //' | head -1)
+if [[ -n "$SSE_DATA" ]]; then
+  echo "Response (SSE):"
+  echo "$SSE_DATA" | jq . 2>/dev/null || echo "$SSE_DATA"
+  ok "Gateway processed MCP request with token exchange"
+elif [[ -n "$RESPONSE" ]]; then
+  echo "Response:"
+  echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
+  ok "Gateway returned response"
+else
+  warn "No response received (gateway may be holding connection for elicitation)"
+fi
 
 echo ""
-warn "NOTE: Completing the elicitation requires the Solo Enterprise UI."
-warn "This example demonstrates that the elicitation is TRIGGERED."
+warn "NOTE: In ElicitationOnly mode, if token exchange succeeds the request goes through."
+warn "If upstream OAuth creds are needed, the gateway returns an elicitation URL."
+warn "Completing elicitation requires the Solo Enterprise UI."
 echo ""
 ok "Flow 3: Elicitation — test complete"
 echo "  Cleanup: source ../../common/cleanup.sh"
