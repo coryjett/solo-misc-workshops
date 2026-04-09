@@ -26,6 +26,29 @@ npx @modelcontextprotocol/inspector@latest
 
 The inspector will discover the OAuth endpoints, register dynamically, and prompt you to log in via Keycloak.
 
+## Testing
+
+After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+
+```bash
+# Unauthenticated → 401
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/mcp
+
+# Fetch OAuth protected resource metadata
+curl -s http://localhost:8888/.well-known/oauth-protected-resource/mcp | jq .
+
+# Get a JWT from Keycloak (simulating completed OAuth flow)
+USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow11-realm/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
+  | jq -r '.access_token')
+
+# Authenticated MCP initialize → 200 with session
+curl -s --max-time 10 -X POST http://localhost:8888/mcp \
+  -H "Authorization: Bearer ${USER_JWT}" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
+```
+
 ## Cleanup
 
 ```bash

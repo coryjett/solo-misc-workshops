@@ -36,6 +36,21 @@ listeners:
         - name: flow-mtls-ca-cert
 ```
 
+## Testing
+
+After `setup.sh` completes, the gateway is port-forwarded to `localhost:8443` (TLS). Certificates are generated in `certs/`:
+
+```bash
+# No client cert → connection refused / 400
+curl -sk --cacert certs/ca.crt https://localhost:8443/
+
+# Valid client cert → 200
+curl -sk --cacert certs/ca.crt \
+  --cert certs/client.crt \
+  --key certs/client.key \
+  https://localhost:8443/
+```
+
 ## Cleanup
 
 ```bash

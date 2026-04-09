@@ -30,6 +30,21 @@ basicAuthentication:
     namespace: default
 ```
 
+## Testing
+
+After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+
+```bash
+# No credentials → 401
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/
+
+# Wrong password → 401
+curl -s -o /dev/null -w "%{http_code}" -u "testuser:wrongpass" http://localhost:8888/
+
+# Valid credentials → 200
+curl -s -u "testuser:testpass" http://localhost:8888/
+```
+
 ## Cleanup
 
 ```bash
