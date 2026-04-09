@@ -19,7 +19,7 @@ In impersonation mode, the exchanged token has no `act` claim — downstream ser
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`. The script automatically calls the `whoami` MCP tool and verifies no `act` claim is present. You can also test manually:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak
@@ -27,7 +27,7 @@ USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow02b-realm/protocol/
   -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
   | jq -r '.access_token')
 
-# Initialize MCP session
+# Initialize MCP session (gateway exchanges token via STS, no act claim)
 curl -s --max-time 10 -X POST http://localhost:8888/mcp \
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \

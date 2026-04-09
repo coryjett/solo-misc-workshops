@@ -38,16 +38,17 @@ listeners:
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8443` (TLS). Certificates are generated in `certs/`:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8443`. Cert files are generated in `/tmp/flow-mtls-certs/`:
 
 ```bash
-# No client cert → connection refused / 400
-curl -sk --cacert certs/ca.crt https://localhost:8443/
+CERT_DIR="/tmp/flow-mtls-certs"
+
+# No client cert → rejected
+curl -sk -o /dev/null -w "%{http_code}" https://localhost:8443/
 
 # Valid client cert → 200
-curl -sk --cacert certs/ca.crt \
-  --cert certs/client.crt \
-  --key certs/client.key \
+curl -sk -o /dev/null -w "%{http_code}" \
+  --cert "${CERT_DIR}/client.crt" --key "${CERT_DIR}/client.key" \
   https://localhost:8443/
 ```
 

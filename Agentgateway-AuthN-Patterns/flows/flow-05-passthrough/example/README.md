@@ -36,7 +36,7 @@ traffic:
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak
@@ -47,8 +47,8 @@ USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow05-realm/protocol/o
 # No JWT → 401
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/
 
-# Valid JWT → 200 (backend receives the original token)
-curl -s -H "Authorization: Bearer ${USER_JWT}" http://localhost:8888/
+# Valid JWT → 200 (backend receives the original token via passthrough)
+curl -s -H "Authorization: Bearer ${USER_JWT}" http://localhost:8888/ | jq .
 ```
 
 ## Cleanup

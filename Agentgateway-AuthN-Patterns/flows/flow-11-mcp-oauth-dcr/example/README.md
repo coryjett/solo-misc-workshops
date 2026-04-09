@@ -28,10 +28,10 @@ The inspector will discover the OAuth endpoints, register dynamically, and promp
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
-# Unauthenticated → 401
+# Unauthenticated → 401 (with resource metadata URL)
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/mcp
 
 # Fetch OAuth protected resource metadata
@@ -42,7 +42,7 @@ USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow11-realm/protocol/o
   -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
   | jq -r '.access_token')
 
-# Authenticated MCP initialize → 200 with session
+# Authenticated MCP initialize → 200
 curl -s --max-time 10 -X POST http://localhost:8888/mcp \
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \

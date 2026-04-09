@@ -30,7 +30,7 @@ tokenExchange:
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`. The script automatically calls the `echo_token` MCP tool to verify the STS-issued token. You can also test manually:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak

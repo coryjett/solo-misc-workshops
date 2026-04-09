@@ -24,7 +24,7 @@ tokenExchange:
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak
@@ -35,7 +35,7 @@ USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow03-realm/protocol/o
 # No JWT → 401
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/mcp
 
-# Valid JWT → MCP response (token exchange succeeds) or elicitation URL
+# Valid JWT → MCP response or elicitation URL (PENDING status)
 curl -s --max-time 10 -X POST http://localhost:8888/mcp \
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \

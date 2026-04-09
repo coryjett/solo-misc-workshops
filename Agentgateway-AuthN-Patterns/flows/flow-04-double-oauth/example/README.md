@@ -24,7 +24,7 @@ tokenExchange: {}
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak (Phase 1: OIDC)

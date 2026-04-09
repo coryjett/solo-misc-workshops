@@ -41,17 +41,17 @@ apiKeyAuthentication:
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # No API key → 401
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/
 
 # Wrong API key → 401
-curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer wrong-key" http://localhost:8888/
+curl -s -o /dev/null -w "%{http_code}" -H "x-api-key: wrong-key" http://localhost:8888/
 
 # Valid API key → 200
-curl -s -H "Authorization: Bearer my-secret-api-key-12345" http://localhost:8888/
+curl -s -o /dev/null -w "%{http_code}" -H "x-api-key: my-secret-api-key-12345" http://localhost:8888/
 ```
 
 ## Cleanup

@@ -39,7 +39,7 @@ tokenExchange:
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`. The script automatically calls the `whoami` MCP tool to verify the STS-issued token. You can also test manually:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak
@@ -47,7 +47,7 @@ USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow02a-realm/protocol/
   -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
   | jq -r '.access_token')
 
-# Initialize MCP session (expect SSE response with server info)
+# Initialize MCP session (gateway exchanges token via STS)
 curl -s --max-time 10 -X POST http://localhost:8888/mcp \
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \

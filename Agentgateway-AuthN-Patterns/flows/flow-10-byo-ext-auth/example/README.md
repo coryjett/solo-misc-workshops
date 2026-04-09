@@ -33,17 +33,17 @@ extAuth:
 
 ## Testing
 
-After `setup.sh` completes, the gateway is port-forwarded to `localhost:8888`:
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
-# No auth token → 403
+# No token → 403
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/
 
 # Wrong token → 403
-curl -s -o /dev/null -w "%{http_code}" -H "x-auth-token: wrong" http://localhost:8888/
+curl -s -o /dev/null -w "%{http_code}" -H "x-auth-token: deny-me" http://localhost:8888/
 
 # Valid token → 200
-curl -s -H "x-auth-token: super-secret-token" http://localhost:8888/
+curl -s -o /dev/null -w "%{http_code}" -H "x-auth-token: allow-me" http://localhost:8888/
 ```
 
 ## Cleanup
