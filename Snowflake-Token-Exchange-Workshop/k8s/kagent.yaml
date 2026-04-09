@@ -1,0 +1,52 @@
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: openai-config
+  namespace: kagent
+spec:
+  provider: openai
+  model: gpt-4o
+  apiKeySecretName: openai-api-key
+  apiKeySecretKey: api-key
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: snowflake-mcp
+  namespace: kagent
+spec:
+  protocol: STREAMABLE_HTTP
+  url: http://snowflake-mcp.default.svc.cluster.local:80
+  timeout: 30s
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: snowflake-analyst
+  namespace: kagent
+spec:
+  description: "Snowflake data analyst — queries sales data and lists available tables"
+  type: Declarative
+  declarative:
+    modelConfig: openai-config
+    systemMessage: |
+      You are a Snowflake data analyst. You have access to a Snowflake database
+      through MCP tools. Use the available tools to help users query data and
+      explore the database schema.
+
+      When you receive results, present them clearly. The results include
+      introspection metadata showing how the token was validated — include this
+      in your response so the user can see the security flow in action.
+
+      Available tools:
+      - query_sales: Query sales data by region
+      - list_tables: List available database tables
+    tools:
+    - type: McpServer
+      mcpServer:
+        name: snowflake-mcp
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames:
+        - query_sales
+        - list_tables

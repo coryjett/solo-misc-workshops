@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snowflake-mcp
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: snowflake-mcp
+  template:
+    metadata:
+      labels:
+        app: snowflake-mcp
+    spec:
+      containers:
+      - name: mcp
+        image: python:3.12-slim
+        command: ["python", "/app/server.py"]
+        ports:
+        - containerPort: 80
+        env:
+        - name: KEYCLOAK_URL
+          value: "http://keycloak.keycloak.svc.cluster.local:8080"
+        - name: KEYCLOAK_REALM
+          value: "snowflake-workshop"
+        - name: INTROSPECT_CLIENT_ID
+          value: "agw-exchange"
+        - name: INTROSPECT_CLIENT_SECRET
+          value: "agw-exchange-secret"
+        volumeMounts:
+        - name: script
+          mountPath: /app
+      volumes:
+      - name: script
+        configMap:
+          name: snowflake-mcp-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: snowflake-mcp
+  namespace: default
+spec:
+  selector:
+    app: snowflake-mcp
+  ports:
+  - port: 80
+    targetPort: 80

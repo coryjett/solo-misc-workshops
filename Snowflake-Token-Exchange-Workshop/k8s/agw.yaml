@@ -1,0 +1,97 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-default-to-keycloak
+  namespace: keycloak
+spec:
+  from:
+  - group: enterpriseagentgateway.solo.io
+    kind: EnterpriseAgentgatewayPolicy
+    namespace: default
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: default
+  to:
+  - group: ""
+    kind: Service
+    name: keycloak
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: workshop-params
+  namespace: default
+spec:
+  env:
+  - name: STS_URI
+    value: "${KEYCLOAK_URL_INTERNAL}/realms/snowflake-workshop/protocol/openid-connect/token"
+  - name: STS_TOKEN_EXCHANGE_CLIENT_ID
+    value: "agw-exchange"
+  - name: STS_TOKEN_EXCHANGE_CLIENT_SECRET
+    value: "agw-exchange-secret"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: workshop-gateway
+  namespace: default
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: workshop-params
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: workshop-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: workshop-gateway
+  rules:
+  - backendRefs:
+    - name: ${AGENT_SERVICE_NAME}
+      namespace: ${AGENT_SERVICE_NAMESPACE}
+      port: ${AGENT_SERVICE_PORT}
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: workshop-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: workshop-route
+  traffic:
+    jwtAuthentication:
+      issuer: "${KEYCLOAK_ISSUER}"
+      jwks:
+        backendRef:
+          name: keycloak
+          kind: Service
+          namespace: keycloak
+          port: 8080
+        jwksPath: "realms/snowflake-workshop/protocol/openid-connect/certs"
+      audiences:
+      - account
+      - kagent-ui
+      mode: Strict
+      provider: Keycloak
+    tokenExchange:
+      mode: ExchangeOnly
