@@ -145,7 +145,7 @@ spec:
       - name: x-kagent-host
         value: snowflake-mcp.default.svc.cluster.local
 ---
-# MCP backend policy: validate inbound Keycloak JWT + exchange for opaque token
+# MCP backend policy: validate Keycloak JWT + exchange for opaque token via external STS
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
@@ -160,6 +160,9 @@ spec:
     mcp:
       authentication:
         issuer: "${KEYCLOAK_ISSUER}"
+        audiences:
+        - account
+        - kagent-ui
         jwks:
           backendRef:
             name: keycloak
@@ -167,10 +170,6 @@ spec:
             namespace: keycloak
             port: 8080
           jwksPath: "realms/snowflake-workshop/protocol/openid-connect/certs"
-        audiences:
-        - account
-        - kagent-ui
         mode: Strict
-        provider: Keycloak
     tokenExchange:
       mode: ExchangeOnly

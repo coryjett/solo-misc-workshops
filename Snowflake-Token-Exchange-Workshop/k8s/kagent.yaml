@@ -29,6 +29,10 @@ spec:
   description: "Snowflake data analyst — queries sales data and lists available tables"
   type: Declarative
   declarative:
+    deployment:
+      env:
+      - name: KAGENT_PROPAGATE_TOKEN
+        value: "true"
     modelConfig: openai-config
     systemMessage: |
       You are a Snowflake data analyst. You have access to a Snowflake database

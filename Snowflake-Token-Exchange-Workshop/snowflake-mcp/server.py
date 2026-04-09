@@ -198,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
         req_id = req.get("id")
 
         if method == "notifications/initialized":
-            self.send_response(200)
+            self.send_response(204)
             self.send_header("Mcp-Session-Id", SESSION_ID)
             self.end_headers()
             return
