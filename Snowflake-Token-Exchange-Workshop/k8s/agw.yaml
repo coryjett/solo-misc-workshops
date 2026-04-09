@@ -16,6 +16,21 @@ spec:
     kind: Service
     name: keycloak
 ---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-default-to-kagent
+  namespace: kagent
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: default
+  to:
+  - group: ""
+    kind: Service
+    name: ${AGENT_SERVICE_NAME}
+---
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayParameters
 metadata:
@@ -24,11 +39,9 @@ metadata:
 spec:
   env:
   - name: STS_URI
-    value: "${KEYCLOAK_URL_INTERNAL}/realms/snowflake-workshop/protocol/openid-connect/token"
-  - name: STS_TOKEN_EXCHANGE_CLIENT_ID
-    value: "agw-exchange"
-  - name: STS_TOKEN_EXCHANGE_CLIENT_SECRET
-    value: "agw-exchange-secret"
+    value: "http://external-sts.default.svc.cluster.local:9000/token"
+  - name: STS_AUTH_TOKEN
+    value: "/var/run/secrets/xds-tokens/xds-token"
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -50,6 +63,7 @@ spec:
       namespaces:
         from: All
 ---
+# Route for kagent UI -> agent pod (JWT auth on inbound)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -68,6 +82,7 @@ spec:
         type: PathPrefix
         value: /
 ---
+# JWT auth policy for inbound requests to the agent
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
@@ -80,18 +95,82 @@ spec:
     name: workshop-route
   traffic:
     jwtAuthentication:
-      issuer: "${KEYCLOAK_ISSUER}"
-      jwks:
-        backendRef:
-          name: keycloak
-          kind: Service
-          namespace: keycloak
-          port: 8080
-        jwksPath: "realms/snowflake-workshop/protocol/openid-connect/certs"
-      audiences:
-      - account
-      - kagent-ui
       mode: Strict
-      provider: Keycloak
+      providers:
+      - issuer: "${KEYCLOAK_ISSUER}"
+        audiences:
+        - account
+        - kagent-ui
+        jwks:
+          remote:
+            backendRef:
+              name: keycloak
+              kind: Service
+              namespace: keycloak
+              port: 8080
+            jwksPath: "realms/snowflake-workshop/protocol/openid-connect/certs"
+---
+# AgentgatewayBackend for MCP server routing (enables token exchange)
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: mcp-backend
+  namespace: default
+spec:
+  mcp:
+    targets:
+    - name: snowflake-mcp
+      static:
+        host: snowflake-mcp.default.svc.cluster.local
+        port: 80
+        protocol: StreamableHTTP
+        path: /
+---
+# Route for MCP traffic via AgentgatewayBackend
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: workshop-gateway
+  rules:
+  - backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: mcp-backend
+    matches:
+    - headers:
+      - name: x-kagent-host
+        value: snowflake-mcp.default.svc.cluster.local
+---
+# MCP backend policy: validate inbound Keycloak JWT + exchange for opaque token
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-exchange-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    mcp:
+      authentication:
+        issuer: "${KEYCLOAK_ISSUER}"
+        jwks:
+          backendRef:
+            name: keycloak
+            kind: Service
+            namespace: keycloak
+            port: 8080
+          jwksPath: "realms/snowflake-workshop/protocol/openid-connect/certs"
+        audiences:
+        - account
+        - kagent-ui
+        mode: Strict
+        provider: Keycloak
     tokenExchange:
       mode: ExchangeOnly

@@ -1,44 +1,43 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: snowflake-mcp
+  name: external-sts
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: snowflake-mcp
+      app: external-sts
   template:
     metadata:
       labels:
-        app: snowflake-mcp
+        app: external-sts
     spec:
       containers:
-      - name: mcp
+      - name: sts
         image: python:3.12-slim
-        command: ["python", "/app/server.py"]
+        command: ["python", "/app/sts.py"]
         ports:
-        - containerPort: 80
-        env:
-        - name: INTROSPECT_URL
-          value: "http://external-sts.default.svc.cluster.local:9000/introspect"
+        - containerPort: 9000
         volumeMounts:
         - name: script
           mountPath: /app
       volumes:
       - name: script
         configMap:
-          name: snowflake-mcp-script
+          name: external-sts-script
+          items:
+          - key: sts.py
+            path: sts.py
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: snowflake-mcp
+  name: external-sts
   namespace: default
 spec:
   selector:
-    app: snowflake-mcp
+    app: external-sts
   ports:
-  - port: 80
-    targetPort: 80
-    appProtocol: agentgateway.dev/mcp
+  - port: 9000
+    targetPort: 9000

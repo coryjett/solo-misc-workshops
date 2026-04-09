@@ -4,9 +4,9 @@ metadata:
   name: openai-config
   namespace: kagent
 spec:
-  provider: openai
+  provider: OpenAI
   model: gpt-4o
-  apiKeySecretName: openai-api-key
+  apiKeySecret: openai-api-key
   apiKeySecretKey: api-key
 ---
 apiVersion: kagent.dev/v1alpha2
@@ -15,6 +15,7 @@ metadata:
   name: snowflake-mcp
   namespace: kagent
 spec:
+  description: "Mock Snowflake MCP server for token exchange workshop"
   protocol: STREAMABLE_HTTP
   url: http://snowflake-mcp.default.svc.cluster.local:80
   timeout: 30s

@@ -17,11 +17,16 @@ spec:
       - name: oauth2-proxy
         image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
         args:
-        - --provider=keycloak-oidc
+        - --provider=oidc
+        - --provider-display-name=Keycloak
         - --client-id=kagent-ui
         - --client-secret=kagent-ui-secret
         - --redirect-url=http://localhost:8080/oauth2/callback
-        - --oidc-issuer-url=http://keycloak.keycloak.svc.cluster.local:8080/realms/snowflake-workshop
+        - --skip-oidc-discovery=true
+        - --oidc-issuer-url=http://localhost:9090/realms/snowflake-workshop
+        - --login-url=http://localhost:9090/realms/snowflake-workshop/protocol/openid-connect/auth
+        - --redeem-url=http://keycloak.keycloak.svc.cluster.local:8080/realms/snowflake-workshop/protocol/openid-connect/token
+        - --oidc-jwks-url=http://keycloak.keycloak.svc.cluster.local:8080/realms/snowflake-workshop/protocol/openid-connect/certs
         - --upstream=http://kagent-ui.kagent.svc.cluster.local:8080
         - --http-address=0.0.0.0:4180
         - --cookie-secret=REPLACE_WITH_RANDOM_32_BYTES
@@ -31,6 +36,7 @@ spec:
         - --pass-authorization-header=true
         - --skip-provider-button=true
         - --code-challenge-method=S256
+        - --insecure-oidc-allow-unverified-email=true
         ports:
         - containerPort: 4180
         readinessProbe:
