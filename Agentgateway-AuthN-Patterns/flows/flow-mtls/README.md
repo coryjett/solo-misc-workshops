@@ -32,4 +32,21 @@ Two independent TLS features that can be used separately or combined for end-to-
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
+### Testing
+
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8443` (TLS). Certificates are in `example/certs/`:
+
+```bash
+CERT_DIR=example/certs
+
+# No client cert → connection refused / 400
+curl -sk --cacert ${CERT_DIR}/ca.crt https://localhost:8443/
+
+# Valid client cert → 200
+curl -sk --cacert ${CERT_DIR}/ca.crt \
+  --cert ${CERT_DIR}/client.crt \
+  --key ${CERT_DIR}/client.key \
+  https://localhost:8443/
+```
+
 Back to [Auth Patterns overview](../../README.md)

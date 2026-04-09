@@ -17,4 +17,19 @@ Clients authenticate with a static API key instead of OIDC. Gateway validates th
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
+### Testing
+
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
+
+```bash
+# No API key → 401
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/
+
+# Wrong API key → 401
+curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer wrong-key" http://localhost:8888/
+
+# Valid API key → 200
+curl -s -H "Authorization: Bearer my-secret-api-key-12345" http://localhost:8888/
+```
+
 Back to [Auth Patterns overview](../../README.md)

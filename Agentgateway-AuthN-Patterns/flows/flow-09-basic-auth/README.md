@@ -19,4 +19,19 @@ Clients authenticate with username and password (Base64-encoded in the `Authoriz
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
+### Testing
+
+After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
+
+```bash
+# No credentials → 401
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/
+
+# Wrong password → 401
+curl -s -o /dev/null -w "%{http_code}" -u "testuser:wrongpass" http://localhost:8888/
+
+# Valid credentials → 200
+curl -s -u "testuser:testpass" http://localhost:8888/
+```
+
 Back to [Auth Patterns overview](../../README.md)
