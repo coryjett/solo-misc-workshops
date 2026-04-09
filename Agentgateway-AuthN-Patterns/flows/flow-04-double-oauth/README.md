@@ -36,4 +36,19 @@ Two sequential user-facing OAuth flows orchestrated by the gateway. First, the u
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
+### Interactive testing with MCP Inspector
+
+After running `setup.sh`, you can explore the MCP server interactively using [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+
+```bash
+# Get a JWT from Keycloak
+USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow04-realm/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
+  | jq -r '.access_token')
+
+# Launch MCP Inspector web UI
+mcp-inspector --server-url http://localhost:8888/mcp --transport http \
+  --header "Authorization: Bearer ${USER_JWT}"
+```
+
 Back to [Auth Patterns overview](../../README.md)

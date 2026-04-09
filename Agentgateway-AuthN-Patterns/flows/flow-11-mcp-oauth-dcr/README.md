@@ -38,4 +38,21 @@ MCP clients (like Claude Code, VS Code extensions) that don't have pre-registere
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
+### Interactive testing with MCP Inspector
+
+After running `setup.sh`, you can explore the MCP server interactively using [MCP Inspector](https://github.com/modelcontextprotocol/inspector). Flow 11 supports the full MCP OAuth + DCR flow — MCP Inspector will automatically discover the auth server and register itself:
+
+```bash
+# Option 1: Full DCR flow (MCP Inspector handles OAuth automatically)
+mcp-inspector --server-url http://localhost:8888/mcp --transport http
+
+# Option 2: Pre-authenticated (skip DCR, use a pre-obtained JWT)
+USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow11-realm/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
+  | jq -r '.access_token')
+
+mcp-inspector --server-url http://localhost:8888/mcp --transport http \
+  --header "Authorization: Bearer ${USER_JWT}"
+```
+
 Back to [Auth Patterns overview](../../README.md)
