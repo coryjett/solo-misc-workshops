@@ -20,24 +20,4 @@ Client obtains a JWT from an external OIDC provider (e.g., via Authorization Cod
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
-### Testing
-
-After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`. Get a JWT and test:
-
-```bash
-# Get a JWT from Keycloak (password grant)
-USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow01-realm/protocol/openid-connect/token" \
-  -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
-  | jq -r '.access_token')
-
-# No JWT → 401
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/
-
-# Invalid JWT → 401
-curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer invalid.jwt.token" http://localhost:8888/
-
-# Valid JWT → 200
-curl -s -H "Authorization: Bearer ${USER_JWT}" http://localhost:8888/
-```
-
 Back to [Auth Patterns overview](../../README.md)

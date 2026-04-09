@@ -19,19 +19,4 @@ Validate the inbound OIDC JWT, inspect a claim (sub, team, tier), then use a CEL
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
-### Testing
-
-After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`. Get a JWT and test:
-
-```bash
-# Get a JWT from Keycloak
-USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow07-realm/protocol/openid-connect/token" \
-  -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
-  | jq -r '.access_token')
-
-# Valid JWT → 200 (backend receives a mapped token based on JWT claims)
-curl -s -H "Authorization: Bearer ${USER_JWT}" http://localhost:8888/
-# Response shows the mapped token in auth_header
-```
-
 Back to [Auth Patterns overview](../../README.md)
