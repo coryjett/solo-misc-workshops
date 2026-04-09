@@ -1,6 +1,6 @@
 # Flow 11: MCP OAuth + Dynamic Client Registration — Working Example
 
-MCP clients register dynamically via DCR, complete OAuth, then connect with a JWT. This example deploys the full infrastructure and tests both the discovery endpoints and authenticated MCP access.
+MCP clients register dynamically via DCR, complete OAuth, then connect with a JWT. This example deploys the full infrastructure and tests both the discovery endpoints and authenticated MCP access. The MCP server's `whoami` tool shows the authenticated user identity from the JWT.
 
 ## Prerequisites
 

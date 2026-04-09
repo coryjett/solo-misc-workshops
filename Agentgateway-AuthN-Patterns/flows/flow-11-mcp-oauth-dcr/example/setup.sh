@@ -21,11 +21,21 @@ metadata:
 data:
   server.py: |
     from http.server import BaseHTTPRequestHandler, HTTPServer
-    import json
+    import json, base64, sys
+    def decode_jwt(token):
+        try:
+            payload = token.split('.')[1]
+            payload += '=' * (4 - len(payload) % 4)
+            return json.loads(base64.urlsafe_b64decode(payload))
+        except: return None
     class H(BaseHTTPRequestHandler):
         def do_POST(self):
             auth = self.headers.get('Authorization', '')
             body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode()
+            claims = decode_jwt(auth[7:]) if auth.startswith('Bearer ') else None
+            if claims:
+                sys.stderr.write(f"\nMCP SERVER TOKEN: iss={claims.get('iss')} sub={claims.get('sub')}\n")
+                sys.stderr.flush()
             try: req = json.loads(body)
             except: req = {}
             method, req_id = req.get('method',''), req.get('id')
@@ -34,9 +44,10 @@ data:
             elif method == 'notifications/initialized':
                 self.send_response(200); self.end_headers(); return
             elif method == 'tools/list':
-                resp = {"jsonrpc":"2.0","id":req_id,"result":{"tools":[{"name":"hello","description":"Says hello","inputSchema":{"type":"object","properties":{}}}]}}
+                resp = {"jsonrpc":"2.0","id":req_id,"result":{"tools":[{"name":"whoami","description":"Shows the authenticated user identity from the JWT","inputSchema":{"type":"object","properties":{}}}]}}
             elif method == 'tools/call':
-                resp = {"jsonrpc":"2.0","id":req_id,"result":{"content":[{"type":"text","text":"Hello from MCP server! You authenticated via OAuth + DCR."}]}}
+                result = {"token_issuer": claims.get("iss","none") if claims else "no token received", "token_sub": claims.get("sub","none") if claims else "none", "preferred_username": claims.get("preferred_username") if claims else None, "message": "You authenticated via OAuth + DCR"}
+                resp = {"jsonrpc":"2.0","id":req_id,"result":{"content":[{"type":"text","text":json.dumps(result,indent=2)}]}}
             else:
                 resp = {"jsonrpc":"2.0","id":req_id,"error":{"code":-32601,"message":f"Unknown: {method}"}}
             out = json.dumps(resp).encode()
@@ -264,7 +275,7 @@ if [[ -n "$SID" ]]; then
     -H "Authorization: Bearer ${USER_JWT}" \
     -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
     -H "Mcp-Session-Id: ${SID}" \
-    -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"hello","arguments":{}},"id":3}' 2>/dev/null || true)
+    -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"whoami","arguments":{}},"id":3}' 2>/dev/null || true)
   RESULT_DATA=$(echo "$RESULT" | grep '^data: ' | sed 's/^data: //' | head -1)
   [[ -z "$RESULT_DATA" ]] && RESULT_DATA="$RESULT"
   echo "MCP response: $(echo "$RESULT_DATA" | jq -r '.result.content[0].text' 2>/dev/null)"

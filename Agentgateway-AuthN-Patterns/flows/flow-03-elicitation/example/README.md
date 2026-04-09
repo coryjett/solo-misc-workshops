@@ -1,6 +1,6 @@
 # Flow 3: Elicitation — Working Example
 
-Demonstrates the elicitation trigger: when no upstream OAuth token is available, the gateway returns a `PENDING` status with an elicitation URL.
+Demonstrates the elicitation trigger: when no upstream OAuth token is available, the gateway returns a `PENDING` status with an elicitation URL. The MCP server's `echo_token` tool shows the token it received, so you can verify the token exchange after completing the elicitation.
 
 **Note:** Completing the elicitation (the user opening the URL and authorizing access) requires the Solo Enterprise UI. This example shows the trigger mechanism only.
 

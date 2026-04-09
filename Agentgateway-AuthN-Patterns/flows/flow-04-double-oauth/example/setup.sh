@@ -26,10 +26,21 @@ metadata:
 data:
   server.py: |
     from http.server import BaseHTTPRequestHandler, HTTPServer
-    import json
+    import json, base64, sys
+    def decode_jwt(token):
+        try:
+            payload = token.split('.')[1]
+            payload += '=' * (4 - len(payload) % 4)
+            return json.loads(base64.urlsafe_b64decode(payload))
+        except: return None
     class H(BaseHTTPRequestHandler):
         def do_POST(self):
+            auth = self.headers.get('Authorization', '')
             body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode()
+            claims = decode_jwt(auth[7:]) if auth.startswith('Bearer ') else None
+            if claims:
+                sys.stderr.write(f"\nMCP SERVER TOKEN: iss={claims.get('iss')} sub={claims.get('sub')} act={claims.get('act')}\n")
+                sys.stderr.flush()
             try: req = json.loads(body)
             except: req = {}
             method, req_id = req.get('method',''), req.get('id')
@@ -38,9 +49,12 @@ data:
             elif method == 'notifications/initialized':
                 self.send_response(200); self.end_headers(); return
             elif method == 'tools/list':
-                resp = {"jsonrpc":"2.0","id":req_id,"result":{"tools":[{"name":"test","description":"Test","inputSchema":{"type":"object","properties":{}}}]}}
+                resp = {"jsonrpc":"2.0","id":req_id,"result":{"tools":[{"name":"echo_token","description":"Shows the token received by the MCP server","inputSchema":{"type":"object","properties":{}}}]}}
+            elif method == 'tools/call':
+                result = {"token_issuer": claims.get("iss","none") if claims else "no token received", "token_sub": claims.get("sub","none") if claims else "none", "token_act": claims.get("act") if claims else None, "message": "This is the token that reached the MCP server (after OIDC + elicitation)"}
+                resp = {"jsonrpc":"2.0","id":req_id,"result":{"content":[{"type":"text","text":json.dumps(result,indent=2)}]}}
             else:
-                resp = {"jsonrpc":"2.0","id":req_id,"result":{"content":[{"type":"text","text":"ok"}]}}
+                resp = {"jsonrpc":"2.0","id":req_id,"error":{"code":-32601,"message":f"Unknown: {method}"}}
             out = json.dumps(resp).encode()
             self.send_response(200)
             self.send_header('Content-Type','application/json')

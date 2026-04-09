@@ -1,6 +1,6 @@
 # Flow 4: Double OAuth — Working Example
 
-Two sequential OAuth flows: OIDC authentication (Phase 1) + upstream credential gathering via elicitation (Phase 2).
+Two sequential OAuth flows: OIDC authentication (Phase 1) + upstream credential gathering via elicitation (Phase 2). The MCP server's `echo_token` tool shows the token it received, so you can verify which tokens were exchanged.
 
 **Note:** Phase 2 completion requires the Solo Enterprise UI. This example demonstrates the OIDC auth and elicitation trigger.
 
