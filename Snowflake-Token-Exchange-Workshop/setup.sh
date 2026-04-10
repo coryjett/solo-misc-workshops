@@ -215,7 +215,38 @@ sed "s|REPLACE_WITH_RANDOM_32_BYTES|${COOKIE_SECRET}|g" \
 kubectl -n kagent wait --for=condition=Available deployment/oauth2-proxy --timeout=120s
 ok "oauth2-proxy deployed"
 
-# ── 11. Port-forward and print instructions ──────────────────────────────────
+# ── 11. Patch kagent-ui to forward Authorization header ───────────────────────
+info "Patching kagent-ui to forward Authorization header to controller..."
+
+# kagent 0.8.6 doesn't forward the Authorization header from oauth2-proxy to the
+# kagent-controller when proxying A2A requests. This was fixed on main (583d7a4)
+# but hasn't been released yet. Patch the compiled Next.js route to forward it.
+UI_POD=$(kubectl get pod -n kagent -l app.kubernetes.io/name=kagent-ui -o jsonpath='{.items[0].metadata.name}')
+ROUTE_CHUNK_PATH="/app/ui/.next/server/chunks/[root-of-the-server]__0u-gm~m._.js"
+kubectl exec -n kagent "${UI_POD}" -- sh -c "cat '${ROUTE_CHUNK_PATH}'" > /tmp/ui-route-chunk.js 2>/dev/null
+
+if grep -q '"User-Agent":"kagent-ui"' /tmp/ui-route-chunk.js && ! grep -q 'e.headers.get("authorization")' /tmp/ui-route-chunk.js; then
+  sed 's/"User-Agent":"kagent-ui"}/"User-Agent":"kagent-ui",...(e.headers.get("authorization")?{Authorization:e.headers.get("authorization")}:{})}/g' \
+    /tmp/ui-route-chunk.js > /tmp/ui-route-chunk-patched.js
+
+  kubectl create configmap kagent-ui-a2a-patch \
+    -n kagent \
+    --from-file=route-chunk.js=/tmp/ui-route-chunk-patched.js \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl -n kagent patch deployment kagent-ui --type=json -p '[
+    {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"a2a-patch","configMap":{"name":"kagent-ui-a2a-patch"}}},
+    {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"a2a-patch","mountPath":"'"${ROUTE_CHUNK_PATH}"'","subPath":"route-chunk.js"}}
+  ]'
+  kubectl -n kagent rollout status deployment/kagent-ui --timeout=60s
+  ok "kagent-ui patched to forward Authorization header"
+else
+  ok "kagent-ui already forwards Authorization header (newer version)"
+fi
+
+rm -f /tmp/ui-route-chunk.js /tmp/ui-route-chunk-patched.js
+
+# ── 12. Port-forward and print instructions ──────────────────────────────────
 kill_pf "oauth2-proxy.*8080"
 kill_pf "keycloak.*9090"
 kubectl port-forward -n kagent svc/oauth2-proxy 8080:8080 &>/dev/null &
