@@ -1,0 +1,182 @@
+# kagent Enterprise — Security Demo
+
+> **Time:** ~25 minutes
+> **Product:** Solo Enterprise for kagent
+> **Focus:** RBAC, AccessPolicies, Observability
+> **IdP:** Keycloak (3 demo users)
+> **All demo steps are in the kagent UI — no terminal required during the demo.**
+
+---
+
+## Pre-Demo Setup
+
+```bash
+export OPENAI_API_KEY=sk-...
+export AGENTGATEWAY_LICENSE_KEY=eyJ...
+
+./setup.sh
+./check.sh   # verify everything works
+```
+
+Verify:
+- **kagent UI:** http://localhost:4000 (open in incognito)
+- **Keycloak Admin:** http://<your-ip>:8088/admin (admin/admin)
+
+**Demo users:**
+
+| User | Password | Group | kagent Role |
+|------|----------|-------|-------------|
+| admin | password | admins | global.Admin |
+| writer | password | writers | global.Writer |
+| reader | password | readers | global.Reader |
+
+**Pre-created agents:**
+- `cluster-assistant` — general purpose, no tools, no policy restrictions
+- `k8s-explorer` — live kubectl tools, available to all users
+- `security-auditor` — live kubectl tools, will be restricted during the demo
+
+---
+
+## Part 1: Context (3 min)
+
+> **Talk track:** "Organizations need to securely govern AI agents and MCP tools at enterprise scale. kagent Enterprise provides three layers of security: authentication via your existing IdP, role-based access control mapped from your IdP groups, and fine-grained AccessPolicies that control which users can interact with which agents and tools."
+
+> "Today we're using Keycloak as the IdP with three users representing different roles in your organization. In production, this would be Entra ID, Okta, or any OIDC provider."
+
+> "We have three agents with different purposes and access levels — a general assistant, a Kubernetes explorer, and a security auditor that we'll restrict to the security team."
+
+---
+
+## Part 2: RBAC — Different Users, Different Access (7 min)
+
+> **Goal:** Show how IdP group membership maps to kagent permissions.
+
+### Step 1 — Admin View
+
+Open http://localhost:4000 and log in as **admin** / **password**.
+
+> **Show:**
+> - Navigate to **Agents** — all three agents visible: `cluster-assistant`, `k8s-explorer`, `security-auditor`
+> - Click into `security-auditor` — full access to edit the agent configuration, model, system prompt
+> - Navigate to **Settings** — access to model configs, cluster settings, user management
+
+> **Talk track:** "The admin user is in the `admins` group in Keycloak, which maps to `global.Admin` in kagent. Full read/write access to everything."
+
+### Step 2 — Chat with an Agent (as admin)
+
+> **Show:**
+> - Open `k8s-explorer`, start a chat: **"List all namespaces in this cluster"**
+> - The agent calls the kubectl MCP tools and returns **real cluster data**
+
+> **Talk track:** "This isn't a mock — the agent is calling real kubectl tools against the cluster and returning live data. The k8s-explorer and security-auditor both have live cluster access through MCP tools."
+
+### Step 3 — Reader View
+
+Log out. Log in as **reader** / **password**.
+
+> **Show:**
+> - Navigate to **Agents** — agents visible but editing is restricted
+> - Try to modify an agent — blocked
+> - Settings access is limited to read-only views
+
+> **Talk track:** "The reader maps to `global.Reader` — view-only. They can see what agents exist but can't modify anything."
+
+---
+
+## Part 3: AccessPolicies — Restricting Agent Access (10 min)
+
+> **Goal:** Create a policy that restricts the security-auditor agent to the admins group only.
+
+> **Talk track:** "RBAC controls what you can do in the platform — create agents, change settings. AccessPolicies control which users can interact with which specific agents. This is where you enforce that only your security team can use the SecOps agent."
+
+### Step 1 — Show Both Agents Work (as admin)
+
+Log in as **admin** / **password**.
+
+> **Show:**
+> - Open `k8s-explorer`, chat: **"What pods are running in the kagent namespace?"** — works, returns live data
+> - Open `security-auditor`, chat: **"Show me the cluster configuration"** — works, returns live data
+> - Both agents respond with real cluster state — no restrictions yet
+
+### Step 2 — Create the AccessPolicy
+
+Navigate to **Access Policies** in the kagent UI.
+
+> **Show:** Click **+ New Access Policy** and configure:
+> - **Name:** `admin-only-security-auditor`
+> - **Cluster:** `kagent-security`
+> - **Namespace:** `demo`
+> - **Subjects:** Add subject — UserGroup, claim name `Groups`, value `admins`
+> - **Action:** ALLOW
+> - **Target:** Agent — `security-auditor`
+> - Save
+
+> **Talk track:** "This policy says: only users in the `admins` Keycloak group can access the `security-auditor` agent. Agent Gateway evaluates this policy before forwarding any request to the agent."
+
+### Step 3 — Test as Admin
+
+> **Show:**
+> - Chat with `security-auditor` — still works (admin is in `admins` group)
+> - Chat with `k8s-explorer` — still works (no policy restricting it)
+
+### Step 4 — Test as Reader (Denied)
+
+Log out. Log in as **reader** / **password**.
+
+> **Show:**
+> - Open `k8s-explorer` — works fine, no policy restriction
+> - Try to access `security-auditor` — **blocked**. The reader is in the `readers` group, which is not allowed by the policy.
+
+> **Talk track:** "The reader can still use the general-purpose agents, but the security auditor is locked down. This is the common enterprise pattern — a general-purpose agent available to all developers, and an elevated SecOps agent restricted to the security team. The enforcement happens at the gateway level, not in the agent code."
+
+---
+
+## Part 4: Observability — Audit Trail (5 min)
+
+> **Goal:** Show the full trace of who accessed what, including the denied request.
+
+### Step 1 — View the Denied Request
+
+Navigate to **Tracing** in the kagent UI.
+
+> **Show:**
+> - Find the denied request from the reader user — it should show as a failed/rejected trace
+> - Click into it — the trace shows: user identity (reader), target agent (security-auditor), policy evaluation, denial
+> - Point out the `sub` claim from Keycloak attached to the trace
+
+> **Talk track:** "Here's the audit trail. You can see exactly who tried to access the security auditor, when, and that it was denied by the AccessPolicy. The identity comes from Keycloak, so you always know which human initiated the action."
+
+### Step 2 — Compare with an Allowed Request
+
+> **Show:**
+> - Find a successful request from the admin user chatting with `security-auditor`
+> - Click into it — shows the full request lifecycle: user identity, agent target, policy allowed, tool calls, LLM response
+> - Point out the spans: agent processing, kubectl tool call, LLM response, latency
+
+> **Talk track:** "Compare this with the allowed request. Same agent, different user — one allowed, one denied. Full observability into what the agent did: which model it called, how many tokens it used. This feeds into your cost tracking and compliance reporting."
+
+---
+
+## Wrap-Up (2 min buffer)
+
+> **Talk track:** "To recap:
+>
+> 1. **RBAC** — Your Keycloak groups map directly to kagent roles. Admin, writer, reader — each sees a different view.
+>
+> 2. **AccessPolicies** — Fine-grained control over which users and groups can access which agents. Enforced at the gateway, visible in traces. Your SecOps agent stays locked to the security team.
+>
+> 3. **Live Tools** — Agents with real kubectl access to the cluster. The security controls aren't theater — these agents have actual capabilities that need governing.
+>
+> 4. **Observability** — Full audit trail of every interaction including denied requests, with user identity from your IdP attached to every trace.
+>
+> All of this works with any OIDC provider — Entra ID, Okta, or your existing IdP. The Keycloak setup today is interchangeable."
+
+> **Next steps:** "For the follow-up session, we can cover MCP tools integration, LLM endpoint whitelisting, rate limiting, guardrails (Agent Gateway features), and shadow agent discovery."
+
+---
+
+## Cleanup
+
+```bash
+./cleanup.sh
+```

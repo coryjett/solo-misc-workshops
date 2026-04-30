@@ -1,0 +1,47 @@
+graph LR
+    subgraph IdP["Identity Provider"]
+        KC["Keycloak<br/>OIDC / Groups / JWT"]
+        Users["admin (admins)<br/>writer (writers)<br/>reader (readers)"]
+    end
+
+    subgraph KE["kagent Enterprise"]
+        UI["Solo Enterprise UI"]
+        RBAC["RBAC<br/>Groups → Roles"]
+        CTRL["Controller"]
+        OBO["OBO Tokens<br/>user + agent identity"]
+        AP["AccessPolicy<br/>who can use which agent"]
+    end
+
+    subgraph AGW["Agent Gateway"]
+        Proxy["AGW Proxy"]
+        Enforce["Policy Enforce"]
+        Trace["Tracing / Audit"]
+    end
+
+    subgraph Agents
+        A1["cluster-assistant<br/>✅ all users"]
+        A2["k8s-explorer<br/>✅ all users<br/>🔧 kubectl tools"]
+        A3["security-auditor<br/>🔒 admins only<br/>🔧 kubectl tools"]
+    end
+
+    KC -->|OIDC login| UI
+    UI --> CTRL
+    CTRL -->|OBO JWT| Proxy
+    Proxy --> A1
+    Proxy --> A2
+    Proxy -->|blocked for readers| A3
+    Enforce --> Trace
+
+    style KC fill:#ffd8a8,stroke:#f59e0b
+    style Users fill:#fff3bf,stroke:#f59e0b
+    style UI fill:#a5d8ff,stroke:#4a9eed
+    style RBAC fill:#a5d8ff,stroke:#4a9eed
+    style CTRL fill:#a5d8ff,stroke:#4a9eed
+    style OBO fill:#a5d8ff,stroke:#4a9eed
+    style AP fill:#d0bfff,stroke:#8b5cf6
+    style Proxy fill:#d0bfff,stroke:#8b5cf6
+    style Enforce fill:#d0bfff,stroke:#8b5cf6
+    style Trace fill:#eebefa,stroke:#8b5cf6
+    style A1 fill:#b2f2bb,stroke:#22c55e
+    style A2 fill:#b2f2bb,stroke:#22c55e
+    style A3 fill:#ffc9c9,stroke:#ef4444
