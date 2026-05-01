@@ -6,6 +6,14 @@
 #
 set -uo pipefail
 
+# Many of the existence checks below are `kubectl ... | grep -q PATTERN`.
+# `grep -q` exits as soon as it finds a match, which closes its stdin and
+# causes kubectl to receive SIGPIPE (exit 141). With `pipefail` set, the
+# pipeline then returns 141 even though "we matched" — turning every
+# successful check into a false FAIL. Disable pipefail just for these
+# pattern-match checks.
+set +o pipefail
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
