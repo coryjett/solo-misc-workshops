@@ -7,11 +7,11 @@ A 25-minute security demo for Solo Enterprise for kagent using Keycloak as the I
 [![Architecture](docs/architecture.png)](https://excalidraw.com/#json=GlPxqn_ob4TWIMYJbWqO7,OLQn0Qgdo0IOD2ULhOy4jg)
 
 **Flow:**
-1. User authenticates via Keycloak (OIDC)
+1. User authenticates via Keycloak (OIDC). Keycloak emits both `Groups` (array) and `role` (single string) claims.
 2. RBAC maps IdP groups to kagent roles (Admin/Writer/Reader)
-3. kagent mints an OBO (On-Behalf-Of) token carrying the user's `Groups` claim
-4. AccessPolicies translate to `EnterpriseAgentgatewayPolicy` enforced at the Istio ambient waypoint in front of each restricted agent
-5. Agent Gateway validates the OBO token's `Groups` claim against a CEL policy and forwards or rejects with `403 authorization failed`
+3. kagent mints an OBO (On-Behalf-Of) token carrying the user's propagated claims (incl. `role`)
+4. AccessPolicies created in the kagent UI translate to `EnterpriseAgentgatewayPolicy` and attach to the Istio ambient waypoint in front of each restricted agent
+5. Agent Gateway validates the OBO token's `role` claim against a CEL policy (`jwt.role == "admin"`) and forwards or rejects with `403 authorization failed`
 
 ## Quick Start
 

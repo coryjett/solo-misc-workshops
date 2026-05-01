@@ -1,14 +1,14 @@
 graph LR
     subgraph IdP["Identity Provider"]
-        KC["Keycloak<br/>OIDC / Groups / JWT"]
-        Users["admin (admins)<br/>writer (writers)<br/>reader (readers)"]
+        KC["Keycloak<br/>OIDC<br/>group + role claims"]
+        Users["admin (role=admin)<br/>writer (role=writer)<br/>reader (role=reader)"]
     end
 
     subgraph KE["kagent Enterprise"]
         UI["Solo Enterprise UI"]
         RBAC["RBAC<br/>Groups → Roles"]
-        CTRL["Controller<br/>mints OBO JWT<br/>(propagates Groups)"]
-        AP["AccessPolicy<br/>+ EnterpriseAgentgatewayPolicy<br/>CEL: jwt.Groups has admins"]
+        CTRL["Controller<br/>mints OBO JWT<br/>(propagates role)"]
+        AP["AccessPolicy<br/>(created in UI)<br/>jwt.role == 'admin'"]
     end
 
     subgraph Mesh["Istio Ambient Mesh"]
@@ -24,7 +24,7 @@ graph LR
 
     KC -->|OIDC login| UI
     UI --> CTRL
-    CTRL -->|OBO JWT<br/>iss=kagent.kagent| ZT
+    CTRL -->|OBO JWT<br/>iss=kagent.kagent<br/>role=admin| ZT
     ZT --> A1
     ZT --> A2
     ZT --> WP

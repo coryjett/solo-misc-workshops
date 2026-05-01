@@ -98,6 +98,7 @@ oidc:
   secret: kagent-backend-secret
   oboClaimsToPropagate:
     - Groups
+    - role
 kagent-tools:
   enabled: true
 otel:
@@ -133,33 +134,30 @@ if [[ -n "${JWKS}" ]]; then
   JWKS_INLINE=$(echo "${JWKS}" | jq -c .)
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
   cat > "${SCRIPT_DIR}/access-policy.yaml" <<EOF
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayPolicy
+apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
+kind: AccessPolicy
 metadata:
   name: admin-only-security-auditor
   namespace: demo
 spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: agent-security-auditor-waypoint
-  traffic:
-    jwtAuthentication:
-      mode: Strict
-      providers:
-        - issuer: kagent.kagent
-          jwks:
+  action: ALLOW
+  from:
+    subjects:
+      - kind: UserGroup
+        userGroup:
+          claimName: role
+          claimValue: admin
+          issuer: kagent.kagent
+          jwksKey:
             inline: '${JWKS_INLINE}'
-    authorization:
-      action: Allow
-      policy:
-        matchExpressions:
-          - 'jwt.Groups.exists(g, g == "admins")'
+  targetRef:
+    kind: Agent
+    name: security-auditor
 EOF
   ok "access-policy.yaml refreshed"
 
   # If the policy was already applied, re-apply it with the fresh JWKS
-  if kubectl --context ${CTX} get enterpriseagentgatewaypolicy admin-only-security-auditor -n demo >/dev/null 2>&1; then
+  if kubectl --context ${CTX} get accesspolicy admin-only-security-auditor -n demo >/dev/null 2>&1; then
     kubectl --context ${CTX} apply -f "${SCRIPT_DIR}/access-policy.yaml"
     ok "Policy re-applied with refreshed JWKS"
   fi
