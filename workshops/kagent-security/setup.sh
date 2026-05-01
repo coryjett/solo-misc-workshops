@@ -45,7 +45,7 @@ ok "Prerequisites met"
 
 CLUSTER_NAME="${CLUSTER_NAME:-kagent-security}"
 KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.3.19}"
-AGW_VERSION="${AGW_VERSION:-v2.3.0-rc.1}"
+AGW_VERSION="${AGW_VERSION:-v2.4.0-beta.0}"
 ISTIO_VERSION="${ISTIO_VERSION:-1.27.1-solo}"
 ISTIO_REPO="${ISTIO_REPO:-oci://us-docker.pkg.dev/soloio-img/istio-helm}"
 
@@ -123,7 +123,52 @@ info "Configuring Keycloak master realm..."
 docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
   --server http://localhost:8080 --realm master --user admin --password admin 2>/dev/null
 docker exec keycloak /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE 2>/dev/null
-ok "Keycloak configured (pre-baked realm with 3 users, 3 groups, group mappers)"
+
+# Add per-user "role" attribute + a single-string claim mapper.
+# kagent-enterprise's AccessPolicy translator emits CEL `jwt.<claim> == "<value>"`
+# (string equality). The default `Groups` claim is a JSON array, so that CEL
+# never matches. Adding a string-valued `role` claim lets the unmodified
+# auto-generated EAP enforce correctly.
+info "Adding string role claim to Keycloak users..."
+docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+  --server http://localhost:8080 --realm master --user admin --password admin 2>/dev/null
+for u in admin writer reader; do
+  USER_ID=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get -r kagent-dev users -q "username=${u}" 2>/dev/null \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
+  docker exec keycloak /opt/keycloak/bin/kcadm.sh update -r kagent-dev users/${USER_ID} \
+    -s "attributes.role=[\"${u}\"]" 2>/dev/null || true
+done
+
+CLIENT_ID=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get -r kagent-dev clients -q 'clientId=kagent-backend' 2>/dev/null \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
+
+# Idempotent: only create if not already present
+EXISTING=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get -r kagent-dev clients/${CLIENT_ID}/protocol-mappers/models 2>/dev/null \
+  | python3 -c "import json,sys; print('yes' if any(m['name']=='role-attribute' for m in json.load(sys.stdin)) else 'no')")
+if [[ "${EXISTING}" == "no" ]]; then
+  cat > /tmp/role-mapper.json <<'EOF'
+{
+  "name": "role-attribute",
+  "protocol": "openid-connect",
+  "protocolMapper": "oidc-usermodel-attribute-mapper",
+  "consentRequired": false,
+  "config": {
+    "user.attribute": "role",
+    "id.token.claim": "true",
+    "access.token.claim": "true",
+    "userinfo.token.claim": "true",
+    "claim.name": "role",
+    "jsonType.label": "String",
+    "multivalued": "false"
+  }
+}
+EOF
+  docker cp /tmp/role-mapper.json keycloak:/tmp/role-mapper.json >/dev/null 2>&1
+  docker exec keycloak /opt/keycloak/bin/kcadm.sh create -r kagent-dev \
+    clients/${CLIENT_ID}/protocol-mappers/models -f /tmp/role-mapper.json 2>/dev/null || true
+  rm -f /tmp/role-mapper.json
+fi
+ok "Keycloak configured (role claim emits as string)"
 
 # ============================================================================
 # 2. Provision k3d cluster
@@ -314,6 +359,7 @@ oidc:
   secret: kagent-backend-secret
   oboClaimsToPropagate:
     - Groups
+    - role
 kagent-tools:
   enabled: true
 otel:
@@ -477,13 +523,14 @@ kill ${PF_PID} 2>/dev/null || true
 JWKS_INLINE=$(echo "${JWKS}" | jq -c .)
 
 cat > "${SCRIPT_DIR}/access-policy.yaml" <<EOF
-# Restricts the security-auditor agent to users in the "admins" Keycloak group.
+# Restricts the security-auditor agent to users with role=admin.
 #
 # Same shape as what the kagent UI produces from the Access Policies form.
-# Apply with kubectl OR fill the same fields in the UI; either way, run
-# ./activate-ui-policy.sh admin-only-security-auditor afterwards to fix the
-# auto-generated EnterpriseAgentgatewayPolicy that kagent-enterprise
-# ${KAGENT_ENT_VERSION} produces (see TROUBLESHOOTING.md Issues 1 and 1b).
+# Uses the string \`role\` claim (not \`Groups\`) because kagent-enterprise's
+# translator emits \`jwt.<claim> == "<value>"\`, which only matches scalar
+# JWT values. The Keycloak realm is set up to emit \`role\` as a string for
+# every user; \`Groups\` is also propagated but is a JSON array so \`==\`
+# never matches it. See TROUBLESHOOTING.md Issue 1b.
 apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
 kind: AccessPolicy
 metadata:
@@ -495,8 +542,8 @@ spec:
     subjects:
       - kind: UserGroup
         userGroup:
-          claimName: Groups
-          claimValue: admins
+          claimName: role
+          claimValue: admin
           issuer: kagent.kagent
           jwksKey:
             inline: '${JWKS_INLINE}'

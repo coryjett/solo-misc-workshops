@@ -2,7 +2,11 @@
 
 This is the debug history that drove the final shape of `setup.sh`. Future-you will hit some subset of these. Each issue silently disabled the chain at a different layer.
 
-> **TL;DR for the UI flow.** kagent-enterprise 0.3.19 has two translation bugs that make UI-created AccessPolicies no-op (Issues 1 and 1b below). After creating the AccessPolicy in the UI, run `./activate-ui-policy.sh <name>` once — it patches the auto-generated `EnterpriseAgentgatewayPolicy` (fixes the targetRef and the CEL).
+> **TL;DR for the UI flow.** Two translation bugs used to make UI-created AccessPolicies no-op:
+> - **Issue 1** (HTTPRoute target) — fixed by AGW `v2.4.0-beta.0` (auto-attaches now). `setup.sh` pins this version.
+> - **Issue 1b** (string-eq CEL on array claim) — worked around by emitting a string `role` claim from Keycloak and targeting `claimName: role` in the AccessPolicy instead of the array `Groups` claim. `setup.sh` configures the realm to ship `role`.
+>
+> Result: create the AccessPolicy in the UI, hit Save, it enforces. No patcher, no activate script.
 
 ## The chain
 
@@ -16,40 +20,25 @@ UI → AccessPolicy CRD
 
 Any of these layers can no-op without a clear error.
 
-## Issue 1 — Translation targeted HTTPRoute instead of Gateway
+## Issue 1 — Translation targeted HTTPRoute instead of Gateway *(fixed in AGW v2.4.0-beta.0)*
 
 **Symptom:** AccessPolicy created. EnterpriseAgentgatewayPolicy auto-generated. Status: `Attached: False`. Requests went through unfiltered.
 
-**Cause:** kagent-enterprise's waypoint translator (`waypoint_translator_plugin.go`) generates the agent's HTTPRoute with **Service** parentRefs only. The AccessPolicy translator then generates an `EnterpriseAgentgatewayPolicy` targeting that HTTPRoute. AGW's policy attachment logic looks for the HTTPRoute's *Gateway* parentRefs to decide which Gateway to attach to — sees none → `Attached: False`.
+**Cause:** kagent-enterprise's waypoint translator (`waypoint_translator_plugin.go`) generates the agent's HTTPRoute with **Service** parentRefs only. The AccessPolicy translator then generates an `EnterpriseAgentgatewayPolicy` targeting that HTTPRoute. AGW's policy attachment logic in v2.3.x looked for the HTTPRoute's *Gateway* parentRefs to decide which Gateway to attach to — saw none → `Attached: False`.
 
-**Fix:** Manually create (or patch) the `EnterpriseAgentgatewayPolicy` with `targetRefs` pointing directly at the auto-provisioned waypoint Gateway (`agent-{name}-waypoint`).
+**Fix:** AGW `v2.4.0-beta.0` recognizes service-bound HTTPRoute attachment. `setup.sh` pins this version (`AGW_VERSION=v2.4.0-beta.0`). EAPs auto-generated from AccessPolicies now reach `Attached: True` on their own.
 
-```yaml
-spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: agent-security-auditor-waypoint
-```
-
-**Workshop workaround:** `activate-ui-policy.sh <accesspolicy-name>` watches for the auto-generated EAP and patches its `targetRefs` + CEL.
-
-## Issue 1b — Auto-generated CEL is string-equality on an array claim
+## Issue 1b — Auto-generated CEL is string-equality on an array claim *(worked around)*
 
 **Symptom:** Even with the EAP attached, every user — including admin — got `403 authorization failed`.
 
-**Cause:** kagent-enterprise translates a `UserGroup` subject to CEL `jwt.<ClaimName> == "<ClaimValue>"` (see `access_policy_translation.go:479`, `makeCELExpressionForSubject`). The propagated `Groups` claim is an **array** (`["admins"]`), not a string. `["admins"] == "admins"` is always false → 403 for everyone.
+**Cause:** kagent-enterprise translates a `UserGroup` subject to CEL `jwt.<ClaimName> == "<ClaimValue>"` (see `access_policy_translation.go:479`, `makeCELExpressionForSubject`). The standard OIDC `Groups` claim is an **array** (`["admins"]`), not a string. `["admins"] == "admins"` is always false → 403 for everyone.
 
-**Fix:** Rewrite to `jwt.<ClaimName>.exists(g, g == "<ClaimValue>")` (array-contains).
+**Workaround:** Use a string-valued claim instead of `Groups`. `setup.sh` configures the Keycloak realm to add a single-valued `role` user attribute (`admin` / `writer` / `reader`) and a `oidc-usermodel-attribute-mapper` that emits it as a string claim. The AccessPolicy targets `claimName: role, claimValue: admin`, which produces CEL `jwt.role == "admin"` — that one matches.
 
-```yaml
-authorization:
-  policy:
-    matchExpressions:
-      - 'jwt.Groups.exists(g, g == "admins")'
-```
+`oboClaimsToPropagate` in the kagent helm values now includes both `Groups` and `role`, so the `role` claim survives into the OBO token kagent mints.
 
-`activate-ui-policy.sh` does this rewrite automatically.
+**Real fix:** kagent-enterprise should emit array-aware CEL (`jwt.<claim>.exists(g, g == "<value>")`) when the source claim is array-typed. Two-line change in `access_policy_translation.go`. Not yet upstreamed.
 
 ## Issue 1c — UI "Access Policies" tab stays empty even after creating one
 

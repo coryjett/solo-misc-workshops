@@ -75,13 +75,9 @@ clears chat sessions; keeps cluster, Istio, kagent, agents, Keycloak.
 
 ## AccessPolicy demo flow
 
-1. Create the AccessPolicy in the kagent UI (Access Policies → + New). Paste the inline JWKS from `cat access-policy.yaml`.
-2. Activate enforcement (one command):
-   ```bash
-   ./activate-ui-policy.sh admin-only-security-auditor
-   ```
+Create the AccessPolicy in the kagent UI (Access Policies → + New). Paste the inline JWKS from `cat access-policy.yaml`. Save → enforces immediately.
 
-`kubectl apply -f access-policy.yaml` is the same first step from the terminal — `activate-ui-policy.sh` works for either path. See `TROUBLESHOOTING.md` for what the script patches and why.
+`kubectl apply -f access-policy.yaml` is the equivalent terminal command. See `TROUBLESHOOTING.md` for why this works in 0.3.19 / AGW v2.4.0-beta.0 (Issues 1 + 1b).
 
 ## Cleanup
 

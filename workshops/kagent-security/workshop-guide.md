@@ -108,25 +108,17 @@ Navigate to **Access Policies → + New Access Policy**. Fill in:
 - **Namespace:** `demo`
 - **Target:** Agent — `security-auditor`
 - **Subject:** UserGroup
-  - **Claim name:** `Groups`
-  - **Claim value:** `admins`
+  - **Claim name:** `role`
+  - **Claim value:** `admin`
   - **Issuer:** `kagent.kagent`
   - **JWKS (inline):** paste the inline JWKS from `cat access-policy.yaml` (the long single-line JSON between the single quotes)
 - **Action:** ALLOW
 
-Save. The policy appears in the UI immediately.
+Save. The policy enforces immediately — no extra step.
 
-### Step 2b — Activate enforcement
+> **Why `role` and not `Groups`?** The kagent translator emits `jwt.<claim> == "<value>"` (scalar equality). `Groups` is a JSON array (`["admins"]`) so `==` never matches. The Keycloak realm is set up to emit a string `role` claim (`"admin"`, `"writer"`, `"reader"`) so the unmodified policy enforces correctly. See `TROUBLESHOOTING.md` Issue 1b.
 
-In a terminal:
-
-```bash
-./activate-ui-policy.sh admin-only-security-auditor
-```
-
-This patches the auto-generated `EnterpriseAgentgatewayPolicy` that kagent produces — fixes its targetRef from a broken HTTPRoute reference to the waypoint Gateway directly, and rewrites the CEL from `jwt.Groups == "admins"` (string-eq, never matches an array claim) to `jwt.Groups.exists(g, g == "admins")`. See `TROUBLESHOOTING.md` Issues 1 and 1b for the full story.
-
-> **Prefer kubectl?** `kubectl apply -f access-policy.yaml` creates the same AccessPolicy. Then run `activate-ui-policy.sh` exactly the same way.
+> **Prefer kubectl?** `kubectl apply -f access-policy.yaml` creates the same AccessPolicy.
 
 > **Talk track:** "The user creates an AccessPolicy in the UI — high-level, declarative, scoped to a kagent agent. kagent translates it into a low-level Agent Gateway policy that gets attached to the Istio ambient waypoint sitting in front of the agent. Every request carries an OBO (On-Behalf-Of) token kagent minted from the user's OIDC token, and Agent Gateway validates it against this policy before forwarding."
 
