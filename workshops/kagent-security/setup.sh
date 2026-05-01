@@ -430,7 +430,7 @@ metadata:
 spec:
   apiKeySecret: kagent-openai
   apiKeySecretKey: OPENAI_API_KEY
-  model: gpt-4.1-mini
+  model: gpt-5.4-mini
   provider: OpenAI
 EOF
 
@@ -439,24 +439,8 @@ info "Configuring tool server cross-namespace access..."
 kubectl patch remotemcpserver kagent-tool-server -n kagent --type=merge \
   -p '{"spec":{"allowedNamespaces":{"from":"All"}}}' 2>/dev/null || true
 
-# Create agents — 3 agents with different access levels and live K8s tools
+# Create agents — 2 agents: one open to all users, one policy-restricted
 kubectl apply -f - <<'EOF'
-apiVersion: kagent.dev/v1alpha2
-kind: Agent
-metadata:
-  name: cluster-assistant
-  namespace: demo
-spec:
-  description: "General-purpose Kubernetes assistant for basic operations"
-  declarative:
-    modelConfig: default-model-config
-    systemMessage: |
-      You are a Kubernetes assistant for a workshop demo. You explain
-      basic cluster concepts (namespaces, pods, services, deployments)
-      conversationally. You do NOT have any tools — if asked to inspect
-      live cluster state, say so and refer the user to the k8s-explorer
-      agent. Keep answers under 4 sentences. No bullet lists.
----
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
@@ -521,11 +505,15 @@ spec:
       from the cluster. Never speculate when you can check.
 EOF
 
+# Clean up the legacy cluster-assistant agent if it's still around from
+# an older setup run.
+kubectl delete agent cluster-assistant -n demo --ignore-not-found 2>/dev/null || true
+
 info "Waiting for agents..."
 kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="Accepted")].status}'=True \
-  agent/cluster-assistant agent/k8s-explorer agent/security-auditor -n demo --timeout=120s 2>/dev/null || true
+  agent/k8s-explorer agent/security-auditor -n demo --timeout=120s 2>/dev/null || true
 sleep 30
-ok "Demo agents created (3 agents)"
+ok "Demo agents created (2 agents)"
 
 # ============================================================================
 # 9a. Pre-bake EnterpriseAgentgatewayPolicy YAML for the demo
@@ -609,8 +597,7 @@ echo "  writer  — writers group — global.Writer"
 echo "  reader  — readers group — global.Reader"
 echo ""
 echo "Demo agents (namespace: demo):"
-echo "  cluster-assistant  — General purpose, no tools (no policy restriction)"
-echo "  k8s-explorer       — Live kubectl tools (no policy restriction)"
+echo "  k8s-explorer       — Live kubectl tools, available to all users"
 echo "  security-auditor   — Live kubectl tools, waypoint-attached (policy target)"
 echo ""
 echo "Pre-baked policy:  ${SCRIPT_DIR}/access-policy.yaml"

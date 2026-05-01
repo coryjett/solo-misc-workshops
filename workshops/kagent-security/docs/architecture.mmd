@@ -17,7 +17,6 @@ graph LR
     end
 
     subgraph Agents
-        A1["cluster-assistant<br/>✅ all users"]
         A2["k8s-explorer<br/>✅ all users<br/>🔧 kubectl tools"]
         A3["security-auditor<br/>🔒 admins only<br/>🔧 kubectl tools"]
     end
@@ -25,7 +24,6 @@ graph LR
     KC -->|OIDC login| UI
     UI --> CTRL
     CTRL -->|OBO JWT<br/>iss=kagent.kagent<br/>role=admin| ZT
-    ZT --> A1
     ZT --> A2
     ZT --> WP
     WP -->|admin: 200| A3
@@ -40,6 +38,5 @@ graph LR
     style AP fill:#d0bfff,stroke:#8b5cf6
     style ZT fill:#eebefa,stroke:#8b5cf6
     style WP fill:#d0bfff,stroke:#8b5cf6
-    style A1 fill:#b2f2bb,stroke:#22c55e
     style A2 fill:#b2f2bb,stroke:#22c55e
     style A3 fill:#ffc9c9,stroke:#ef4444

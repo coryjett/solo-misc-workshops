@@ -31,7 +31,6 @@ Verify:
 | reader | password | readers | global.Reader |
 
 **Pre-created agents:**
-- `cluster-assistant` — general purpose, no tools, no policy restrictions
 - `k8s-explorer` — live kubectl tools, available to all users
 - `security-auditor` — live kubectl tools, **waypoint-attached** (Istio ambient), will be restricted during the demo
 
@@ -66,7 +65,7 @@ Verify:
 Open http://localhost:4000 and log in as **admin** / **password**.
 
 > **Show:**
-> - Navigate to **Agents** — all three agents visible: `cluster-assistant`, `k8s-explorer`, `security-auditor`
+> - Navigate to **Agents** — both agents visible: `k8s-explorer`, `security-auditor`
 > - Click into `security-auditor` — full access to edit the agent configuration, model, system prompt
 > - Navigate to **Settings** — access to model configs, cluster settings, user management
 

@@ -67,7 +67,7 @@ UI_READY=$(kubectl --context ${CTX} get pods -n kagent -l app=solo-enterprise-ui
 [[ "$UI_READY" == "4" ]] && pass "Solo Enterprise UI 4/4 containers ready" || fail "Solo Enterprise UI only ${UI_READY}/4 containers ready"
 
 # 6. Agents accepted
-for agent in cluster-assistant security-auditor k8s-explorer; do
+for agent in security-auditor k8s-explorer; do
   if kubectl --context ${CTX} get agent ${agent} -n demo -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q True; then
     pass "Agent '${agent}' accepted"
   else
@@ -76,7 +76,7 @@ for agent in cluster-assistant security-auditor k8s-explorer; do
 done
 
 # 7. Agent pods running
-for agent in cluster-assistant security-auditor k8s-explorer; do
+for agent in security-auditor k8s-explorer; do
   if kubectl --context ${CTX} get pods -n demo --no-headers 2>/dev/null | grep "${agent}" | grep -q "Running"; then
     pass "Agent pod '${agent}' running"
   else
