@@ -9,8 +9,9 @@ A 25-minute security demo for Solo Enterprise for kagent using Keycloak as the I
 **Flow:**
 1. User authenticates via Keycloak (OIDC)
 2. RBAC maps IdP groups to kagent roles (Admin/Writer/Reader)
-3. AccessPolicies restrict which users can access which agents
-4. Agent Gateway enforces policies and generates audit traces
+3. kagent mints an OBO (On-Behalf-Of) token carrying the user's `Groups` claim
+4. AccessPolicies translate to `EnterpriseAgentgatewayPolicy` enforced at the Istio ambient waypoint in front of each restricted agent
+5. Agent Gateway validates the OBO token's `Groups` claim against a CEL policy and forwards or rejects with `403 authorization failed`
 
 ## Quick Start
 
@@ -34,7 +35,8 @@ Then follow the [Workshop Guide](workshop-guide.md).
 - `docker`, `kubectl`, `helm`, `jq` installed
 - An OpenAI API key
 - An Agent Gateway Enterprise license key
-- ~6 GB RAM available (k3d cluster + Keycloak container)
+- ~10 GB RAM available (k3d 1 server + 3 agents, Istio ambient, Keycloak, kagent, AGW)
+- k3d cluster uses 3 agent nodes — Istio ambient + waypoint + kagent + tools cannot fit on a single agent
 
 ## Demo Flow
 

@@ -11,7 +11,10 @@ echo "Deleting k3d cluster..."
 k3d cluster delete kagent-security 2>/dev/null || true
 
 echo "Cleaning up generated files..."
-rm -rf "$(dirname "$0")/ssl" "$(dirname "$0")/realm-data"
+DIR="$(dirname "$0")"
+rm -rf "${DIR}/ssl"
+rm -f "${DIR}/access-policy.yaml"
+# realm-data/ is committed to the repo — do not delete
 
 echo "Killing port-forwards..."
 pkill -f "port-forward.*kagent-security" 2>/dev/null || true

@@ -83,12 +83,58 @@ else
   fail "Agent Gateway not running"
 fi
 
+# 8a. Istio ambient mesh
+for istio_pod in istiod istio-cni ztunnel; do
+  if kubectl --context ${CTX} get pods -n istio-system --no-headers 2>/dev/null | grep "${istio_pod}" | grep -q "Running"; then
+    pass "Istio ${istio_pod} running"
+  else
+    fail "Istio ${istio_pod} not running — AccessPolicy enforcement requires ambient mesh"
+  fi
+done
+
+# 8b. demo namespace ambient mode
+DM=$(kubectl --context ${CTX} get ns demo -o jsonpath='{.metadata.labels.istio\.io/dataplane-mode}' 2>/dev/null)
+[[ "$DM" == "ambient" ]] && pass "demo namespace in ambient mode" || fail "demo namespace missing istio.io/dataplane-mode=ambient"
+
+# 8c. Waypoint Gateway provisioned for security-auditor
+if kubectl --context ${CTX} get gateway agent-security-auditor-waypoint -n demo >/dev/null 2>&1; then
+  pass "Waypoint Gateway agent-security-auditor-waypoint exists"
+else
+  fail "Waypoint Gateway not provisioned — check kagent.solo.io/waypoint=true label on security-auditor"
+fi
+
+# 8d. Waypoint pod running
+if kubectl --context ${CTX} get pods -n demo --no-headers 2>/dev/null | grep "agent-security-auditor-waypoint" | grep -q "Running"; then
+  pass "Waypoint pod running"
+else
+  fail "Waypoint pod not running"
+fi
+
+# 8e. AgentgatewayParameters + GatewayClass parametersRef
+if kubectl --context ${CTX} get gatewayclass enterprise-agentgateway-waypoint -o jsonpath='{.spec.parametersRef.name}' 2>/dev/null | grep -q "agentgateway-waypoint-params"; then
+  pass "GatewayClass parametersRef configured"
+else
+  fail "GatewayClass parametersRef missing — waypoint cert renewal will fail"
+fi
+
+# 8f. oboClaimsToPropagate includes Groups (read from kagent-enterprise-config configmap)
+OBO_CLAIMS=$(kubectl --context ${CTX} get configmap kagent-enterprise-config -n kagent -o jsonpath='{.data.OBO_CLAIMS_TO_PROPAGATE}' 2>/dev/null)
+if [[ "${OBO_CLAIMS}" == *"Groups"* ]]; then
+  pass "oboClaimsToPropagate includes Groups (=${OBO_CLAIMS})"
+else
+  fail "OBO_CLAIMS_TO_PROPAGATE missing Groups (=${OBO_CLAIMS:-unset}) — Groups claim won't reach OBO tokens"
+fi
+
 # 9. UI accessible via port-forward
 curl -sf -o /dev/null http://localhost:4000 2>/dev/null && pass "UI accessible at http://localhost:4000" || fail "UI not accessible — run: kubectl --context ${CTX} port-forward -n kagent svc/solo-enterprise-ui 4000:80"
 
-# 10. No existing access policies (clean slate for demo)
-POLICY_COUNT=$(kubectl --context ${CTX} get accesspolicies -A --no-headers 2>/dev/null | wc -l | tr -d ' ')
-[[ "$POLICY_COUNT" == "0" ]] && pass "No AccessPolicies (clean slate)" || fail "${POLICY_COUNT} AccessPolicies exist — delete for clean demo"
+# 10. Pre-baked policy file exists
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+[[ -f "${SCRIPT_DIR}/access-policy.yaml" ]] && pass "access-policy.yaml ready for demo" || fail "access-policy.yaml missing — re-run setup.sh"
+
+# 11. No existing EnterpriseAgentgatewayPolicy (clean slate for demo)
+POLICY_COUNT=$(kubectl --context ${CTX} get enterpriseagentgatewaypolicy -A --no-headers 2>/dev/null | wc -l | tr -d ' ')
+[[ "$POLICY_COUNT" == "0" ]] && pass "No EnterpriseAgentgatewayPolicies (clean slate)" || fail "${POLICY_COUNT} EnterpriseAgentgatewayPolicies exist — delete for clean demo"
 
 echo ""
 if [[ $ERRORS -eq 0 ]]; then

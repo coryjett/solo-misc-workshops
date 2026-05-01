@@ -44,8 +44,10 @@ command -v jq      >/dev/null 2>&1 || fail "jq not found"
 ok "Prerequisites met"
 
 CLUSTER_NAME="${CLUSTER_NAME:-kagent-security}"
-KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.3.17}"
+KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.3.19}"
 AGW_VERSION="${AGW_VERSION:-v2.3.0-rc.1}"
+ISTIO_VERSION="${ISTIO_VERSION:-1.27.1-solo}"
+ISTIO_REPO="${ISTIO_REPO:-oci://us-docker.pkg.dev/soloio-img/istio-helm}"
 
 # Detect LAN IP (used so both browser and cluster can reach Keycloak)
 MAC_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
@@ -135,7 +137,7 @@ else
     curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
   fi
   k3d cluster create "${CLUSTER_NAME}" \
-    --servers 1 --agents 1 \
+    --servers 1 --agents 3 \
     --k3s-arg "--disable=traefik@server:0" \
     --wait
 fi
@@ -146,11 +148,55 @@ ok "Cluster ready"
 # 3. Namespaces + Gateway API CRDs
 # ============================================================================
 info "Creating namespaces..."
-for ns in kagent agentgateway-system demo; do
+for ns in kagent agentgateway-system demo istio-system; do
   kubectl create namespace "$ns" 2>/dev/null || true
 done
+# Demo namespace into Istio ambient mode (required for AccessPolicy enforcement)
+kubectl label namespace demo istio.io/dataplane-mode=ambient --overwrite
+# kagent namespace also ambient — kagent-controller proxies UI traffic to agents.
+# If kagent ns is non-ambient, that traffic bypasses the waypoint and reaches
+# the agent directly with no JWT enforcement (reader can chat with restricted agents).
+kubectl label namespace kagent istio.io/dataplane-mode=ambient --overwrite
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml 2>&1 | tail -1
 ok "Namespaces and CRDs ready"
+
+# ============================================================================
+# 3a. Istio Ambient Mesh (required for AccessPolicy enforcement at waypoint)
+# ============================================================================
+info "Installing Istio ambient mesh ${ISTIO_VERSION}..."
+helm upgrade -i istio-base "${ISTIO_REPO}/base" \
+  --version "${ISTIO_VERSION}" -n istio-system --wait 2>&1 | tail -1
+helm upgrade -i istiod "${ISTIO_REPO}/istiod" \
+  --version "${ISTIO_VERSION}" -n istio-system \
+  --set profile=ambient --set meshConfig.accessLogFile=/dev/stdout \
+  --wait 2>&1 | tail -1
+helm upgrade -i istio-cni "${ISTIO_REPO}/cni" \
+  --version "${ISTIO_VERSION}" -n istio-system \
+  --set profile=ambient \
+  --set cni.cniBinDir=/var/lib/rancher/k3s/data/cni \
+  --set cni.cniConfDir=/var/lib/rancher/k3s/agent/etc/cni/net.d \
+  --wait 2>&1 | tail -1
+
+# Copy istio-cni binary to host CNI bin dir on every k3d node.
+# install-cni container writes the conflist but ships the binary inside
+# the image — k3s containerd only reads from /var/lib/rancher/k3s/data/cni.
+# Tolerant of `set -e` — find/grep can exit 1 with no matches.
+info "Installing istio-cni binary on k3d nodes..."
+NODES=$(docker ps --filter "label=app=k3d" --format '{{.Names}}' 2>/dev/null | grep -E "${CLUSTER_NAME}-(server|agent)" || true)
+for node in ${NODES}; do
+  SRC=$(docker exec "$node" sh -c 'find /var/lib/rancher/k3s/agent/containerd -path "*/opt/cni/bin/istio-cni" 2>/dev/null | head -1' || true)
+  if [[ -n "$SRC" ]]; then
+    docker exec "$node" sh -c "cp '$SRC' /var/lib/rancher/k3s/data/cni/istio-cni && chmod +x /var/lib/rancher/k3s/data/cni/istio-cni" || warn "$node: copy failed"
+    ok "$node: istio-cni binary installed"
+  else
+    warn "$node: istio-cni binary source not found"
+  fi
+done
+
+helm upgrade -i ztunnel "${ISTIO_REPO}/ztunnel" \
+  --version "${ISTIO_VERSION}" -n istio-system --wait 2>&1 | tail -1
+kubectl -n istio-system wait --for=condition=ready pod -l app=istiod --timeout=180s
+ok "Istio ambient mesh installed"
 
 # ============================================================================
 # 4. Backend client secret
@@ -185,6 +231,36 @@ kubectl -n agentgateway-system wait --for=condition=ready pod \
 ok "Agent Gateway Enterprise deployed"
 
 # ============================================================================
+# 5a. AgentgatewayParameters + GatewayClass patch
+#     (required so waypoint Gateways trust istiod's local cluster identity)
+# ============================================================================
+info "Configuring AgentgatewayParameters for waypoint..."
+kubectl apply -f - <<'EOF'
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: agentgateway-waypoint-params
+  namespace: agentgateway-system
+spec:
+  env:
+    - name: CLUSTER_ID
+      value: "Kubernetes"
+    - name: NETWORK
+      value: ""
+EOF
+
+# Wait for GatewayClass created by AGW controller
+for i in $(seq 1 30); do
+  kubectl get gatewayclass enterprise-agentgateway-waypoint >/dev/null 2>&1 && break
+  [[ $i -eq 30 ]] && fail "GatewayClass enterprise-agentgateway-waypoint not found"
+  sleep 2
+done
+
+kubectl patch gatewayclass enterprise-agentgateway-waypoint --type=merge -p \
+  '{"spec":{"parametersRef":{"group":"agentgateway.dev","kind":"AgentgatewayParameters","name":"agentgateway-waypoint-params","namespace":"agentgateway-system"}}}'
+ok "GatewayClass patched"
+
+# ============================================================================
 # 6. OBO RSA key pair
 # ============================================================================
 info "Generating OBO RSA key pair..."
@@ -207,6 +283,8 @@ licensing:
   licenseKey: ${AGENTGATEWAY_LICENSE_KEY}
 oidc:
   issuer: ${KEYCLOAK_ISSUER}
+istioAuthzTranslation:
+  enabled: true
 ui:
   backend:
     oidc: {clientId: ${KEYCLOAK_BACKEND_CLIENT_ID}, secretRef: kagent-backend-secret}
@@ -231,7 +309,11 @@ helm upgrade -i kagent-crds \
 cat > /tmp/kagent.yaml <<EOF
 licensing: {licenseKey: ${AGENTGATEWAY_LICENSE_KEY}}
 providers: {default: openAI, openAI: {apiKey: ${OPENAI_API_KEY}}}
-oidc: {issuer: ${KEYCLOAK_ISSUER}, secret: kagent-backend-secret}
+oidc:
+  issuer: ${KEYCLOAK_ISSUER}
+  secret: kagent-backend-secret
+  oboClaimsToPropagate:
+    - Groups
 kagent-tools:
   enabled: true
 otel:
@@ -326,6 +408,8 @@ kind: Agent
 metadata:
   name: security-auditor
   namespace: demo
+  labels:
+    kagent.solo.io/waypoint: "true"
 spec:
   description: "Elevated security auditor with live cluster access"
   declarative:
@@ -356,6 +440,93 @@ sleep 30
 ok "Demo agents created (3 agents)"
 
 # ============================================================================
+# 9a. Pre-bake EnterpriseAgentgatewayPolicy YAML for the demo
+#     (workshop applies this during Part 3 — JWKS must be fetched now since
+#      it depends on kagent controller running)
+# ============================================================================
+info "Waiting for security-auditor waypoint Gateway..."
+for i in $(seq 1 60); do
+  kubectl get gateway agent-security-auditor-waypoint -n demo >/dev/null 2>&1 && break
+  [[ $i -eq 60 ]] && fail "waypoint Gateway not created — check kagent.solo.io/waypoint label on security-auditor"
+  sleep 3
+done
+ok "Waypoint Gateway provisioned"
+
+info "Fetching kagent OBO JWKS..."
+KAGENT_SVC="kagent"
+kubectl get svc kagent -n kagent >/dev/null 2>&1 || KAGENT_SVC="kagent-controller"
+KAGENT_PORT=$(kubectl get svc -n kagent "${KAGENT_SVC}" -o jsonpath='{.spec.ports[?(@.name=="http")].port}' 2>/dev/null)
+[[ -z "${KAGENT_PORT}" ]] && KAGENT_PORT=8083
+
+pkill -f "port-forward.*${KAGENT_SVC}.*18083" 2>/dev/null || true
+kubectl port-forward -n kagent "svc/${KAGENT_SVC}" 18083:${KAGENT_PORT} >/dev/null 2>&1 &
+PF_PID=$!
+sleep 4
+JWKS=$(curl -sf http://localhost:18083/jwks.json 2>/dev/null || true)
+kill ${PF_PID} 2>/dev/null || true
+[[ -z "${JWKS}" ]] && fail "Could not fetch JWKS from kagent controller (svc=${KAGENT_SVC} port=${KAGENT_PORT})"
+JWKS_INLINE=$(echo "${JWKS}" | jq -c .)
+
+cat > "${SCRIPT_DIR}/access-policy.yaml" <<EOF
+# Restricts the security-auditor agent to users in the "admins" Keycloak group.
+#
+# Two resources because of a current limitation in kagent-enterprise ${KAGENT_ENT_VERSION}:
+#  1. AccessPolicy (high-level, shown in kagent UI). Auto-translation in this
+#     version produces an EnterpriseAgentgatewayPolicy targeting an HTTPRoute
+#     bound to a Service — AGW does not recognize Service parentRefs as a
+#     valid attachment, so the generated policy stays "Attached: False" and
+#     does not enforce. Generated CEL is also \`jwt.Groups == "admins"\` which
+#     is a string-equality check on an array claim and never matches.
+#  2. EnterpriseAgentgatewayPolicy (low-level) targeted at the waypoint
+#     Gateway directly with the correct CEL expression. This is what
+#     actually enforces the policy.
+---
+apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: admin-only-security-auditor
+  namespace: demo
+spec:
+  action: ALLOW
+  from:
+    subjects:
+      - kind: UserGroup
+        userGroup:
+          claimName: Groups
+          claimValue: admins
+          issuer: kagent.kagent
+          jwksKey:
+            inline: '${JWKS_INLINE}'
+  targetRef:
+    kind: Agent
+    name: security-auditor
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: admin-only-security-auditor-enforce
+  namespace: demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agent-security-auditor-waypoint
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: kagent.kagent
+          jwks:
+            inline: '${JWKS_INLINE}'
+    authorization:
+      action: Allow
+      policy:
+        matchExpressions:
+          - 'jwt.Groups.exists(g, g == "admins")'
+EOF
+ok "Policy YAML generated: ${SCRIPT_DIR}/access-policy.yaml"
+
+# ============================================================================
 # 10. Start port-forwards
 # ============================================================================
 info "Starting port-forwards..."
@@ -380,10 +551,13 @@ echo ""
 echo "Demo agents (namespace: demo):"
 echo "  cluster-assistant  — General purpose, no tools (no policy restriction)"
 echo "  k8s-explorer       — Live kubectl tools (no policy restriction)"
-echo "  security-auditor   — Live kubectl tools (restrict via AccessPolicy)"
+echo "  security-auditor   — Live kubectl tools, waypoint-attached (policy target)"
+echo ""
+echo "Pre-baked policy:  ${SCRIPT_DIR}/access-policy.yaml"
+echo "  Apply during demo: kubectl apply -f access-policy.yaml"
 echo ""
 echo -e "${YELLOW}NOTE:${NC} Keycloak is at ${MAC_IP}:${KEYCLOAK_PORT}."
-echo "      If your IP changes, re-run setup."
+echo "      If your IP changes, run reconfig.sh"
 echo ""
 echo "Continue to the Workshop Guide (workshop-guide.md)"
 echo ""
