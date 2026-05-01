@@ -1,0 +1,132 @@
+# access-policy-patcher
+#
+# Watches AccessPolicy + EnterpriseAgentgatewayPolicy in the demo namespace
+# and patches kagent-enterprise 0.3.19's auto-generated EAP so it actually
+# enforces. Two patches:
+#   1. targetRefs: HTTPRoute → Gateway (the real waypoint Gateway)
+#   2. CEL: jwt.<claim> == "<value>"  →  jwt.<claim>.exists(g, g == "<value>")
+#
+# This is the workshop's "UI-only" path. User creates an AccessPolicy in the
+# kagent UI, this controller activates enforcement automatically. Remove once
+# kagent-enterprise fixes the upstream translation.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: access-policy-patcher
+  namespace: kagent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: access-policy-patcher
+rules:
+  - apiGroups: ["policy.kagent-enterprise.solo.io"]
+    resources: ["accesspolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["enterpriseagentgateway.solo.io"]
+    resources: ["enterpriseagentgatewaypolicies"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: access-policy-patcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: access-policy-patcher
+subjects:
+  - kind: ServiceAccount
+    name: access-policy-patcher
+    namespace: kagent
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: access-policy-patcher
+  namespace: kagent
+data:
+  patcher.sh: |
+    #!/bin/bash
+    set -uo pipefail
+    echo "[$(date +%H:%M:%S)] access-policy-patcher starting"
+    while true; do
+      kubectl get accesspolicy -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"|"}{.metadata.name}{"|"}{.spec.targetRef.name}{"\n"}{end}' 2>/dev/null \
+      | while IFS='|' read -r ns name agent; do
+        [[ -z "$ns" || -z "$name" || -z "$agent" ]] && continue
+        eap="accesspolicy-${name}-waypoint"
+        waypoint="agent-${agent}-waypoint"
+        # Skip if EAP not yet generated
+        kubectl get enterpriseagentgatewaypolicy "${eap}" -n "${ns}" >/dev/null 2>&1 || continue
+        # Skip if waypoint Gateway doesn't exist
+        kubectl get gateway "${waypoint}" -n "${ns}" >/dev/null 2>&1 || continue
+        # Read current state
+        kind=$(kubectl get enterpriseagentgatewaypolicy "${eap}" -n "${ns}" -o jsonpath='{.spec.targetRefs[0].kind}' 2>/dev/null)
+        cel=$(kubectl get enterpriseagentgatewaypolicy "${eap}" -n "${ns}" -o jsonpath='{.spec.traffic.authorization.policy.matchExpressions[0]}' 2>/dev/null)
+        # Determine if a patch is needed
+        need_patch="false"
+        new_cel="${cel}"
+        if [[ "${kind}" != "Gateway" ]]; then
+          need_patch="true"
+        fi
+        # Convert string-eq to array-exists if applicable
+        if [[ "${cel}" =~ ^jwt\.([A-Za-z0-9_]+)\ ==\ \"([^\"]+)\"$ ]]; then
+          claim="${BASH_REMATCH[1]}"
+          value="${BASH_REMATCH[2]}"
+          new_cel="jwt.${claim}.exists(g, g == \"${value}\")"
+          need_patch="true"
+        fi
+        if [[ "${need_patch}" == "true" ]]; then
+          echo "[$(date +%H:%M:%S)] Patching ${ns}/${eap} → Gateway ${waypoint}, CEL: ${new_cel}"
+          patch=$(printf '[{"op":"replace","path":"/spec/targetRefs/0/kind","value":"Gateway"},{"op":"replace","path":"/spec/targetRefs/0/name","value":"%s"},{"op":"replace","path":"/spec/traffic/authorization/policy/matchExpressions/0","value":%s}]' \
+            "${waypoint}" \
+            "$(printf '%s' "${new_cel}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")
+          kubectl patch enterpriseagentgatewaypolicy "${eap}" -n "${ns}" --type=json -p "${patch}" >/dev/null 2>&1 \
+            && echo "[$(date +%H:%M:%S)] OK ${ns}/${eap}" \
+            || echo "[$(date +%H:%M:%S)] FAILED ${ns}/${eap}"
+        fi
+      done
+      sleep 5
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: access-policy-patcher
+  namespace: kagent
+  labels:
+    app: access-policy-patcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: access-policy-patcher
+  template:
+    metadata:
+      labels:
+        app: access-policy-patcher
+    spec:
+      serviceAccountName: access-policy-patcher
+      containers:
+        - name: patcher
+          image: alpine/k8s:1.31.0
+          command: ["bash", "/scripts/patcher.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: scripts
+          configMap:
+            name: access-policy-patcher
+            defaultMode: 0755

@@ -343,6 +343,20 @@ kubectl rollout status deploy/solo-enterprise-ui -n kagent --timeout=180s 2>&1 |
 ok "UI restarted with full CRD watch list"
 
 # ============================================================================
+# 8a. AccessPolicy patcher
+#     Workaround for kagent-enterprise 0.3.19 translation bugs (Issues 1+1b
+#     in TROUBLESHOOTING.md): when an AccessPolicy is created (UI or kubectl),
+#     kagent generates an EnterpriseAgentgatewayPolicy that targets the wrong
+#     resource and uses string-eq CEL on an array claim. The patcher
+#     Deployment watches AccessPolicy + EAP and rewrites the bad bits so the
+#     UI-only flow actually enforces.
+# ============================================================================
+info "Deploying access-policy-patcher..."
+kubectl apply -f "${SCRIPT_DIR}/manifests/access-policy-patcher.yaml" 2>&1 | tail -1
+kubectl -n kagent rollout status deploy/access-policy-patcher --timeout=120s 2>&1 | tail -1
+ok "AccessPolicy patcher running"
+
+# ============================================================================
 # 9. Create demo agents (in demo namespace)
 # ============================================================================
 info "Creating demo agents..."
@@ -479,17 +493,10 @@ JWKS_INLINE=$(echo "${JWKS}" | jq -c .)
 cat > "${SCRIPT_DIR}/access-policy.yaml" <<EOF
 # Restricts the security-auditor agent to users in the "admins" Keycloak group.
 #
-# Two resources because of a current limitation in kagent-enterprise ${KAGENT_ENT_VERSION}:
-#  1. AccessPolicy (high-level, shown in kagent UI). Auto-translation in this
-#     version produces an EnterpriseAgentgatewayPolicy targeting an HTTPRoute
-#     bound to a Service — AGW does not recognize Service parentRefs as a
-#     valid attachment, so the generated policy stays "Attached: False" and
-#     does not enforce. Generated CEL is also \`jwt.Groups == "admins"\` which
-#     is a string-equality check on an array claim and never matches.
-#  2. EnterpriseAgentgatewayPolicy (low-level) targeted at the waypoint
-#     Gateway directly with the correct CEL expression. This is what
-#     actually enforces the policy.
----
+# Same shape as what the kagent UI produces when you create an AccessPolicy
+# in the Access Policies tab. The access-policy-patcher Deployment fixes the
+# auto-generated EnterpriseAgentgatewayPolicy so this actually enforces — see
+# TROUBLESHOOTING.md Issues 1 + 1b for why that's needed in 0.3.19.
 apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
 kind: AccessPolicy
 metadata:
@@ -509,29 +516,6 @@ spec:
   targetRef:
     kind: Agent
     name: security-auditor
----
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayPolicy
-metadata:
-  name: admin-only-security-auditor-enforce
-  namespace: demo
-spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: agent-security-auditor-waypoint
-  traffic:
-    jwtAuthentication:
-      mode: Strict
-      providers:
-        - issuer: kagent.kagent
-          jwks:
-            inline: '${JWKS_INLINE}'
-    authorization:
-      action: Allow
-      policy:
-        matchExpressions:
-          - 'jwt.Groups.exists(g, g == "admins")'
 EOF
 ok "Policy YAML generated: ${SCRIPT_DIR}/access-policy.yaml"
 

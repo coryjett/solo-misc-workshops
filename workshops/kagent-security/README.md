@@ -73,14 +73,15 @@ clears chat sessions; keeps cluster, Istio, kagent, agents, Keycloak.
 ./reset.sh
 ```
 
-## UI-flow AccessPolicy
+## UI-only AccessPolicy
 
-Create an AccessPolicy in the kagent UI then activate enforcement (works around two
-translation bugs in kagent-enterprise 0.3.19 — see TROUBLESHOOTING.md Issues 1 and 1b):
+Create the AccessPolicy in the kagent UI (Access Policies → + New). The
+`access-policy-patcher` Deployment installed by `setup.sh` watches for the
+auto-generated `EnterpriseAgentgatewayPolicy` and rewrites the broken bits
+within ~5 seconds — no extra command needed.
 
-```bash
-./activate-ui-policy.sh <accesspolicy-name>
-```
+The standalone `activate-ui-policy.sh` is kept for one-shot manual fixes if
+you'd rather not run the patcher Deployment.
 
 ## Cleanup
 

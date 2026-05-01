@@ -100,39 +100,25 @@ Log in as **admin** / **password**.
 > - Open `security-auditor`, chat: **"Show me the cluster configuration"** — works, returns live data
 > - Both agents respond with real cluster state — no restrictions yet
 
-### Step 2 — Apply the policy
+### Step 2 — Create the AccessPolicy in the kagent UI
 
-Two options. Both end in the same enforcement; pick whichever tells the story you want.
+Navigate to **Access Policies → + New Access Policy**. Fill in:
 
-#### Option A — kubectl (fastest)
-
-`access-policy.yaml` is pre-baked by `setup.sh` with the kagent OBO JWKS embedded. Ships an `AccessPolicy` (UI-visible) plus a manually-targeted `EnterpriseAgentgatewayPolicy` that actually enforces.
-
-```bash
-kubectl apply -f access-policy.yaml
-cat access-policy.yaml
-```
-
-#### Option B — UI (visual)
-
-Create the AccessPolicy in the kagent UI (Access Policies → + New Access Policy):
 - **Name:** `admin-only-security-auditor`
+- **Namespace:** `demo`
 - **Target:** Agent — `security-auditor`
-- **Subject:** UserGroup, claim `Groups`, value `admins`, issuer `kagent.kagent`, JWKS inline (paste from `access-policy.yaml`)
+- **Subject:** UserGroup
+  - **Claim name:** `Groups`
+  - **Claim value:** `admins`
+  - **Issuer:** `kagent.kagent`
+  - **JWKS (inline):** paste the inline JWKS from `cat access-policy.yaml` (the long single-line JSON between the single quotes)
 - **Action:** ALLOW
 
-Then activate enforcement (one-time fix for kagent-enterprise 0.3.19 translation bugs):
+Save. Within ~5 seconds the policy is enforcing.
 
-```bash
-./activate-ui-policy.sh admin-only-security-auditor
-```
+> **Behind the scenes:** kagent translates the AccessPolicy into an `EnterpriseAgentgatewayPolicy`. In 0.3.19 that translation has two bugs that make the policy a no-op (wrong target, wrong CEL — see `TROUBLESHOOTING.md`). The `access-policy-patcher` Deployment that `setup.sh` installed in the `kagent` namespace watches for the generated EAP and rewrites it: target → the waypoint Gateway, CEL → array-aware `jwt.Groups.exists(g, g == "admins")`.
 
-The script retargets the auto-generated `EnterpriseAgentgatewayPolicy` at the waypoint Gateway directly and rewrites its CEL from `jwt.Groups == "admins"` (string-eq, never matches an array claim) to `jwt.Groups.exists(g, g == "admins")`. See `TROUBLESHOOTING.md` for why this is needed.
-
-Key fields in either case:
-- Target: the `agent-security-auditor-waypoint` Gateway (auto-provisioned because the Agent has `kagent.solo.io/waypoint: "true"`)
-- JWT issuer `kagent.kagent` — validates the OBO token kagent mints for each user
-- CEL `jwt.Groups.exists(g, g == "admins")` — array-aware check on the propagated `Groups` claim
+> **Prefer kubectl?** `kubectl apply -f access-policy.yaml` applies the same AccessPolicy.
 
 > **Talk track:** "Only users in the `admins` Keycloak group can reach the `security-auditor` agent. Enforcement happens at the Istio ambient waypoint that sits in front of the agent — every request carries an OBO (On-Behalf-Of) token kagent minted from the user's OIDC token, and Agent Gateway validates it against this policy before forwarding."
 
