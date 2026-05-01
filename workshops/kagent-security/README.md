@@ -73,6 +73,15 @@ clears chat sessions; keeps cluster, Istio, kagent, agents, Keycloak.
 ./reset.sh
 ```
 
+## UI-flow AccessPolicy
+
+Create an AccessPolicy in the kagent UI then activate enforcement (works around two
+translation bugs in kagent-enterprise 0.3.19 — see TROUBLESHOOTING.md Issues 1 and 1b):
+
+```bash
+./activate-ui-policy.sh <accesspolicy-name>
+```
+
 ## Cleanup
 
 Full teardown — deletes the k3d cluster and stops Keycloak.

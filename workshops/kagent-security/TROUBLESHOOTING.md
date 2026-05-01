@@ -2,6 +2,8 @@
 
 This is the debug history that drove the final shape of `setup.sh`. Future-you will hit some subset of these. Each issue silently disabled the chain at a different layer.
 
+> **TL;DR for the UI flow.** kagent-enterprise 0.3.19 has two translation bugs that make UI-created AccessPolicies no-op (Issues 1 and 1b below). The workshop ships `activate-ui-policy.sh` which patches the auto-generated `EnterpriseAgentgatewayPolicy` to fix both. Run it once after creating the AccessPolicy in the UI.
+
 ## The chain
 
 ```
@@ -18,9 +20,9 @@ Any of these layers can no-op without a clear error.
 
 **Symptom:** AccessPolicy created. EnterpriseAgentgatewayPolicy auto-generated. Status: `Attached: False`. Requests went through unfiltered.
 
-**Cause:** The auto-generated EnterpriseAgentgatewayPolicy targeted an HTTPRoute whose `parentRefs` pointed at Services, not Gateways. The AGW controller only recognizes Gateway parentRefs as valid attachment targets.
+**Cause:** kagent-enterprise's waypoint translator (`waypoint_translator_plugin.go`) generates the agent's HTTPRoute with **Service** parentRefs only. The AccessPolicy translator then generates an `EnterpriseAgentgatewayPolicy` targeting that HTTPRoute. AGW's policy attachment logic looks for the HTTPRoute's *Gateway* parentRefs to decide which Gateway to attach to — sees none → `Attached: False`.
 
-**Fix:** Manually create an `EnterpriseAgentgatewayPolicy` with `targetRefs` pointing directly at the auto-provisioned waypoint Gateway (`agent-security-auditor-waypoint`).
+**Fix:** Manually create (or patch) the `EnterpriseAgentgatewayPolicy` with `targetRefs` pointing directly at the auto-provisioned waypoint Gateway (`agent-{name}-waypoint`).
 
 ```yaml
 spec:
@@ -29,6 +31,25 @@ spec:
       kind: Gateway
       name: agent-security-auditor-waypoint
 ```
+
+**Workshop workaround:** `activate-ui-policy.sh <accesspolicy-name>` watches for the auto-generated EAP and patches its `targetRefs` + CEL.
+
+## Issue 1b — Auto-generated CEL is string-equality on an array claim
+
+**Symptom:** Even with the EAP attached, every user — including admin — got `403 authorization failed`.
+
+**Cause:** kagent-enterprise translates a `UserGroup` subject to CEL `jwt.<ClaimName> == "<ClaimValue>"` (see `access_policy_translation.go:479`, `makeCELExpressionForSubject`). The propagated `Groups` claim is an **array** (`["admins"]`), not a string. `["admins"] == "admins"` is always false → 403 for everyone.
+
+**Fix:** Rewrite to `jwt.<ClaimName>.exists(g, g == "<ClaimValue>")` (array-contains).
+
+```yaml
+authorization:
+  policy:
+    matchExpressions:
+      - 'jwt.Groups.exists(g, g == "admins")'
+```
+
+`activate-ui-policy.sh` does this rewrite automatically.
 
 ## Issue 2 — Wrong JWKS (Keycloak vs. kagent OBO)
 
