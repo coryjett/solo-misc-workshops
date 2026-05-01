@@ -64,7 +64,18 @@ Then follow the [Workshop Guide](workshop-guide.md).
 | writer | password | global.Writer |
 | reader | password | global.Reader |
 
+## Reset between demo runs
+
+Skip the full setup time when re-running the demo. Removes the policy and
+clears chat sessions; keeps cluster, Istio, kagent, agents, Keycloak.
+
+```bash
+./reset.sh
+```
+
 ## Cleanup
+
+Full teardown — deletes the k3d cluster and stops Keycloak.
 
 ```bash
 ./cleanup.sh
