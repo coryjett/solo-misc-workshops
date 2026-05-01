@@ -437,8 +437,11 @@ spec:
   declarative:
     modelConfig: default-model-config
     systemMessage: |
-      You are a helpful Kubernetes cluster assistant. You help users understand
-      their cluster by answering questions about namespaces, pods, and services.
+      You are a Kubernetes assistant for a workshop demo. You explain
+      basic cluster concepts (namespaces, pods, services, deployments)
+      conversationally. You do NOT have any tools — if asked to inspect
+      live cluster state, say so and refer the user to the k8s-explorer
+      agent. Keep answers under 4 sentences. No bullet lists.
 ---
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
@@ -463,9 +466,12 @@ spec:
             - k8s_get_events
             - k8s_get_available_api_resources
     systemMessage: |
-      You are a Kubernetes explorer with live access to the cluster.
-      Use your tools to query real cluster state — list pods, services,
-      namespaces, and describe resources.
+      You are a Kubernetes explorer with live cluster access via the
+      kubectl tools you've been given. Use them to answer real questions
+      about cluster state — list pods, services, namespaces, describe
+      resources, fetch logs and events. Be concise: lead with the answer
+      in one sentence, then a short bullet list of the relevant data
+      points. Don't speculate when a tool can give you the truth.
 ---
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
@@ -492,9 +498,13 @@ spec:
             - k8s_get_events
             - k8s_get_cluster_configuration
     systemMessage: |
-      You are a security auditor for Kubernetes clusters. You have live access
-      to review cluster state, RBAC policies, and security configurations.
-      Only authorized security team members should use this agent.
+      You are a security auditor for Kubernetes clusters with live cluster
+      access. You review RBAC, network policies, pod security, secret
+      handling, and cluster configuration. When asked about security
+      posture, use your tools first, then call out concrete findings —
+      what's exposed, what's privileged, what's misconfigured. Lead with
+      the verdict in one sentence, then 2–4 bullets of evidence pulled
+      from the cluster. Never speculate when you can check.
 EOF
 
 info "Waiting for agents..."
@@ -590,7 +600,17 @@ echo "  k8s-explorer       — Live kubectl tools (no policy restriction)"
 echo "  security-auditor   — Live kubectl tools, waypoint-attached (policy target)"
 echo ""
 echo "Pre-baked policy:  ${SCRIPT_DIR}/access-policy.yaml"
-echo "  Apply during demo: kubectl apply -f access-policy.yaml"
+echo "  Apply via kubectl: kubectl apply -f access-policy.yaml"
+echo "  Or fill the same fields in the kagent UI Access Policies form."
+echo ""
+echo "Copy-paste fields for the UI form:"
+echo "  Subject Kind:  UserGroup"
+echo "  Claim Name:    role"
+echo "  Claim Value:   admin"
+echo "  Issuer:        kagent.kagent"
+echo "  JWKS (paste this whole line):"
+echo ""
+echo "${JWKS_INLINE}"
 echo ""
 echo -e "${YELLOW}NOTE:${NC} Keycloak is at ${MAC_IP}:${KEYCLOAK_PORT}."
 echo "      If your IP changes, run reconfig.sh"

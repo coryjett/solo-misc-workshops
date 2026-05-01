@@ -30,6 +30,18 @@ If you switch networks after setup:
 
 Then follow the [Workshop Guide](workshop-guide.md).
 
+## Versions tested
+
+| Component | Version |
+|---|---|
+| kagent Enterprise | `0.3.19` |
+| Agent Gateway Enterprise | `v2.4.0-beta.0` *(required for AccessPolicy auto-attach — see TROUBLESHOOTING Issue 1)* |
+| Solo Istio | `1.27.1-solo` (ambient profile) |
+| Keycloak | `21.1.1` |
+| k3d / k3s | k3s `v1.33.x` |
+
+Override at install time with env vars: `KAGENT_ENT_VERSION`, `AGW_VERSION`, `ISTIO_VERSION`. Later versions may require different workarounds (the kagent translator's CEL bug, Issue 1b, was still unfixed in HEAD as of 2026-05-01).
+
 ## Prerequisites
 
 - `docker`, `kubectl`, `helm`, `jq` installed
