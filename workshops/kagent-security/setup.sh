@@ -333,6 +333,15 @@ helm upgrade -i kagent \
 rm -f /tmp/management.yaml /tmp/kagent.yaml
 ok "kagent Enterprise deployed"
 
+# Restart Solo Enterprise UI so the k8sobjects-collector picks up CRDs that
+# were registered AFTER the management plane started. Without this, the
+# AccessPolicy CRD watch is never set up and the UI's "Access Policies"
+# tab stays empty (UI reads policies from ClickHouse, not the K8s API).
+info "Restarting Solo Enterprise UI to pick up new CRDs..."
+kubectl rollout restart deploy/solo-enterprise-ui -n kagent 2>&1 | tail -1
+kubectl rollout status deploy/solo-enterprise-ui -n kagent --timeout=180s 2>&1 | tail -1
+ok "UI restarted with full CRD watch list"
+
 # ============================================================================
 # 9. Create demo agents (in demo namespace)
 # ============================================================================

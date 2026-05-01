@@ -51,6 +51,20 @@ authorization:
 
 `activate-ui-policy.sh` does this rewrite automatically.
 
+## Issue 1c — UI "Access Policies" tab stays empty even after creating one
+
+**Symptom:** AccessPolicy exists in the cluster (`kubectl get accesspolicy -A` shows it) but the kagent UI's Access Policies tab says "No Access Policies Found".
+
+**Cause:** The Solo Enterprise UI lists AccessPolicies from **ClickHouse**, not from the Kubernetes API. The `k8sobjects-collector` sidecar in the UI pod populates ClickHouse by watching CRDs. If the collector starts **before** the AccessPolicy CRD is registered (Helm install order: management plane first → CRDs install second), it logs `resource not found: accesspolicies` once and never retries. The watch is never set up; the table is never populated.
+
+**Fix:** Restart the UI deployment after the kagent-enterprise CRDs are installed:
+
+```bash
+kubectl rollout restart deploy/solo-enterprise-ui -n kagent
+```
+
+`setup.sh` does this automatically at the end of section 8.
+
 ## Issue 2 — Wrong JWKS (Keycloak vs. kagent OBO)
 
 **Symptom:** Even after fixing Issue 1, requests returned `401 unknown key`.
