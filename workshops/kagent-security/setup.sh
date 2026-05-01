@@ -218,18 +218,27 @@ ok "Namespaces and CRDs ready"
 # 3a. Istio Ambient Mesh (required for AccessPolicy enforcement at waypoint)
 # ============================================================================
 info "Installing Istio ambient mesh ${ISTIO_VERSION}..."
-helm upgrade -i istio-base "${ISTIO_REPO}/base" \
-  --version "${ISTIO_VERSION}" -n istio-system --wait 2>&1 | tail -1
-helm upgrade -i istiod "${ISTIO_REPO}/istiod" \
-  --version "${ISTIO_VERSION}" -n istio-system \
-  --set profile=ambient --set meshConfig.accessLogFile=/dev/stdout \
-  --wait 2>&1 | tail -1
-helm upgrade -i istio-cni "${ISTIO_REPO}/cni" \
-  --version "${ISTIO_VERSION}" -n istio-system \
+
+# Idempotent helm install. On re-runs after a partial install, helm upgrade
+# can fail on field-manager conflicts (e.g. validating webhooks owned by
+# pilot-discovery). If a release is already deployed, skip.
+helm_install_once() {
+  local rel="$1" chart="$2"; shift 2
+  if helm --kube-context "k3d-${CLUSTER_NAME}" status "${rel}" -n istio-system >/dev/null 2>&1; then
+    info "  ${rel} already installed, skipping"
+    return 0
+  fi
+  helm upgrade -i "${rel}" "${chart}" --version "${ISTIO_VERSION}" \
+    -n istio-system --wait "$@" 2>&1 | tail -1
+}
+
+helm_install_once istio-base "${ISTIO_REPO}/base"
+helm_install_once istiod "${ISTIO_REPO}/istiod" \
+  --set profile=ambient --set meshConfig.accessLogFile=/dev/stdout
+helm_install_once istio-cni "${ISTIO_REPO}/cni" \
   --set profile=ambient \
   --set cni.cniBinDir=/var/lib/rancher/k3s/data/cni \
-  --set cni.cniConfDir=/var/lib/rancher/k3s/agent/etc/cni/net.d \
-  --wait 2>&1 | tail -1
+  --set cni.cniConfDir=/var/lib/rancher/k3s/agent/etc/cni/net.d
 
 # Copy istio-cni binary to host CNI bin dir on every k3d node.
 # install-cni container writes the conflist but ships the binary inside
@@ -247,8 +256,7 @@ for node in ${NODES}; do
   fi
 done
 
-helm upgrade -i ztunnel "${ISTIO_REPO}/ztunnel" \
-  --version "${ISTIO_VERSION}" -n istio-system --wait 2>&1 | tail -1
+helm_install_once ztunnel "${ISTIO_REPO}/ztunnel"
 kubectl -n istio-system wait --for=condition=ready pod -l app=istiod --timeout=180s
 ok "Istio ambient mesh installed"
 
@@ -402,9 +410,15 @@ ok "UI restarted with full CRD watch list"
 # ============================================================================
 info "Creating demo agents..."
 
-# Copy OpenAI secret to demo namespace
-kubectl get secret kagent-openai -n kagent -o yaml | \
-  sed 's/namespace: kagent/namespace: demo/' | kubectl apply -f -
+# Copy OpenAI secret to demo namespace.
+# Strip resourceVersion/uid/creationTimestamp so re-runs don't conflict
+# with the existing object in the demo ns.
+kubectl get secret kagent-openai -n kagent -o yaml \
+  | sed -e 's/namespace: kagent/namespace: demo/' \
+        -e '/resourceVersion:/d' \
+        -e '/uid:/d' \
+        -e '/creationTimestamp:/d' \
+  | kubectl apply -f -
 
 # Create ModelConfig in demo namespace
 kubectl apply -f - <<'EOF'
