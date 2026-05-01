@@ -2,7 +2,7 @@
 
 This is the debug history that drove the final shape of `setup.sh`. Future-you will hit some subset of these. Each issue silently disabled the chain at a different layer.
 
-> **TL;DR for the UI flow.** kagent-enterprise 0.3.19 has two translation bugs that make UI-created AccessPolicies no-op (Issues 1 and 1b below). `setup.sh` installs an `access-policy-patcher` Deployment in the `kagent` namespace that watches for the auto-generated `EnterpriseAgentgatewayPolicy` and rewrites the broken bits within ~5s — no manual step required. The standalone `activate-ui-policy.sh` is kept for one-shot manual fixes.
+> **TL;DR for the UI flow.** kagent-enterprise 0.3.19 has two translation bugs that make UI-created AccessPolicies no-op (Issues 1 and 1b below). After creating the AccessPolicy in the UI, run `./activate-ui-policy.sh <name>` once — it patches the auto-generated `EnterpriseAgentgatewayPolicy` (fixes the targetRef and the CEL).
 
 ## The chain
 

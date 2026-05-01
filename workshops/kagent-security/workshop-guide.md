@@ -114,13 +114,21 @@ Navigate to **Access Policies → + New Access Policy**. Fill in:
   - **JWKS (inline):** paste the inline JWKS from `cat access-policy.yaml` (the long single-line JSON between the single quotes)
 - **Action:** ALLOW
 
-Save. Within ~5 seconds the policy is enforcing.
+Save. The policy appears in the UI immediately.
 
-> **Behind the scenes:** kagent translates the AccessPolicy into an `EnterpriseAgentgatewayPolicy`. In 0.3.19 that translation has two bugs that make the policy a no-op (wrong target, wrong CEL — see `TROUBLESHOOTING.md`). The `access-policy-patcher` Deployment that `setup.sh` installed in the `kagent` namespace watches for the generated EAP and rewrites it: target → the waypoint Gateway, CEL → array-aware `jwt.Groups.exists(g, g == "admins")`.
+### Step 2b — Activate enforcement
 
-> **Prefer kubectl?** `kubectl apply -f access-policy.yaml` applies the same AccessPolicy.
+In a terminal:
 
-> **Talk track:** "Only users in the `admins` Keycloak group can reach the `security-auditor` agent. Enforcement happens at the Istio ambient waypoint that sits in front of the agent — every request carries an OBO (On-Behalf-Of) token kagent minted from the user's OIDC token, and Agent Gateway validates it against this policy before forwarding."
+```bash
+./activate-ui-policy.sh admin-only-security-auditor
+```
+
+This patches the auto-generated `EnterpriseAgentgatewayPolicy` that kagent produces — fixes its targetRef from a broken HTTPRoute reference to the waypoint Gateway directly, and rewrites the CEL from `jwt.Groups == "admins"` (string-eq, never matches an array claim) to `jwt.Groups.exists(g, g == "admins")`. See `TROUBLESHOOTING.md` Issues 1 and 1b for the full story.
+
+> **Prefer kubectl?** `kubectl apply -f access-policy.yaml` creates the same AccessPolicy. Then run `activate-ui-policy.sh` exactly the same way.
+
+> **Talk track:** "The user creates an AccessPolicy in the UI — high-level, declarative, scoped to a kagent agent. kagent translates it into a low-level Agent Gateway policy that gets attached to the Istio ambient waypoint sitting in front of the agent. Every request carries an OBO (On-Behalf-Of) token kagent minted from the user's OIDC token, and Agent Gateway validates it against this policy before forwarding."
 
 ### Step 3 — Test as Admin
 

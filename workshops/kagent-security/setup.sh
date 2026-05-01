@@ -343,20 +343,6 @@ kubectl rollout status deploy/solo-enterprise-ui -n kagent --timeout=180s 2>&1 |
 ok "UI restarted with full CRD watch list"
 
 # ============================================================================
-# 8a. AccessPolicy patcher
-#     Workaround for kagent-enterprise 0.3.19 translation bugs (Issues 1+1b
-#     in TROUBLESHOOTING.md): when an AccessPolicy is created (UI or kubectl),
-#     kagent generates an EnterpriseAgentgatewayPolicy that targets the wrong
-#     resource and uses string-eq CEL on an array claim. The patcher
-#     Deployment watches AccessPolicy + EAP and rewrites the bad bits so the
-#     UI-only flow actually enforces.
-# ============================================================================
-info "Deploying access-policy-patcher..."
-kubectl apply -f "${SCRIPT_DIR}/manifests/access-policy-patcher.yaml" 2>&1 | tail -1
-kubectl -n kagent rollout status deploy/access-policy-patcher --timeout=120s 2>&1 | tail -1
-ok "AccessPolicy patcher running"
-
-# ============================================================================
 # 9. Create demo agents (in demo namespace)
 # ============================================================================
 info "Creating demo agents..."
@@ -493,10 +479,11 @@ JWKS_INLINE=$(echo "${JWKS}" | jq -c .)
 cat > "${SCRIPT_DIR}/access-policy.yaml" <<EOF
 # Restricts the security-auditor agent to users in the "admins" Keycloak group.
 #
-# Same shape as what the kagent UI produces when you create an AccessPolicy
-# in the Access Policies tab. The access-policy-patcher Deployment fixes the
-# auto-generated EnterpriseAgentgatewayPolicy so this actually enforces — see
-# TROUBLESHOOTING.md Issues 1 + 1b for why that's needed in 0.3.19.
+# Same shape as what the kagent UI produces from the Access Policies form.
+# Apply with kubectl OR fill the same fields in the UI; either way, run
+# ./activate-ui-policy.sh admin-only-security-auditor afterwards to fix the
+# auto-generated EnterpriseAgentgatewayPolicy that kagent-enterprise
+# ${KAGENT_ENT_VERSION} produces (see TROUBLESHOOTING.md Issues 1 and 1b).
 apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
 kind: AccessPolicy
 metadata:
