@@ -139,14 +139,15 @@ for u in admin writer reader; do
     -s "attributes.role=[\"${u}\"]" 2>/dev/null || true
 done
 
-CLIENT_ID=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get -r kagent-dev clients -q 'clientId=kagent-backend' 2>/dev/null \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
-
-# Idempotent: only create if not already present
-EXISTING=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get -r kagent-dev clients/${CLIENT_ID}/protocol-mappers/models 2>/dev/null \
-  | python3 -c "import json,sys; print('yes' if any(m['name']=='role-attribute' for m in json.load(sys.stdin)) else 'no')")
-if [[ "${EXISTING}" == "no" ]]; then
-  cat > /tmp/role-mapper.json <<'EOF'
+# Add role mapper to BOTH clients:
+#  - kagent-ui    (public client used by the browser OIDC code flow → user's
+#                  access_token. kagent-controller reads this token and uses
+#                  its claims when minting OBO tokens.)
+#  - kagent-backend (confidential client used by the UI backend.)
+# Without the mapper on kagent-ui, the user's browser-issued token never
+# carries `role` → kagent-controller mints OBOs without it → CEL on the
+# waypoint never matches → 403 for everyone.
+cat > /tmp/role-mapper.json <<'EOF'
 {
   "name": "role-attribute",
   "protocol": "openid-connect",
@@ -163,12 +164,20 @@ if [[ "${EXISTING}" == "no" ]]; then
   }
 }
 EOF
-  docker cp /tmp/role-mapper.json keycloak:/tmp/role-mapper.json >/dev/null 2>&1
-  docker exec keycloak /opt/keycloak/bin/kcadm.sh create -r kagent-dev \
-    clients/${CLIENT_ID}/protocol-mappers/models -f /tmp/role-mapper.json 2>/dev/null || true
-  rm -f /tmp/role-mapper.json
-fi
-ok "Keycloak configured (role claim emits as string)"
+docker cp /tmp/role-mapper.json keycloak:/tmp/role-mapper.json >/dev/null 2>&1
+
+for CLIENT in kagent-backend kagent-ui; do
+  CLIENT_ID=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get -r kagent-dev clients -q "clientId=${CLIENT}" 2>/dev/null \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
+  EXISTING=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get -r kagent-dev clients/${CLIENT_ID}/protocol-mappers/models 2>/dev/null \
+    | python3 -c "import json,sys; print('yes' if any(m['name']=='role-attribute' for m in json.load(sys.stdin)) else 'no')")
+  if [[ "${EXISTING}" == "no" ]]; then
+    docker exec keycloak /opt/keycloak/bin/kcadm.sh create -r kagent-dev \
+      clients/${CLIENT_ID}/protocol-mappers/models -f /tmp/role-mapper.json 2>/dev/null || true
+  fi
+done
+rm -f /tmp/role-mapper.json
+ok "Keycloak configured (role claim emits as string on both kagent-ui and kagent-backend)"
 
 # ============================================================================
 # 2. Provision k3d cluster
