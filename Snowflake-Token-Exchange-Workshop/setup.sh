@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
-# Snowflake Token Exchange Workshop — setup script
-# Deploys: k3d + AGW Enterprise + Keycloak + External STS + kagent OSS + mock Snowflake MCP server
+# Snowflake Workshop — dual-token gateway auth (introspection + workload JWT)
+# Deploys: k3d + AGW Enterprise + Keycloak + kagent OSS + mock Snowflake MCP
+#
+# Two independent auth mechanisms run on the same MCP HTTPRoute:
+#
+#   Authorization: Bearer <Keycloak token>   ── entExtAuth -> AuthConfig
+#                                              -> Keycloak /introspect
+#                                              -> sets x-user-id upstream
+#   aembitauth:    <workload JWT>             ── jwtAuthentication.location
+#                                                 .header.name=aembitauth
+#                                              -> JWKS signature check
+#                                              -> strips the header upstream
+#
+# AGW's CP wires up the extauth filter from the AuthConfig (no sidecar in
+# this repo). The dual-policy path requires AGW v2026.5.0-beta.1+ for the
+# `jwtAuthentication.location` field — see PR #1555.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -14,7 +28,10 @@ fail()  { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 kill_pf() { pkill -f "port-forward.*$1" 2>/dev/null || true; sleep 1; }
 
 CLUSTER_NAME="snowflake-workshop"
-AGW_VERSION="${AGW_VERSION:-v2.3.0-rc.1}"
+# v2026.5.0-beta.1 was the first tag to ship `jwtAuthentication.location`
+# (PR #1555). The dual-token demo below requires the field to be present
+# in both the CRDs chart and the controller image.
+AGW_VERSION="${AGW_VERSION:-v2026.5.0-beta.3}"
 GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.5.0}"
 KEYCLOAK_REALM="snowflake-workshop"
 KEYCLOAK_ISSUER="http://localhost:9090/realms/${KEYCLOAK_REALM}"
@@ -28,6 +45,8 @@ command -v kubectl >/dev/null 2>&1 || fail "kubectl not found"
 command -v helm    >/dev/null 2>&1 || fail "helm not found"
 command -v curl    >/dev/null 2>&1 || fail "curl not found"
 command -v jq      >/dev/null 2>&1 || fail "jq not found"
+command -v openssl >/dev/null 2>&1 || fail "openssl not found"
+command -v python3 >/dev/null 2>&1 || fail "python3 not found"
 [[ -n "${AGENTGATEWAY_LICENSE_KEY:-}" ]] || fail "AGENTGATEWAY_LICENSE_KEY not set"
 [[ -n "${OPENAI_API_KEY:-}" ]] || fail "OPENAI_API_KEY not set"
 ok "Prerequisites met"
@@ -58,25 +77,16 @@ helm upgrade -i --create-namespace \
   enterprise-agentgateway-crds \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds
 
-info "Installing Enterprise Agentgateway ${AGW_VERSION} with STS (token exchange)..."
-KEYCLOAK_JWKS_URL="http://keycloak.keycloak.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs"
+info "Installing Enterprise Agentgateway ${AGW_VERSION}..."
 helm upgrade -i -n agentgateway-system enterprise-agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
   --version "${AGW_VERSION}" \
   --set-string licensing.licenseKey="${AGENTGATEWAY_LICENSE_KEY}" \
-  --set agentgateway.enabled=true \
-  --set tokenExchange.enabled=true \
-  --set tokenExchange.issuer=enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777 \
-  --set tokenExchange.tokenExpiration=24h \
-  --set tokenExchange.subjectValidator.validatorType=remote \
-  --set tokenExchange.subjectValidator.remoteConfig.url="${KEYCLOAK_JWKS_URL}" \
-  --set tokenExchange.actorValidator.validatorType=k8s \
-  --set tokenExchange.apiValidator.validatorType=remote \
-  --set tokenExchange.apiValidator.remoteConfig.url="${KEYCLOAK_JWKS_URL}"
+  --set agentgateway.enabled=true
 
 info "Waiting for AGW pods..."
 kubectl -n agentgateway-system rollout status deployment/enterprise-agentgateway --timeout=180s
-ok "Enterprise Agentgateway deployed with STS"
+ok "Enterprise Agentgateway deployed"
 
 # ── 4. Keycloak ──────────────────────────────────────────────────────────────
 info "Deploying Keycloak..."
@@ -135,14 +145,10 @@ curl -sf -X POST "${KEYCLOAK_URL}/admin/realms/${KEYCLOAK_REALM}/users" \
 
 ok "Keycloak configured (realm=${KEYCLOAK_REALM}, client=kagent-ui, user=testuser/testuser)"
 
-# ── 6. Deploy external STS ──────────────────────────────────────────────────
-info "Deploying external STS (opaque token exchange)..."
-kubectl create configmap external-sts-script \
-  --from-file=sts.py="${SCRIPT_DIR}/external-sts/sts.py" \
-  --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -f "${SCRIPT_DIR}/k8s/external-sts.yaml"
-kubectl wait deployment/external-sts --for=condition=Available --timeout=120s
-ok "External STS deployed"
+# ── 6. Apply AuthConfig for AGW Enterprise extauth introspection ───────────
+info "Applying introspection AuthConfig + client secret..."
+kubectl apply -f "${SCRIPT_DIR}/k8s/introspection-authconfig.yaml"
+ok "AuthConfig applied (AGW CP will wire up extauth)"
 
 # ── 7. Deploy mock Snowflake MCP server ──────────────────────────────────────
 info "Deploying mock Snowflake MCP server..."
@@ -177,8 +183,79 @@ info "Waiting for kagent controller..."
 kubectl -n kagent wait --for=condition=Available deployment -l app.kubernetes.io/name=kagent --timeout=180s
 ok "kagent deployed"
 
+# ── 8b. Generate workload-identity keypair, JWKS, and demo JWT ──────────────
+# Powers the dual-policy demo: the new mcp-workload-jwt-policy validates a
+# JWT from the `aembitauth` header against this JWKS.
+WORKLOAD_DIR="${SCRIPT_DIR}/.workload"
+mkdir -p "${WORKLOAD_DIR}"
+
+if [[ ! -f "${WORKLOAD_DIR}/priv.pem" ]]; then
+  info "Generating workload-identity ES256 keypair..."
+  openssl ecparam -name prime256v1 -genkey -noout -out "${WORKLOAD_DIR}/priv.pem"
+  openssl ec -in "${WORKLOAD_DIR}/priv.pem" -pubout -out "${WORKLOAD_DIR}/pub.pem" 2>/dev/null
+  ok "Keypair written to ${WORKLOAD_DIR}/{priv,pub}.pem"
+else
+  ok "Reusing existing keypair at ${WORKLOAD_DIR}/"
+fi
+
+info "Building JWKS + signing demo workload JWT..."
+python3 - "${WORKLOAD_DIR}" <<'PY'
+import base64, hashlib, json, sys, time
+from cryptography.hazmat.primitives.serialization import load_pem_public_key, load_pem_private_key
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+workload_dir = sys.argv[1]
+
+def b64url(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+
+with open(f"{workload_dir}/priv.pem", "rb") as f:
+    priv = load_pem_private_key(f.read(), password=None)
+with open(f"{workload_dir}/pub.pem", "rb") as f:
+    pub = load_pem_public_key(f.read())
+
+nums = pub.public_numbers()
+x = nums.x.to_bytes(32, "big")
+y = nums.y.to_bytes(32, "big")
+kid = hashlib.sha256(x + y).hexdigest()[:16]
+
+jwks = {"keys": [{
+    "kty": "EC", "crv": "P-256",
+    "x": b64url(x), "y": b64url(y),
+    "kid": kid, "alg": "ES256", "use": "sig",
+}]}
+with open(f"{workload_dir}/jwks.json", "w") as f:
+    json.dump(jwks, f)
+
+header = {"alg": "ES256", "typ": "JWT", "kid": kid}
+now = int(time.time())
+payload = {
+    "iss": "https://workshop-issuer.local/aembit",
+    "sub": "snowflake-workload-001",
+    "aud": "snowflake-mcp",
+    "iat": now, "nbf": now, "exp": now + 24 * 3600,
+    "credentialProviderId": "cp-workshop-001",
+    "client_id": "snowflake-workload",
+}
+signing_input = (
+    b64url(json.dumps(header, separators=(",", ":")).encode()) + "."
+    + b64url(json.dumps(payload, separators=(",", ":")).encode())
+)
+der = priv.sign(signing_input.encode(), ec.ECDSA(hashes.SHA256()))
+r, s = decode_dss_signature(der)
+sig = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+token = f"{signing_input}.{b64url(sig)}"
+with open(f"{workload_dir}/workload.jwt", "w") as f:
+    f.write(token)
+
+print(f"kid={kid}")
+PY
+ok "Demo JWT written to ${WORKLOAD_DIR}/workload.jwt (24h validity)"
+
 # ── 9. Apply AGW resources ──────────────────────────────────────────────────
-info "Applying AGW gateway + token exchange policy..."
+info "Applying AGW gateway + extAuth introspection policy..."
 
 # Apply kagent CRDs so the agent pod gets created
 kubectl apply -f "${SCRIPT_DIR}/k8s/kagent.yaml"
@@ -201,8 +278,13 @@ export AGENT_SERVICE_NAMESPACE="kagent"
 export AGENT_SERVICE_PORT="${AGENT_PORT}"
 envsubst < "${SCRIPT_DIR}/k8s/agw.yaml" | kubectl apply -f -
 
+# Inline the JWKS into the workload-JWT policy and apply it. The JWKS
+# is a single JSON line so it embeds cleanly inside YAML single-quotes.
+JWKS_INLINE=$(jq -c . "${WORKLOAD_DIR}/jwks.json") \
+  envsubst '${JWKS_INLINE}' < "${SCRIPT_DIR}/k8s/aembit-jwt-policy.template.yaml" | kubectl apply -f -
+
 kubectl wait gateway/workshop-gateway --for=condition=Programmed --timeout=120s
-ok "AGW gateway + token exchange ready"
+ok "AGW gateway + extAuth introspection + workload-JWT policies ready"
 
 # ── 10. Deploy oauth2-proxy ─────────────────────────────────────────────────
 info "Deploying oauth2-proxy..."
@@ -264,8 +346,8 @@ echo "  Login as:       testuser / testuser"
 echo ""
 echo "  Architecture:"
 echo "    User -> oauth2-proxy -> AGW (JWT auth) -> kagent agent"
-echo "    kagent agent -> AGW -> External STS (JWT->opaque) -> Snowflake MCP"
-echo "    Snowflake MCP -> External STS /introspect -> identity resolved"
+echo "    kagent agent -> AGW -(entExtAuth -> AuthConfig)-> Keycloak /introspect"
+echo "                              -> Snowflake MCP (prints x-user-id header)"
 echo ""
 echo "  1. Open http://localhost:8080 in your browser"
 echo "  2. Log in with testuser / testuser"
@@ -274,7 +356,34 @@ echo "  4. Ask: 'Show me the sales data'"
 echo ""
 echo "  The response will show:"
 echo "    - Mock Snowflake query results"
-echo "    - Opaque token introspection metadata (identity resolved via RFC 7662)"
+echo "    - identity_from_gateway: { x-user-id, plus any other propagated headers }"
+echo ""
+echo "  Watch the MCP server's headers while you chat:"
+echo "    kubectl logs -f deployment/snowflake-mcp"
+echo ""
+echo "  ── Dual-token (Aembit-style) curl demo ──"
+echo "  Two independent auth mechanisms on the same MCP route:"
+echo "    Authorization: Bearer <Keycloak token>   ─ ext-auth /introspect"
+echo "    aembitauth:    <workload JWT>             ─ local JWKS validation"
+echo ""
+echo "  Hit the gateway directly with both headers (the workload JWT is at"
+echo "  ${SCRIPT_DIR}/.workload/workload.jwt):"
+echo ""
+echo "    USER_TOKEN=\$(curl -sf -X POST '${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token' \\"
+echo "      -d 'username=testuser' -d 'password=testuser' \\"
+echo "      -d 'grant_type=password' -d 'client_id=kagent-ui' \\"
+echo "      -d 'client_secret=kagent-ui-secret' | jq -r .access_token)"
+echo "    WORKLOAD_TOKEN=\$(cat ${SCRIPT_DIR}/.workload/workload.jwt)"
+echo ""
+echo "    kubectl port-forward -n default svc/workshop-gateway 18080:80 &"
+echo "    curl -sS http://127.0.0.1:18080/ \\"
+echo "      -H \"Authorization: Bearer \$USER_TOKEN\" \\"
+echo "      -H \"aembitauth: \$WORKLOAD_TOKEN\" \\"
+echo "      -H 'x-kagent-host: snowflake-mcp.default.svc.cluster.local'"
+echo ""
+echo "  In the MCP server logs you should see x-user-id (set from"
+echo "  introspection) but NOT aembitauth — it was stripped by the JWT"
+echo "  policy after validation."
 echo ""
 echo "  Cleanup: ./cleanup.sh"
 echo "=========================================="

@@ -31,18 +31,6 @@ spec:
     kind: Service
     name: ${AGENT_SERVICE_NAME}
 ---
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayParameters
-metadata:
-  name: workshop-params
-  namespace: default
-spec:
-  env:
-  - name: STS_URI
-    value: "http://external-sts.default.svc.cluster.local:9000/token"
-  - name: STS_AUTH_TOKEN
-    value: "/var/run/secrets/xds-tokens/xds-token"
----
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -50,11 +38,6 @@ metadata:
   namespace: default
 spec:
   gatewayClassName: enterprise-agentgateway
-  infrastructure:
-    parametersRef:
-      group: enterpriseagentgateway.solo.io
-      kind: EnterpriseAgentgatewayParameters
-      name: workshop-params
   listeners:
   - name: http
     port: 80
@@ -63,7 +46,8 @@ spec:
       namespaces:
         from: All
 ---
-# Route for kagent UI -> agent pod (JWT auth on inbound)
+# Route for kagent UI -> agent pod (JWT auth on inbound — JWKS validation only,
+# this path is unchanged from the original workshop).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -82,7 +66,6 @@ spec:
         type: PathPrefix
         value: /
 ---
-# JWT auth policy for inbound requests to the agent
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
@@ -110,7 +93,7 @@ spec:
               port: 8080
             jwksPath: "realms/snowflake-workshop/protocol/openid-connect/certs"
 ---
-# AgentgatewayBackend for MCP server routing (enables token exchange)
+# AgentgatewayBackend for the MCP server.
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
@@ -126,7 +109,7 @@ spec:
         protocol: StreamableHTTP
         path: /
 ---
-# Route for MCP traffic via AgentgatewayBackend
+# Route for MCP traffic via AgentgatewayBackend.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -145,31 +128,29 @@ spec:
       - name: x-kagent-host
         value: snowflake-mcp.default.svc.cluster.local
 ---
-# MCP backend policy: validate Keycloak JWT + exchange for opaque token via external STS
+# Reference the AuthConfig that does the Keycloak introspection. AGW's CP
+# resolves this into the extauth wiring at the proxy — no sidecar code in
+# this repo. The previous tokenExchange flow is gone; identity is now
+# propagated to the MCP server as the `x-user-id` header set by extauth
+# (controlled by `userIdAttributeName` in the AuthConfig).
+#
+# Note on targetRefs: `traffic.*` policies (including entExtAuth and
+# jwtAuthentication) MUST target Gateway/ListenerSet/GRPCRoute/HTTPRoute/
+# Service/ServiceEntry — NOT AgentgatewayBackend. The validation rule on
+# v2026.5.0-beta.1+ enforces this, so we attach to the HTTPRoute that
+# fronts the AgentgatewayBackend.
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
-  name: mcp-exchange-policy
+  name: mcp-introspect-policy
   namespace: default
 spec:
   targetRefs:
-  - group: agentgateway.dev
-    kind: AgentgatewayBackend
-    name: mcp-backend
-  backend:
-    mcp:
-      authentication:
-        issuer: "${KEYCLOAK_ISSUER}"
-        audiences:
-        - account
-        - kagent-ui
-        jwks:
-          backendRef:
-            name: keycloak
-            kind: Service
-            namespace: keycloak
-            port: 8080
-          jwksPath: "realms/snowflake-workshop/protocol/openid-connect/certs"
-        mode: Strict
-    tokenExchange:
-      mode: ExchangeOnly
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: mcp-route
+  traffic:
+    entExtAuth:
+      authConfigRef:
+        name: keycloak-introspection
+        namespace: agentgateway-system

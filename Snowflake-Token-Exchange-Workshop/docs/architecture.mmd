@@ -1,0 +1,33 @@
+flowchart TB
+  user(("👤 User"))
+  proxy["oauth2-proxy"]
+  ui["kagent UI"]
+  agw1["AGW Enterprise<br/>(JWT auth on inbound)"]
+  agent["kagent Agent Pod"]
+
+  user --> proxy --> ui -->|JWT| agw1 -->|validated| agent
+
+  subgraph mcp_path[" "]
+    direction TB
+    agw2["AGW Enterprise — HTTPRoute/mcp-route<br/><b>Both traffic policies attach here</b>"]
+    p1["<b>1. entExtAuth</b><br/>reads <b>Authorization</b><br/>↳ AuthConfig: keycloak-introspection<br/>↳ Keycloak /token/introspect<br/>↳ sets <b>x-user-id</b> upstream"]
+    p2["<b>2. jwtAuthentication</b><br/>location.header.name=<b>aembitauth</b><br/>↳ inline JWKS signature check<br/>↳ removes aembitauth before forwarding"]
+    backend["AgentgatewayBackend (mcp-backend)"]
+    mcp["Mock Snowflake MCP<br/>logs x-* headers + per-auth-header strip status"]
+    agw2 --> p1
+    agw2 --> p2
+    p1 --> backend
+    p2 --> backend
+    backend --> mcp
+  end
+
+  agent -->|"Authorization: Bearer <kc-token>+aembitauth: <jwt>"| agw2
+
+  classDef policy fill:#ede9fe,stroke:#7c3aed,color:#1e1b4b;
+  classDef gateway fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+  classDef backend fill:#fef3c7,stroke:#d97706,color:#7c2d12;
+  classDef sink fill:#dcfce7,stroke:#16a34a,color:#14532d;
+  class p1,p2 policy
+  class agw1,agw2 gateway
+  class backend backend
+  class mcp,agent,ui,proxy sink

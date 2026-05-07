@@ -1,0 +1,41 @@
+# Workload-identity JWT validation on a custom header.
+#
+# Demonstrates the v2026.5.0-beta.1+ feature `jwtAuthentication.location` —
+# JWT credentials can be extracted from a header other than `Authorization`.
+# This lets a request carry two independent tokens that are validated by
+# different mechanisms:
+#
+#   Authorization: Bearer <Keycloak user token>     ── ext-auth introspection
+#   aembitauth:    <workload JWT>                    ── local JWKS validation
+#
+# After successful validation the gateway calls `location.remove(req)`, so
+# the upstream MCP server never sees the `aembitauth` header.
+#
+# `${JWKS_INLINE}` is substituted by setup.sh from the keypair generated
+# at workshop install time.
+#
+# Note on targetRefs: `traffic.jwtAuthentication` (like `traffic.entExtAuth`)
+# must attach to a route-level resource, NOT an AgentgatewayBackend. We
+# target the same HTTPRoute as the introspect policy so both filters fire
+# on the MCP path.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-workload-jwt-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: mcp-route
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      location:
+        header:
+          name: aembitauth
+      providers:
+      - issuer: https://workshop-issuer.local/aembit
+        audiences: [snowflake-mcp]
+        jwks:
+          inline: '${JWKS_INLINE}'

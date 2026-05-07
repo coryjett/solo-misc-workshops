@@ -1,0 +1,39 @@
+# OAuth2 introspection AuthConfig for AGW Enterprise.
+#
+# AGW's CP wires up an extauth implementation that consumes this AuthConfig
+# and, on every request that hits a route bound to the policy below, calls
+# Keycloak's /introspect endpoint with the inbound Bearer token. The user
+# identity (controlled by `userIdAttributeName`) is propagated to the
+# upstream as a request header. No sidecar required.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: introspection-client-secret
+  namespace: agentgateway-system
+type: extauth.solo.io/oauth
+stringData:
+  client-secret: kagent-ui-secret
+---
+apiVersion: extauth.solo.io/v1
+kind: AuthConfig
+metadata:
+  name: keycloak-introspection
+  namespace: agentgateway-system
+spec:
+  configs:
+    - oauth2:
+          accessTokenValidation:
+            introspection:
+              # Keycloak introspection endpoint inside the cluster.
+              introspectionUrl: http://keycloak.keycloak.svc.cluster.local:8080/realms/snowflake-workshop/protocol/openid-connect/token/introspect
+              # Confidential client — its secret is used to authenticate
+              # the introspection call itself.
+              clientId: kagent-ui
+              clientSecretRef:
+                name: introspection-client-secret
+                namespace: agentgateway-system
+              # The claim whose value AGW propagates to the upstream as the
+              # user identifier. Set on the upstream request as `x-user-id`
+              # by AGW's extauth.
+              userIdAttributeName: preferred_username

@@ -15,7 +15,7 @@ metadata:
   name: snowflake-mcp
   namespace: kagent
 spec:
-  description: "Mock Snowflake MCP server for token exchange workshop"
+  description: "Mock Snowflake MCP server (gateway-side introspection workshop)"
   protocol: STREAMABLE_HTTP
   url: http://snowflake-mcp.default.svc.cluster.local:80
   timeout: 30s
@@ -39,8 +39,9 @@ spec:
       through MCP tools. Use the available tools to help users query data and
       explore the database schema.
 
-      When you receive results, present them clearly. The results include
-      introspection metadata showing how the token was validated — include this
+      When you receive results, present them clearly. Each result includes an
+      `identity_from_gateway` block showing the user identity headers AGW
+      injected after introspecting the token at the gateway — include this
       in your response so the user can see the security flow in action.
 
       Available tools:
