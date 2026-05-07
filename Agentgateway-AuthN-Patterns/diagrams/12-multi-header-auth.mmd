@@ -1,0 +1,36 @@
+flowchart TB
+  client(("👤 Client"))
+  subgraph req["Single request, two credentials"]
+    direction LR
+    h1["Authorization: Bearer &lt;token-A&gt;"]
+    h2["x-second-token: &lt;token-B&gt;"]
+  end
+
+  client --> req --> agw
+
+  subgraph agw["AGW Enterprise — HTTPRoute"]
+    direction TB
+    p1["<b>Policy A</b><br/>jwtAuthentication<br/>(default location: <b>Authorization</b>)<br/>↳ JWKS-A signature check<br/>↳ iss=issuer-a, aud=audience-a<br/>↳ removes Authorization on success"]
+    p2["<b>Policy B</b><br/>jwtAuthentication<br/>location.header.name=<b>x-second-token</b><br/>↳ JWKS-B signature check<br/>↳ iss=issuer-b, aud=audience-b<br/>↳ removes x-second-token on success"]
+    p1 --- both
+    p2 --- both
+    both{{"both must pass"}}
+  end
+
+  agw -->|200 only if both succeed| backend
+  agw -->|401 if either fails| reject((401))
+
+  subgraph backend["Backend"]
+    upstream["Receives request<br/>WITHOUT either auth header<br/>(both stripped)"]
+  end
+
+  classDef policy fill:#ede9fe,stroke:#7c3aed,color:#1e1b4b;
+  classDef gateway fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+  classDef sink fill:#dcfce7,stroke:#16a34a,color:#14532d;
+  classDef header fill:#fef3c7,stroke:#d97706,color:#7c2d12;
+  classDef bad fill:#fee2e2,stroke:#dc2626,color:#7f1d1d;
+  class p1,p2 policy
+  class agw,both gateway
+  class backend,upstream sink
+  class h1,h2 header
+  class reject bad

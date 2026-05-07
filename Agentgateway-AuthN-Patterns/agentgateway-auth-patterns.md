@@ -41,6 +41,21 @@ Delegate authentication to your own external authorization service using the Env
 
 ---
 
+## Multi-Header Auth (Independent Mechanisms)
+
+Two independent `traffic.*` policies on the same HTTPRoute, each reading its credential from a different header location (`location.header.name`). Validation succeeds only when **all** policies pass — either failing returns `401`. Useful for separating user identity from workload identity, or for stacking a per-tenant API key on top of user OIDC. Mechanisms can be mixed: `jwtAuthentication` + `entExtAuth` (introspection) + `apiKeyAuthentication` + `basicAuthentication` are all valid as separate policies on the same route.
+
+Requires **Enterprise Agentgateway `v2026.5.0-beta.1` or later** — the `location` field on `JWTAuthentication` / `APIKeyAuthentication` / `BasicAuthentication` shipped in PR #1555 (commit `08229837e`, 2026-04-20). Older charts (every `v2.x.x` tag including `v2.3.2`) read JWT credentials only from `Authorization: Bearer …`.
+
+`traffic.*` policies (including all of the above) must target one of `Gateway` / `ListenerSet` / `GRPCRoute` / `HTTPRoute` / `Service` / `ServiceEntry` — **not** `AgentgatewayBackend`. Successful `jwtAuthentication` strips the validated header from the upstream request (`location.remove(req)`).
+
+> **Docs:** [JWT Auth setup](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/)
+> **API:** [`AuthorizationLocation`](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#authorizationlocation) · [`JWTAuthentication`](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#jwtauthentication)
+
+![Multi-Header Auth](images/12-multi-header-auth.png)
+
+---
+
 ## MCP OAuth with Dynamic Client Registration
 
 MCP clients (like Claude Code, VS Code extensions) that don't have pre-registered OAuth credentials use Dynamic Client Registration (DCR) to register themselves, then complete a standard OAuth flow. Enables zero-configuration MCP client onboarding.
