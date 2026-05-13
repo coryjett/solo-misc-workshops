@@ -1,0 +1,104 @@
+# MCP backend that echoes the inbound Authorization so you can see the swap.
+# `tools/call whoami` returns the decoded JWT claims AGW forwarded — proves
+# the exchange happened and the token reaching the backend is Okta-issued
+# with the decorated audience/scope.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-echo-script
+  namespace: okta-tx
+data:
+  server.py: |
+    """MCP server that returns the inbound Authorization for inspection."""
+    import base64, json, sys
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    def decode_jwt(token):
+        try:
+            p = token.split('.')[1]
+            p += '=' * (4 - len(p) % 4)
+            return json.loads(base64.urlsafe_b64decode(p))
+        except Exception as e:
+            return {"_decode_error": str(e)}
+
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        def log_message(self, *a): pass
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode()
+            try: req = json.loads(body)
+            except: req = {}
+            method, rid = req.get('method', ''), req.get('id')
+            auth = self.headers.get('Authorization', '')
+            token = auth[7:] if auth.startswith('Bearer ') else ''
+
+            if method == 'initialize':
+                resp = {"jsonrpc":"2.0","id":rid,"result":{"protocolVersion":"2024-11-05",
+                  "capabilities":{"tools":{"listChanged":False}},
+                  "serverInfo":{"name":"okta-echo","version":"1.0"}}}
+            elif method == 'notifications/initialized':
+                self.send_response(200); self.end_headers(); return
+            elif method == 'tools/list':
+                resp = {"jsonrpc":"2.0","id":rid,"result":{"tools":[
+                  {"name":"whoami","description":"echoes the inbound Authorization token",
+                   "inputSchema":{"type":"object","properties":{}}}]}}
+            elif method == 'tools/call':
+                claims = decode_jwt(token) if token else None
+                result = {
+                    "token_preview": (token[:24]+"..."+token[-12:]) if token else "(none)",
+                    "is_jwt": token.count('.') == 2,
+                    "claims": claims,
+                    "audience": claims.get('aud') if claims else None,
+                    "issuer": claims.get('iss') if claims else None,
+                    "scope": (claims.get('scp') or claims.get('scope')) if claims else None,
+                    "subject": claims.get('sub') if claims else None,
+                }
+                resp = {"jsonrpc":"2.0","id":rid,"result":{"content":[
+                  {"type":"text","text": json.dumps(result, indent=2)}]}}
+            else:
+                resp = {"jsonrpc":"2.0","id":rid,"error":{"code":-32601,"message":f"Unknown: {method}"}}
+            out = json.dumps(resp).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+            print(f"[mcp-echo] {method} aud={resp.get('result',{}) and ''}",
+                  file=sys.stderr, flush=True)
+
+    if __name__ == '__main__':
+        print("mcp-echo ready on :80", file=sys.stderr, flush=True)
+        HTTPServer(('', 80), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-echo
+  namespace: okta-tx
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mcp-echo } }
+  template:
+    metadata: { labels: { app: mcp-echo } }
+    spec:
+      containers:
+      - name: echo
+        image: python:3.12-slim
+        command: ["python", "/app/server.py"]
+        ports: [{ containerPort: 80, name: http }]
+        volumeMounts: [{ name: src, mountPath: /app }]
+      volumes:
+      - name: src
+        configMap: { name: mcp-echo-script, items: [{ key: server.py, path: server.py }] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-echo
+  namespace: okta-tx
+spec:
+  selector: { app: mcp-echo }
+  ports:
+  - { name: http, port: 80, targetPort: 80, appProtocol: agentgateway.dev/mcp }

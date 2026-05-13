@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant AGW as AGW data plane
+    participant S as Shim (Python)
+    participant O as Okta /v1/token
+    participant M as MCP backend
+
+    Note over C,O: Subject token already obtained from Okta<br/>(Resource Owner Password / Auth Code / etc.)
+
+    C->>AGW: POST /mcp<br/>Authorization: Bearer <user-jwt>
+    Note over AGW: validate-inbound-okta-jwt policy<br/>(JWKS check against Okta)
+    Note over AGW: exchange-at-okta-via-shim policy<br/>fires for AgentgatewayBackend
+
+    AGW->>S: POST STS_URI/token<br/>grant_type=token-exchange<br/>subject_token=<user-jwt><br/>subject_token_type=:jwt<br/>resource=<svc-name><br/>Authorization: Bearer <xds-token>
+
+    Note over S: Add Basic auth + audience + scope.<br/>Drop "resource" (Okta doesn't use it).<br/>Normalize subject_token_type to :access_token.
+
+    S->>O: POST /v1/token<br/>grant_type=token-exchange<br/>subject_token=<user-jwt><br/>audience=api://snowflake-mcp<br/>scope=snowflake.access<br/>Authorization: Basic <id:secret>
+
+    Note over O: Validate subject token (JWKS),<br/>check access policy rule allows<br/>Token Exchange grant for this client+user+scope.<br/>Mint new token with decorated audience.
+
+    O-->>S: 200 OK<br/>{access_token, token_type, ...}
+    S-->>AGW: 200 OK (Okta response verbatim)
+    Note over AGW: Replace Authorization with new token
+
+    AGW->>M: POST /mcp<br/>Authorization: Bearer <decorated-jwt>
+    Note over M: Token claims now show:<br/>aud=api://snowflake-mcp<br/>scp=[snowflake.access]<br/>iss=<okta AS>
+    M-->>AGW: tools/call whoami response
+    AGW-->>C: 200 OK

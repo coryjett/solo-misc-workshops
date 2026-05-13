@@ -1,0 +1,165 @@
+# The shim: receives AGW's RFC 8693 request and bridges it to Okta's token endpoint.
+#
+# Why this exists: see ../WHY-SHIM.md. Short version: AGW hardcodes "Bearer "
+# on the Authorization header it sends to STS_URI and omits the `audience`/`scope`
+# form params Okta requires. This shim adds Basic auth + audience + scope and
+# forwards the request to Okta. Everything else passes through unchanged.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: okta-shim-script
+  namespace: okta-tx
+data:
+  shim.py: |
+    """
+    AGW → Okta RFC 8693 translator.
+
+    AGW sends to this shim:
+      POST /token
+      Authorization: Bearer <xds-token>
+      Content-Type: application/x-www-form-urlencoded
+      grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+      subject_token=<incoming user JWT>
+      subject_token_type=urn:ietf:params:oauth:token-type:jwt
+      resource=<upstream svc name>
+
+    This shim rewrites to:
+      POST {OKTA_TOKEN_URL}
+      Authorization: Basic <base64(client_id:client_secret)>     ← added
+      Content-Type: application/x-www-form-urlencoded
+      grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+      subject_token=<incoming user JWT>
+      subject_token_type=urn:ietf:params:oauth:token-type:access_token  ← normalised for Okta
+      requested_token_type=urn:ietf:params:oauth:token-type:access_token
+      audience={OKTA_AUDIENCE}                                   ← added
+      scope={OKTA_SCOPE}                                         ← added
+    """
+    import base64, json, os, ssl, sys, urllib.parse, urllib.request
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    OKTA_TOKEN_URL       = os.environ['OKTA_TOKEN_URL']
+    OKTA_INTROSPECT_URL  = os.environ.get('OKTA_INTROSPECT_URL', '')
+    OKTA_AUDIENCE        = os.environ['OKTA_AUDIENCE']
+    OKTA_SCOPE           = os.environ.get('OKTA_SCOPE', '')
+    OKTA_CLIENT_ID       = os.environ['OKTA_CLIENT_ID']
+    OKTA_CLIENT_SECRET   = os.environ['OKTA_CLIENT_SECRET']
+    BASIC = base64.b64encode(f"{OKTA_CLIENT_ID}:{OKTA_CLIENT_SECRET}".encode()).decode()
+
+    def post(url, body):
+        req = urllib.request.Request(url, data=body.encode(), method='POST')
+        req.add_header('Authorization', f'Basic {BASIC}')
+        req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+        req.add_header('Accept', 'application/json')
+        try:
+            with urllib.request.urlopen(req, timeout=10, context=ssl.create_default_context()) as r:
+                return r.status, r.read().decode()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode()
+        except Exception as e:
+            return 502, json.dumps({"error": "shim_error", "error_description": str(e)})
+
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        def log_message(self, *a): pass
+
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode()
+            params = urllib.parse.parse_qs(body)
+            print(f"[shim] inbound from AGW: path={self.path} grant_type={params.get('grant_type',['?'])[0]}",
+                  file=sys.stderr, flush=True)
+
+            if self.path == '/token':
+                gt = params.get('grant_type', [''])[0]
+                if gt != 'urn:ietf:params:oauth:grant-type:token-exchange':
+                    print(f"[shim] rejected — unsupported grant: {gt}", file=sys.stderr, flush=True)
+                    return self._send(400, json.dumps({"error": "unsupported_grant_type"}))
+
+                # Normalise subject_token_type (AGW sends ":jwt", Okta prefers ":access_token")
+                stt = params.get('subject_token_type', [''])[0]
+                if stt.endswith(':jwt') or not stt:
+                    params['subject_token_type'] = ['urn:ietf:params:oauth:token-type:access_token']
+                params.setdefault('requested_token_type', ['urn:ietf:params:oauth:token-type:access_token'])
+
+                # Inject what AGW can't send
+                params['audience'] = [OKTA_AUDIENCE]
+                if OKTA_SCOPE:
+                    params['scope'] = [OKTA_SCOPE]
+
+                # Drop fields Okta doesn't use (AGW sends `resource`, harmless but noisy)
+                params.pop('resource', None)
+
+                rebuilt = urllib.parse.urlencode(params, doseq=True)
+                print(f"[shim] -> Okta /token  audience={OKTA_AUDIENCE} scope={OKTA_SCOPE}",
+                      file=sys.stderr, flush=True)
+                status, resp_body = post(OKTA_TOKEN_URL, rebuilt)
+                print(f"[shim] <- Okta status={status} body[:120]={resp_body[:120]}",
+                      file=sys.stderr, flush=True)
+                return self._send(status, resp_body)
+
+            if self.path == '/introspect' and OKTA_INTROSPECT_URL:
+                status, resp_body = post(OKTA_INTROSPECT_URL, body)
+                return self._send(status, resp_body)
+
+            return self._send(404, json.dumps({"error": "not_found"}))
+
+        def _send(self, status, body):
+            data = body.encode() if isinstance(body, str) else body
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    if __name__ == '__main__':
+        print(f"shim ready on :9000 -> {OKTA_TOKEN_URL}", file=sys.stderr, flush=True)
+        HTTPServer(('', 9000), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okta-shim
+  namespace: okta-tx
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: okta-shim } }
+  template:
+    metadata: { labels: { app: okta-shim } }
+    spec:
+      containers:
+      - name: shim
+        image: python:3.12-slim
+        command: ["python", "/app/shim.py"]
+        ports: [{ containerPort: 9000, name: http }]
+        env:
+        - name: OKTA_TOKEN_URL
+          value: "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/token"
+        - name: OKTA_INTROSPECT_URL
+          value: "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/introspect"
+        - name: OKTA_AUDIENCE
+          value: "${OKTA_AUDIENCE}"
+        - name: OKTA_SCOPE
+          value: "${OKTA_SCOPE}"
+        - name: OKTA_CLIENT_ID
+          valueFrom: { secretKeyRef: { name: okta-client, key: client_id } }
+        - name: OKTA_CLIENT_SECRET
+          valueFrom: { secretKeyRef: { name: okta-client, key: client_secret } }
+        readinessProbe:
+          tcpSocket: { port: 9000 }
+          initialDelaySeconds: 1
+        volumeMounts: [{ name: src, mountPath: /app }]
+      volumes:
+      - name: src
+        configMap:
+          name: okta-shim-script
+          items: [{ key: shim.py, path: shim.py }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: okta-shim
+  namespace: okta-tx
+spec:
+  selector: { app: okta-shim }
+  ports:
+  - { name: http, port: 9000, targetPort: 9000 }

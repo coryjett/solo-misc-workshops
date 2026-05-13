@@ -1,0 +1,155 @@
+# AGW Gateway, Backend, Route, and Policy.
+#
+# STS_URI is the env var that tells AGW's data plane "send the RFC 8693
+# exchange here instead of the controller's built-in STS at :7777".
+# We point it at the shim Service, which authenticates+decorates+forwards
+# to Okta.
+#
+# Two policies:
+#   * validate-inbound-okta-jwt — mcp.authentication, JWKS = Okta's /v1/keys
+#     (validates the user JWT before AGW agrees to exchange it). Attaches
+#     to the HTTPRoute (Gateway API surface).
+#   * exchange-at-okta-via-shim — tokenExchange.mode: ExchangeOnly, attaches
+#     to the AgentgatewayBackend. This is what triggers AGW to POST to
+#     STS_URI before forwarding upstream.
+
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: workshop-params
+  namespace: okta-tx
+spec:
+  env:
+  # Sending the exchange to the shim instead of the controller-hosted STS.
+  - name: STS_URI
+    value: http://okta-shim.okta-tx.svc.cluster.local:9000/token
+  # AGW still requires this even though the shim ignores the header.
+  # The path is the standard xDS token mount point.
+  - name: STS_AUTH_TOKEN
+    value: /var/run/secrets/xds-tokens/xds-token
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: workshop-gateway
+  namespace: okta-tx
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: workshop-params
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes: { namespaces: { from: All } }
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: mcp-backend
+  namespace: okta-tx
+spec:
+  mcp:
+    targets:
+    - name: mcp-echo
+      static:
+        host: mcp-echo.okta-tx.svc.cluster.local
+        port: 80
+        protocol: StreamableHTTP
+        path: /mcp
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-route
+  namespace: okta-tx
+spec:
+  parentRefs: [{ name: workshop-gateway }]
+  rules:
+  - matches: [{ path: { type: PathPrefix, value: /mcp } }]
+    backendRefs:
+    - { name: mcp-backend, kind: AgentgatewayBackend, group: agentgateway.dev }
+---
+# Tiny in-cluster passthrough so the mcp.authentication.jwks.backendRef
+# can point at a K8s Service while still fetching Okta's real JWKS.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okta-jwks-proxy
+  namespace: okta-tx
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: okta-jwks-proxy } }
+  template:
+    metadata: { labels: { app: okta-jwks-proxy } }
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports: [{ containerPort: 8080 }]
+        volumeMounts: [{ name: conf, mountPath: /etc/nginx/conf.d }]
+      volumes:
+      - name: conf
+        configMap: { name: okta-jwks-proxy-conf }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: okta-jwks-proxy-conf
+  namespace: okta-tx
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      resolver 8.8.8.8 ipv6=off;
+      location /keys {
+        proxy_ssl_server_name on;
+        proxy_pass https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/keys;
+        proxy_set_header Host ${OKTA_DOMAIN};
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: okta-jwks-proxy
+  namespace: okta-tx
+spec:
+  selector: { app: okta-jwks-proxy }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: validate-inbound-okta-jwt
+  namespace: okta-tx
+spec:
+  targetRefs:
+  - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: mcp-route }
+  backend:
+    mcp:
+      authentication:
+        mode: Strict
+        issuer: "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}"
+        audiences:
+        - "${OKTA_AUDIENCE}"
+        - "${OKTA_TEST_CLIENT_ID}"
+        - "api://default"
+        jwks:
+          backendRef: { name: okta-jwks-proxy, port: 8080 }
+          jwksPath: /keys
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: exchange-at-okta-via-shim
+  namespace: okta-tx
+spec:
+  targetRefs:
+  - { group: agentgateway.dev, kind: AgentgatewayBackend, name: mcp-backend }
+  backend:
+    tokenExchange:
+      mode: ExchangeOnly
