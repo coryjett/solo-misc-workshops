@@ -1,0 +1,48 @@
+From the MGMT cluster:
+otel.tracing.exporter.otlp.endpoint (Helm value on kagent-enterprise chart)
+Used for: tells kagent-controller where to send its own traces
+Check: helm get values kagent -n kagent | grep -A5 otel
+Should be: solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT (ConfigMap, set by above)
+Used for: runtime env var that kagent-controller reads on startup
+
+Check: kubectl get cm kagent-controller -n kagent -o yaml | grep OTEL
+
+Should be: solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317
+Service with port 4317
+Used for: the actual telemetry collector service that receives OTLP traces from kagent-controller
+
+Check: kubectl get svc -n kagent | grep 4317
+
+Should be: solo-enterprise-telemetry-collector
+Collector exporters (should be ClickHouse only, no OTLP)
+Used for: where the collector sends data after receiving it (should be ClickHouse on mgmt, not OTLP)
+
+Check: kubectl get cm solo-enterprise-telemetry-collector-config -n kagent -o yaml | grep "endpoint:"
+
+Should be: tcp://<clickhouse>:9000 entries only
+Collector receivers (local + remote)
+Used for: what ports the collector listens on (:4317 for local apps, :4316 for relay clusters)
+Check: kubectl get cm solo-enterprise-telemetry-collector-config -n kagent -o yaml | grep "0.0.0.0:"
+Should be: 0.0.0.0:4317 (local) and 0.0.0.0:4316 (remote)
+From the Relay cluster:
+otel.tracing.exporter.otlp.endpoint (Helm value on kagent-enterprise chart)
+Used for: tells kagent-controller where to send its own traces
+Check: helm get values kagent -n kagent | grep -A5 otel
+Should be: solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT (ConfigMap, set by above)
+Used for: runtime env var that kagent-controller reads on startup
+Check: kubectl get cm kagent-controller -n kagent -o yaml | grep OTEL
+Should be: solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317
+Service with port 4317 (what the OTEL endpoint resolves to)
+Used for: the actual telemetry collector service that receives OTLP traces from kagent-controller
+Check: kubectl get svc -n kagent | grep 4317
+Should be: solo-enterprise-telemetry-collector
+telemetry.fqdn (Helm value on relay chart)
+Used for: tells relay collector where to forward all telemetry to management cluster on :4316
+Check: helm get values kagent-relay -n kagent | grep -A3 telemetry
+Should be: management LB address (not empty)
+Collector OTLP exporter endpoint (generated from telemetry.fqdn)
+Used for: the actual OTLP gRPC connection from relay collector to management collector on :4316
+Check: kubectl get cm solo-enterprise-telemetry-collector-config -n kagent -o yaml | grep "endpoint:"
+Should be: solo-enterprise-telemetry-gateway LB:4316 (not empty, not just :4316)
