@@ -497,26 +497,6 @@ claude
 unset ANTHROPIC_BASE_URL  # restore your AGW URL when done
 ```
 
-## Comparison: Option A vs Option B
-
-| Aspect | oidc-agent | Bash script |
-|---|---|---|
-| Initial setup | 5 min, requires `brew install` / `apt install` | 2 min, no install if `curl` + `jq` already present |
-| Auth UX | Browser via localhost listener (one-time) | Device flow: code + URL prompt (works headless) |
-| Token storage | Encrypted on disk + held in memory by daemon | Plain JSON file (mode 600) at `~/.okta/claude-code-token` |
-| Token rollover | Silent refresh — user doesn't notice | Fresh device-flow prompt every Okta token TTL (default 1h) |
-| Security posture | Refresh tokens stored encrypted, ~30-day sliding window | No refresh tokens — every rollover = fresh human consent (auditable) |
-| Multi-account support | Native (`oidc-gen <name>` for each account) | One account per script; copy + rename for more |
-| Passphrase prompts | Configurable (none with `--pw-store`) | None — uses OS file perms + `umask 077` |
-| Cross-platform | Linux + macOS solid, Windows experimental | macOS + Linux + WSL all fine; Windows native untested |
-| Restricted enterprise | May need security approval to install daemon | Plain bash, usually pre-approved |
-| Maintenance | Solo doesn't own — community project | You maintain it |
-
-**Recommendation**: start with the bash script for testing / one-off
-demos / restricted environments. Move to oidc-agent once you've
-validated the end-to-end flow and are using Claude Code through AGW
-daily — better operational hygiene long-term.
-
 ## What this gets you on the AGW side
 
 Now that Claude Code reaches AGW with a per-user Okta JWT, AGW can:
