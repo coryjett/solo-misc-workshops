@@ -338,6 +338,32 @@ fresh device-flow prompt — see the security note above.
 
 ## Step 3 — Configure Claude Code
 
+Pick one of the following (env-var or settings-file). They do the same thing.
+
+### Env-var approach (per-shell, easy to switch on/off)
+
+Add to `~/.zshrc` / `~/.bashrc`:
+
+```bash
+export ANTHROPIC_BASE_URL="https://YOUR-AGW.example.com/anthropic"
+export CLAUDE_CODE_API_KEY_HELPER_TTL_MS=300000  # re-run helper every 5 min
+```
+
+And run Claude Code with the helper:
+
+```bash
+# Option A
+ANTHROPIC_AUTH_TOKEN="$(oidc-token agw-okta)" claude
+
+# Option B
+ANTHROPIC_AUTH_TOKEN="$(get-okta-token-for-claude-code.sh)" claude
+```
+
+Or — better — wire the helper into Claude Code via settings so it re-runs
+automatically on the TTL cadence (next section).
+
+### Settings-file approach (recommended for ongoing use)
+
 Edit `~/.claude/settings.json` (global) or `<project>/.claude/settings.json` (per-project):
 
 ```json
