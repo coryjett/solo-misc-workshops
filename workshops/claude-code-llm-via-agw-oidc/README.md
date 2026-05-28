@@ -146,165 +146,190 @@ oidc-token agw-okta
 ### Option B — Bash script (no extra install)
 
 Best for one-off testing, ephemeral environments, or organizations
-that can't approve third-party daemons. Uses only `curl` + `jq`.
-Encrypted-at-rest cache in `~/.cache/agw-okta-token.json` with
-`chmod 600`.
+that can't approve third-party daemons. Uses only `curl` + `jq`. Cache
+lives at `~/.okta/claude-code-token` (mode 600).
 
-> **First-time auth uses Okta's Device Authorization Grant** — you
-> get a short user code, visit a URL on any device, paste the code,
-> approve. No localhost listener needed (so it works on remote /
-> headless boxes). Requires Device Authorization to be enabled on
-> the Okta app — set **Grant types** to include `Device Authorization`
-> in the Okta admin console (Step 1 above).
+> **Every Okta auth uses the Device Authorization Grant** — you get a
+> short user code, visit a URL on any device, paste the code, approve.
+> No localhost listener (works on remote / headless boxes). Requires
+> Device Authorization to be enabled on the Okta app — set **Grant
+> types** to include `Device Authorization` in the Okta admin console
+> (Step 1 above).
+>
+> The script intentionally does **not** request a refresh token (no
+> `offline_access` scope) so every token rollover requires fresh human
+> consent. Okta's default access-token TTL is 1 hour — expect a browser
+> prompt about that often. If your team wants silent refresh instead,
+> switch to Option A (oidc-agent) which manages refresh tokens in
+> encrypted storage.
 
 **B1. Save the helper script**
 
-Save the following as `~/bin/agw-okta-token` (or any path on your `$PATH`)
-and `chmod +x` it:
+Save the following as `~/bin/get-okta-token-for-claude-code.sh` (or any
+path on your `$PATH`) and `chmod +x` it:
 
 ```bash
 #!/usr/bin/env bash
-# agw-okta-token — fetch + cache + refresh Okta JWT for use as bearer
-# against agentgateway enterprise. Outputs a fresh access token to stdout.
-#
-# Requires env vars:
-#   OKTA_ISSUER     e.g. https://YOUR-TENANT.okta.com/oauth2/default
-#   OKTA_CLIENT_ID  the client_id from your Okta OIDC native app
-#   OKTA_SCOPE      space-separated scopes; default: "openid email profile offline_access"
 set -euo pipefail
+umask 077   # any file this script creates is mode 600 by default
 
-: "${OKTA_ISSUER:?must be set}"
-: "${OKTA_CLIENT_ID:?must be set}"
-SCOPE="${OKTA_SCOPE:-openid email profile offline_access}"
+# Claude Code apiKeyHelper for Okta device-flow authentication.
+#
+# Required environment variables:
+#   OKTA_DOMAIN     - Okta tenant hostname, e.g. dev-12345.okta.com
+#                     (no scheme, no path — script normalizes either way)
+#   OKTA_CLIENT_ID  - Native app client ID with Device Authorization grant enabled
+#
+# Cache:  ~/.okta/claude-code-token  (mode 600, full Okta JSON response)
+# Stdout: plain access_token  (Claude Code sends as Authorization: Bearer)
+# Stderr: all prompts / status / errors  (so stdout is pure token)
 
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
-mkdir -p "$CACHE_DIR"
-CACHE="$CACHE_DIR/agw-okta-token.json"
-EXPIRY_BUFFER=300  # refresh 5 min before actual expiry
+TOKEN_CACHE="${HOME}/.okta/claude-code-token"
+SCOPE="openid profile"   # no offline_access — every rollover requires fresh consent
 
-now() { date +%s; }
+: "${OKTA_DOMAIN:?OKTA_DOMAIN environment variable is required}"
+: "${OKTA_CLIENT_ID:?OKTA_CLIENT_ID environment variable is required}"
 
-# 1. Cached + fresh? Return it.
-if [ -f "$CACHE" ]; then
-  EXP=$(jq -r '.expires_at // 0' "$CACHE")
-  if [ "$EXP" -gt "$(($(now) + EXPIRY_BUFFER))" ]; then
-    jq -r '.access_token' "$CACHE"
-    exit 0
+# Normalize OKTA_DOMAIN — accept either "dev-12345.okta.com" or a full URL.
+OKTA_DOMAIN="${OKTA_DOMAIN#https://}"
+OKTA_DOMAIN="${OKTA_DOMAIN#http://}"
+OKTA_DOMAIN="${OKTA_DOMAIN%/}"
+
+DEVICE_URL="https://${OKTA_DOMAIN}/oauth2/default/v1/device/authorize"
+TOKEN_URL="https://${OKTA_DOMAIN}/oauth2/default/v1/token"
+
+# Cap polling so a stuck network / abandoned auth flow can't hang Claude
+# Code (apiKeyHelper is in the hot path of every LLM call).
+POLL_DEADLINE_SECS=600   # 10-min ceiling above Okta's own expires_in
+HTTP_TIMEOUT_SHORT=10    # device-authorize, token-poll
+HTTP_TIMEOUT_LONG=30     # final token exchange after user approves
+
+is_token_valid() {
+  local token_file="$1"
+  [[ -f "$token_file" ]] || return 1
+
+  local access_token
+  access_token=$(jq -r '.access_token // empty' "$token_file" 2>/dev/null)
+  [[ -n "$access_token" ]] || return 1
+
+  # Decode JWT payload (base64url second segment) and check exp.
+  # More accurate than tracking expires_at at write time — survives
+  # system-clock drift between cache write and read.
+  local payload
+  payload=$(
+    echo "$access_token" | cut -d. -f2 | tr '_-' '/+' |
+      awk '{ pad = (4 - length($0) % 4) % 4; for (i=0;i<pad;i++) $0 = $0 "="; print }' |
+      base64 -d 2>/dev/null
+  ) || return 1
+
+  local exp now
+  exp=$(echo "$payload" | jq -r '.exp // 0')
+  now=$(date +%s)
+  [[ "$exp" -gt $((now + 60)) ]]
+}
+
+do_device_flow() {
+  local resp device_code user_code verification_uri interval
+
+  resp=$(curl -sf --max-time "$HTTP_TIMEOUT_SHORT" -X POST "$DEVICE_URL" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d "client_id=${OKTA_CLIENT_ID}&scope=${SCOPE}") || {
+    echo "Failed to initiate device flow (network / Okta unreachable)" >&2
+    exit 1
+  }
+
+  device_code=$(echo "$resp" | jq -r '.device_code')
+  user_code=$(echo "$resp" | jq -r '.user_code')
+  verification_uri=$(echo "$resp" | jq -r '.verification_uri_complete // .verification_uri')
+  interval=$(echo "$resp" | jq -r '.interval // 5')
+
+  echo "" >&2
+  echo "Opening browser for Okta authentication..." >&2
+  echo "  URL: ${verification_uri}" >&2
+  echo "  Code: ${user_code}" >&2
+  echo "" >&2
+
+  # Auto-open browser (macOS: open, Linux: xdg-open). Best-effort — on
+  # headless boxes the user copies the URL manually.
+  if command -v open &>/dev/null; then
+    open "$verification_uri" 2>/dev/null || true
+  elif command -v xdg-open &>/dev/null; then
+    xdg-open "$verification_uri" 2>/dev/null || true
   fi
+
+  echo "Waiting for authentication..." >&2
+
+  local deadline=$(($(date +%s) + POLL_DEADLINE_SECS))
+  while [[ "$(date +%s)" -lt "$deadline" ]]; do
+    sleep "$interval"
+
+    local token_resp error
+    token_resp=$(curl -s --max-time "$HTTP_TIMEOUT_LONG" -X POST "$TOKEN_URL" \
+      -H 'Content-Type: application/x-www-form-urlencoded' \
+      -d "client_id=${OKTA_CLIENT_ID}&device_code=${device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code")
+
+    error=$(echo "$token_resp" | jq -r '.error // empty')
+
+    case "$error" in
+      authorization_pending) continue ;;
+      slow_down) interval=$((interval + 5)); continue ;;
+      "")
+        mkdir -p "$(dirname "$TOKEN_CACHE")"
+        chmod 700 "$(dirname "$TOKEN_CACHE")"
+        echo "$token_resp" >"$TOKEN_CACHE"
+        chmod 600 "$TOKEN_CACHE"
+
+        # Friendly "valid until" line so users know when the next prompt will land.
+        local exp_human
+        exp_human=$(
+          echo "$token_resp" | jq -r '.access_token' | cut -d. -f2 | tr '_-' '/+' |
+            awk '{ pad = (4 - length($0) % 4) % 4; for (i=0;i<pad;i++) $0 = $0 "="; print }' |
+            base64 -d 2>/dev/null |
+            jq -r '.exp | strftime("%Y-%m-%d %H:%M:%S %Z")'
+        ) || exp_human="unknown"
+        echo "Authentication successful. Token valid until ${exp_human}" >&2
+        return 0
+        ;;
+      *)
+        echo "Authentication error: $(echo "$token_resp" | jq -r '.error_description // .error')" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  echo "Device authorization timed out (script ceiling: ${POLL_DEADLINE_SECS}s)" >&2
+  exit 1
+}
+
+if ! is_token_valid "$TOKEN_CACHE"; then
+  do_device_flow
 fi
 
-# 2. Have refresh token? Try refresh.
-REFRESH=$(jq -r '.refresh_token // empty' "$CACHE" 2>/dev/null || true)
-if [ -n "$REFRESH" ]; then
-  RESP=$(curl -sf -X POST "$OKTA_ISSUER/v1/token" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "grant_type=refresh_token" \
-    -d "refresh_token=$REFRESH" \
-    -d "client_id=$OKTA_CLIENT_ID" \
-    -d "scope=$SCOPE" 2>/dev/null) || RESP=""
-  if [ -n "$RESP" ] && [ "$(echo "$RESP" | jq -r '.access_token // empty')" != "" ]; then
-    EXPIRES_IN=$(echo "$RESP" | jq -r '.expires_in')
-    EXPIRES_AT=$(($(now) + EXPIRES_IN))
-    # Okta rotates refresh tokens — fall back to the previous one if a
-    # new one isn't issued, otherwise pick up the new one.
-    NEW_REFRESH=$(echo "$RESP" | jq -r '.refresh_token // empty')
-    [ -z "$NEW_REFRESH" ] && NEW_REFRESH="$REFRESH"
-    echo "$RESP" | jq --argjson e "$EXPIRES_AT" --arg r "$NEW_REFRESH" \
-      '. + {expires_at: $e, refresh_token: $r}' > "$CACHE"
-    chmod 600 "$CACHE"
-    jq -r '.access_token' "$CACHE"
-    exit 0
-  fi
-fi
-
-# 3. No cache or refresh failed — Device Authorization Grant.
-#    Prompt the user to authorize on any browser. Works on headless boxes.
-echo >&2
-echo "── Okta auth required ─────────────────────────────────────" >&2
-DEV_RESP=$(curl -sf -X POST "$OKTA_ISSUER/v1/device/authorize" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=$OKTA_CLIENT_ID" \
-  -d "scope=$SCOPE")
-
-DEVICE_CODE=$(echo "$DEV_RESP" | jq -r '.device_code')
-USER_CODE=$(echo "$DEV_RESP" | jq -r '.user_code')
-VERIFY_URL=$(echo "$DEV_RESP" | jq -r '.verification_uri_complete // .verification_uri')
-INTERVAL=$(echo "$DEV_RESP" | jq -r '.interval // 5')
-EXPIRES_IN=$(echo "$DEV_RESP" | jq -r '.expires_in')
-
-echo "1. Open: $VERIFY_URL" >&2
-echo "2. Enter code: $USER_CODE" >&2
-echo "(expires in $EXPIRES_IN seconds)" >&2
-echo >&2
-
-# Open the browser if we're in an interactive desktop session.
-if command -v open >/dev/null 2>&1; then
-  open "$VERIFY_URL" >/dev/null 2>&1 &
-elif command -v xdg-open >/dev/null 2>&1; then
-  xdg-open "$VERIFY_URL" >/dev/null 2>&1 &
-fi
-
-DEADLINE=$(($(now) + EXPIRES_IN))
-while [ "$(now)" -lt "$DEADLINE" ]; do
-  sleep "$INTERVAL"
-  TOKEN_RESP=$(curl -s -X POST "$OKTA_ISSUER/v1/token" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
-    -d "device_code=$DEVICE_CODE" \
-    -d "client_id=$OKTA_CLIENT_ID")
-  ERR=$(echo "$TOKEN_RESP" | jq -r '.error // empty')
-  case "$ERR" in
-    authorization_pending|"" )
-      # "" means no error and we got a token; check next
-      if [ "$(echo "$TOKEN_RESP" | jq -r '.access_token // empty')" != "" ]; then
-        EXPIRES_IN=$(echo "$TOKEN_RESP" | jq -r '.expires_in')
-        EXPIRES_AT=$(($(now) + EXPIRES_IN))
-        echo "$TOKEN_RESP" | jq --argjson e "$EXPIRES_AT" '. + {expires_at: $e}' > "$CACHE"
-        chmod 600 "$CACHE"
-        echo "── Authorized ✓ ─────────────────────────────────────────" >&2
-        jq -r '.access_token' "$CACHE"
-        exit 0
-      fi
-      ;;
-    slow_down) INTERVAL=$((INTERVAL + 5)) ;;
-    access_denied|expired_token)
-      echo "Auth failed: $ERR" >&2
-      exit 1
-      ;;
-    *)
-      echo "Unexpected error: $TOKEN_RESP" >&2
-      exit 1
-      ;;
-  esac
-done
-
-echo "Device authorization timed out before user completed login" >&2
-exit 1
+# Plain access token to stdout — Claude Code sends as Authorization: Bearer
+jq -r '.access_token' "$TOKEN_CACHE"
 ```
 
 **B2. Set the required env vars (add to `~/.zshrc` / `~/.bashrc`)**
 
 ```bash
-export OKTA_ISSUER="https://YOUR-TENANT.okta.com/oauth2/default"
-export OKTA_CLIENT_ID="0oaXXXXXXXXXXXXXXX"
-# Optional — defaults to "openid email profile offline_access"
-# export OKTA_SCOPE="openid email profile offline_access agw-llm"
+export OKTA_DOMAIN="YOUR-TENANT.okta.com"      # just the hostname — script strips scheme if you paste a URL
+export OKTA_CLIENT_ID="0oaXXXXXXXXXXXXXXX"     # Okta native app with Device Authorization grant
 ```
 
 **B3. Test**
 
 ```bash
-agw-okta-token
-# First run: prints a URL + code, waits for you to authorize in a browser
-# Subsequent runs: silent — outputs a fresh JWT from cache/refresh
+get-okta-token-for-claude-code.sh
+# First run: prints URL + code to stderr, opens your browser, waits for Okta auth
+# Subsequent runs: silent — prints fresh JWT from cache to stdout
+# When the JWT's exp claim is within 60s: triggers fresh device flow
 ```
 
-After the first run, the script keeps the refresh token in
-`~/.cache/agw-okta-token.json` (mode 600). Okta access tokens typically
-last 1 hour; the script transparently uses the refresh token to get
-fresh access tokens on demand. Refresh tokens last whatever your Okta
-admin configured (typically 30 days, sliding window) — when they
-finally expire you'll be prompted to re-authorize.
+After auth, the JWT lives in `~/.okta/claude-code-token` (mode 600,
+directory mode 700). Validity is checked by decoding the JWT's `exp`
+claim each call — accurate even when the system clock drifts. When the
+token expires (Okta default: 1 hour), the next invocation triggers a
+fresh device-flow prompt — see the security note above.
 
 ## Step 3 — Configure Claude Code
 
@@ -326,7 +351,7 @@ And run Claude Code with the helper:
 ANTHROPIC_AUTH_TOKEN="$(oidc-token agw-okta)" claude
 
 # Option B
-ANTHROPIC_AUTH_TOKEN="$(agw-okta-token)" claude
+ANTHROPIC_AUTH_TOKEN="$(get-okta-token-for-claude-code.sh)" claude
 ```
 
 Or — better — wire the helper into Claude Code via settings so it re-runs
@@ -350,15 +375,16 @@ For the bash-script option, swap the `apiKeyHelper` value:
 
 ```json
 {
-  "apiKeyHelper": "agw-okta-token"
+  "apiKeyHelper": "get-okta-token-for-claude-code.sh"
 }
 ```
 
 Claude Code re-runs `apiKeyHelper` every 5 minutes (or whatever you set
 the TTL to), takes the stdout as the bearer token, and attaches it as
-`Authorization: Bearer ...` on every LLM request. Both
-options transparently refresh from cache, so the actual latency is
-near-zero.
+`Authorization: Bearer ...` on every LLM request. Option A serves from
+oidc-agent's in-memory cache (silent refresh); Option B serves from its
+file cache until the JWT expires, then prompts the user for a fresh
+device-flow authentication.
 
 ## Step 4 — Verify
 
@@ -407,8 +433,8 @@ oidc-add agw-okta
 
 The cache is local. Delete it to force a fresh token:
 ```bash
-rm ~/.cache/agw-okta-token.json
-agw-okta-token   # re-auths via device flow
+rm ~/.okta/claude-code-token
+get-okta-token-for-claude-code.sh   # re-auths via device flow
 ```
 
 ### Bash script device-flow URL doesn't open the browser
@@ -422,7 +448,7 @@ can authorize the JWT-needing machine from your phone, for example.
 JWT validator config on AGW. Quick checks:
 - `kubectl get agentgatewaypolicy -A` → find the policy targeting your
   Anthropic route → check `spec.jwt.providers[*]`
-- The `issuer` field must match your `OKTA_ISSUER` exactly (trailing slash matters)
+- The `issuer` field must match `https://${OKTA_DOMAIN}/oauth2/default` exactly (trailing slash matters)
 - The `audiences` list must contain whatever audience your Okta auth
   server is configured to issue (often the auth server's audience setting
   or a custom scope)
@@ -453,11 +479,12 @@ unset ANTHROPIC_BASE_URL  # restore your AGW URL when done
 | Aspect | oidc-agent | Bash script |
 |---|---|---|
 | Initial setup | 5 min, requires `brew install` / `apt install` | 2 min, no install if `curl` + `jq` already present |
-| First-time auth UX | Opens browser via localhost listener | Device flow: code + URL prompt (works headless) |
-| Token storage | Encrypted on disk + held in memory by daemon | Plain JSON file (mode 600) in `~/.cache/` |
-| Refresh handling | Built-in, robust, battle-tested | Inline in the script — adequate but you own it |
+| Auth UX | Browser via localhost listener (one-time) | Device flow: code + URL prompt (works headless) |
+| Token storage | Encrypted on disk + held in memory by daemon | Plain JSON file (mode 600) at `~/.okta/claude-code-token` |
+| Token rollover | Silent refresh — user doesn't notice | Fresh device-flow prompt every Okta token TTL (default 1h) |
+| Security posture | Refresh tokens stored encrypted, ~30-day sliding window | No refresh tokens — every rollover = fresh human consent (auditable) |
 | Multi-account support | Native (`oidc-gen <name>` for each account) | One account per script; copy + rename for more |
-| Passphrase prompts | Configurable (none with `--pw-store`) | None — uses the OS file permissions for protection |
+| Passphrase prompts | Configurable (none with `--pw-store`) | None — uses OS file perms + `umask 077` |
 | Cross-platform | Linux + macOS solid, Windows experimental | macOS + Linux + WSL all fine; Windows native untested |
 | Restricted enterprise | May need security approval to install daemon | Plain bash, usually pre-approved |
 | Maintenance | Solo doesn't own — community project | You maintain it |
@@ -492,8 +519,8 @@ oidc-agent --kill
 rm -rf ~/.config/oidc-agent/agw-okta*
 
 # Option B
-rm ~/bin/agw-okta-token
-rm ~/.cache/agw-okta-token.json
+rm ~/bin/get-okta-token-for-claude-code.sh
+rm -rf ~/.okta/claude-code-token
 
 # Claude Code config
 # Remove the apiKeyHelper + env keys from ~/.claude/settings.json
