@@ -168,6 +168,9 @@ lives at `~/.okta/claude-code-token` (mode 600).
 Save the following as `~/bin/get-okta-token-for-claude-code.sh` (or any
 path on your `$PATH`) and `chmod +x` it:
 
+<details>
+<summary><strong>Click to expand: <code>get-okta-token-for-claude-code.sh</code></strong></summary>
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -308,6 +311,8 @@ fi
 # Plain access token to stdout — Claude Code sends as Authorization: Bearer
 jq -r '.access_token' "$TOKEN_CACHE"
 ```
+
+</details>
 
 **B2. Set the required env vars (add to `~/.zshrc` / `~/.bashrc`)**
 
