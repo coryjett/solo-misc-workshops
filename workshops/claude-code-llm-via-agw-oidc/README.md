@@ -4,8 +4,11 @@ Configure Claude Code (the CLI) to send every LLM call through Solo's
 **agentgateway enterprise** with a per-user **Okta-issued Bearer JWT**.
 The gateway validates the token, applies whatever policies you've
 configured (rate limits, prompt guard, observability, audit logging),
-and forwards the request to the real upstream LLM (Anthropic, Bedrock,
-Vertex, etc.) using its own provider credentials.
+and forwards the request to whatever upstream LLM AGW is configured
+for (Anthropic, OpenAI, Bedrock, Vertex, Azure OpenAI, self-hosted…)
+using its own provider credentials. AGW handles protocol translation,
+so the upstream provider doesn't have to match the API shape Claude
+Code sends.
 
 End users authenticate with their own Okta identity. The org-wide LLM
 API key never lives on a developer's laptop.
@@ -13,23 +16,24 @@ API key never lives on a developer's laptop.
 ## Architecture
 
 ```
-┌────────────┐    Authorization: Bearer <okta-jwt>    ┌─────────────────┐    x-api-key: <org-key>   ┌──────────────┐
-│ Claude Code│ ─────────────────────────────────────> │ agentgateway    │ ────────────────────────> │ Anthropic    │
-│  (CLI)     │                                        │  enterprise     │                           │ (or Bedrock, │
-└────────────┘ <──────────────────────────────────── │  - JWT validate │ <──────────────────────── │  Vertex)     │
-                  Anthropic Messages API response     │  - rate limit   │     LLM response          └──────────────┘
-                                                      │  - prompt guard │
-                                                      │  - audit log    │
-                                                      └─────────────────┘
+┌────────────┐   Authorization: Bearer <okta-jwt>   ┌─────────────────┐   upstream's own credential   ┌──────────────┐
+│ Claude Code│ ───────────────────────────────────> │ agentgateway    │ ────────────────────────────> │ Any upstream │
+│  (CLI)     │   Anthropic Messages API request     │  enterprise     │   (translated to whatever     │ LLM AGW      │
+└────────────┘ <─────────────────────────────────── │  - JWT validate │    the upstream expects)      │ supports —   │
+                Anthropic Messages API response     │  - rate limit   │ <──────────────────────────── │ Anthropic,   │
+                                                    │  - prompt guard │       LLM response            │ OpenAI,      │
+                                                    │  - protocol xlat│                               │ Bedrock,     │
+                                                    │  - audit log    │                               │ Vertex, …    │
+                                                    └─────────────────┘                               └──────────────┘
                        ▲
                        │ apiKeyHelper script runs every N min
                        │ returns fresh JWT (handles refresh transparently)
                        │
               ┌────────┴────────┐
-              │ Token source:    │
-              │  - oidc-agent    │  (Option A — recommended)
-              │  - bash script   │  (Option B — no extra install)
-              └──────────────────┘
+              │ Token source:   │
+              │  - oidc-agent   │  (Option A — recommended)
+              │  - bash script  │  (Option B — no extra install)
+              └─────────────────┘
 ```
 
 Claude Code's `apiKeyHelper` is a tiny shell command that prints a fresh
@@ -40,17 +44,30 @@ own what the helper does — anywhere from a one-line wrapper around
 
 ## Prerequisites
 
-1. **Agentgateway enterprise** with an Anthropic (or Bedrock / Vertex)
-   route in front of an LLM provider. The route must:
-   - Accept `POST /v1/messages` and `POST /v1/messages/count_tokens`
-     (Anthropic Messages API shape)
-   - Validate the incoming Bearer JWT against your Okta JWKS
-   - Strip the user's `Authorization` header and re-attach your own
-     provider credential (`x-api-key` for Anthropic) before forwarding
-   - Forward `anthropic-beta` and `anthropic-version` headers
-2. **Okta tenant** with admin access to register an OIDC app
-3. **Claude Code** CLI installed (`npm install -g @anthropic-ai/claude-code` or via your installer)
-4. **`jq` + `curl`** for the bash-script option (almost always already present)
+1. **Agentgateway enterprise** with an LLM route configured to serve
+   Claude Code. The route must:
+   - Accept the shape Claude Code sends. By default Claude Code speaks
+     **Anthropic Messages API** (`POST /v1/messages`,
+     `POST /v1/messages/count_tokens`), so the AGW route exposes those
+     paths. If you instead set `CLAUDE_CODE_USE_BEDROCK=1` or
+     `CLAUDE_CODE_USE_VERTEX=1`, Claude Code sends the corresponding
+     Bedrock or Vertex shape — point the AGW route at the matching
+     Claude-Code env var (`ANTHROPIC_BEDROCK_BASE_URL` /
+     `ANTHROPIC_VERTEX_BASE_URL`).
+   - Validate the incoming Bearer JWT against your Okta JWKS.
+   - Forward to whatever upstream LLM you want (Anthropic, OpenAI,
+     Bedrock, Vertex, Azure OpenAI, a self-hosted model…). AGW's LLM
+     policy handles protocol translation between what the client sent
+     and what the upstream expects, so the upstream provider doesn't
+     have to match the client-facing shape.
+   - Strip the user's `Authorization` header and attach the upstream's
+     own credential (`x-api-key` for Anthropic, AWS SigV4 for Bedrock,
+     a GCP token for Vertex, etc.) before forwarding.
+   - For the Anthropic shape specifically, forward `anthropic-beta` and
+     `anthropic-version` headers through.
+2. **Okta tenant** with admin access to register an OIDC app.
+3. **Claude Code** CLI installed (`npm install -g @anthropic-ai/claude-code` or via your installer).
+4. **`jq` + `curl`** for the bash-script option (almost always already present).
 
 ## Step 1 — Register the OIDC client in Okta
 
