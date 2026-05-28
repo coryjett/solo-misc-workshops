@@ -5,7 +5,7 @@ Configure Claude Code (the CLI) to send every LLM call through Solo's
 The gateway validates the token, applies whatever policies you've
 configured (rate limits, prompt guard, observability, audit logging),
 and forwards the request to whatever upstream LLM AGW is configured
-for (Anthropic, OpenAI, Bedrock, Vertex, Azure OpenAI, self-hosted…)
+for (Anthropic, OpenAI, Bedrock, Vertex, Azure OpenAI, Gemini, GitHub Copilot, self-hosted…)
 using its own provider credentials. AGW handles protocol translation,
 so the upstream provider doesn't have to match the API shape Claude
 Code sends.
