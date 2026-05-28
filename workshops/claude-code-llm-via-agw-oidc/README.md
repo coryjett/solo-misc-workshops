@@ -80,7 +80,8 @@ One-time per organization.
 
 Best for users who'll use Claude Code regularly. Handles refresh
 transparently, integrates with the OS keyring, audited open-source
-project (used widely in research computing).
+project (used widely in research computing). Project home:
+[github.com/indigo-dc/oidc-agent](https://github.com/indigo-dc/oidc-agent).
 
 **A1. Install**
 
