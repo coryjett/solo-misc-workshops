@@ -32,13 +32,7 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 - ~8 GB RAM available (for local k3d/kind cluster)
 - ~45 minutes (manual) or ~10 minutes (automated via `setup.sh`)
 
-### One-time host setup
-
-Add a `/etc/hosts` alias so the host can resolve the in-cluster OIDC issuer (`keycloak.keycloak.svc.cluster.local`). This is used by both `arctl` and the browser-based OIDC login flows, and must be run **before** `./setup.sh`:
-
-```bash
-echo '127.0.0.1 keycloak.keycloak.svc.cluster.local' | sudo tee -a /etc/hosts
-```
+> **No host config required.** The OIDC issuer uses `keycloak.127.0.0.1.sslip.io`, which resolves to `127.0.0.1` via public wildcard DNS — no `/etc/hosts` edit. `setup.sh` adds a CoreDNS rewrite so in-cluster validators resolve the same name to the Keycloak Service.
 
 > **No cloud cluster required.** The demo guide includes provisioning a local k3d or kind cluster. Cloud clusters (GKE, EKS, AKS) also work.
 

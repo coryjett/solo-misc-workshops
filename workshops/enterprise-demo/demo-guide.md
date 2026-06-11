@@ -60,10 +60,16 @@ When setup completes, verify the UIs are accessible:
 
 > **Talk track:** "The UI is SSO'd — and so is the CLI. `arctl` logs in through the same OIDC issuer using the device flow."
 
+> **PATH:** `setup.sh` installs the Enterprise `arctl` to `~/.arctl/bin`. Make sure it's first on your PATH (the installer prints this too) so you don't hit an older `arctl` from another tool:
+> ```bash
+> export PATH="$HOME/.arctl/bin:$PATH"
+> arctl version   # expect v2026.6.0
+> ```
+
 ```bash
 arctl user login \
   --oidc-client-id ar-cli-interactive \
-  --oidc-issuer-url http://keycloak.keycloak.svc.cluster.local:8080/realms/solo-ai-demo
+  --oidc-issuer-url http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo
 # device-authorization is the default flow; the browser opens — log in as dev / password
 
 arctl user whoami
@@ -167,7 +173,7 @@ arctl user logout
 arctl user login \
   --oidc-flow password-credentials \
   --oidc-client-id ar-cli-password \
-  --oidc-issuer-url http://keycloak.keycloak.svc.cluster.local:8080/realms/solo-ai-demo \
+  --oidc-issuer-url http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo \
   --oidc-username viewer --oidc-password password
 
 arctl user whoami   # viewer → viewers group, read-only
@@ -188,7 +194,7 @@ arctl mcp publish weather-tools/ \
 arctl user logout
 arctl user login \
   --oidc-client-id ar-cli-interactive \
-  --oidc-issuer-url http://keycloak.keycloak.svc.cluster.local:8080/realms/solo-ai-demo
+  --oidc-issuer-url http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo
 # log in as dev (developers) — or admin (admins) for full control
 
 arctl mcp publish weather-tools/ \

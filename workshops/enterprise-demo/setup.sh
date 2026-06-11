@@ -93,19 +93,31 @@ info "Deploying Keycloak..."
 kubectl create namespace keycloak 2>/dev/null || true
 
 export AR_BACKEND_SECRET="$(openssl rand -hex 32)"
-export KEYCLOAK_HOST="keycloak.keycloak.svc.cluster.local:8080"
+export KAGENT_BACKEND_SECRET="$(openssl rand -hex 32)"
+# Issuer host uses sslip.io wildcard DNS: keycloak.127.0.0.1.sslip.io resolves to
+# 127.0.0.1 everywhere with zero host config. On the host (browser + arctl) it hits the
+# Keycloak port-forward. In-cluster validators (agentregistry, kagent) can't reach
+# 127.0.0.1, so a CoreDNS rewrite (added below) points this name at the Keycloak
+# Service. Keycloak's KC_HOSTNAME is pinned to the same value, so the token `iss` claim
+# is identical inside and outside the cluster — no /etc/hosts edit required.
+export KEYCLOAK_HOST="keycloak.127.0.0.1.sslip.io:8080"
 export KEYCLOAK_ISSUER="http://${KEYCLOAK_HOST}/realms/solo-ai-demo"
 
-# The OIDC issuer uses the in-cluster service DNS name so the token's `iss` claim
-# matches what agentregistry validates. arctl + the browser run on the host, so that
-# name must resolve to the port-forward. Fail fast if the one-time hosts alias is missing.
-if ! grep -q "keycloak.keycloak.svc.cluster.local" /etc/hosts 2>/dev/null; then
-  fail "Missing hosts alias. Run this once, then re-run setup:
-    echo '127.0.0.1 keycloak.keycloak.svc.cluster.local' | sudo tee -a /etc/hosts"
-fi
+# Point the issuer hostname at the Keycloak Service for in-cluster token validation.
+# k3s/k3d CoreDNS auto-imports /etc/coredns/custom/*.override inside the .:53 server
+# block (mounted from the optional `coredns-custom` ConfigMap), so a `rewrite` dropped
+# there applies cluster-wide — no fragile Corefile editing, and it covers both
+# agentregistry + kagent without per-chart hostAliases. Idempotent (apply).
+info "Adding CoreDNS rewrite for issuer hostname..."
+kubectl -n kube-system create configmap coredns-custom \
+  --from-literal=keycloak.override="rewrite name ${KEYCLOAK_HOST%%:*} keycloak.keycloak.svc.cluster.local" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n kube-system rollout restart deployment/coredns
+kubectl -n kube-system rollout status deployment/coredns --timeout=60s
 
-# Substitute the backend client secret into the realm import, then load as ConfigMap.
-sed "s|\${AR_BACKEND_SECRET}|${AR_BACKEND_SECRET}|g" \
+# Substitute the backend client secrets into the realm import, then load as ConfigMap.
+sed -e "s|\${AR_BACKEND_SECRET}|${AR_BACKEND_SECRET}|g" \
+    -e "s|\${KAGENT_BACKEND_SECRET}|${KAGENT_BACKEND_SECRET}|g" \
   "$(dirname "$0")/keycloak/realm-solo-ai-demo.json" > /tmp/realm-solo-ai-demo.json
 kubectl create configmap keycloak-realm -n keycloak \
   --from-file=realm-solo-ai-demo.json=/tmp/realm-solo-ai-demo.json \
@@ -171,7 +183,14 @@ products:
     namespace: agentgateway-system
 oidc:
   issuer: "${KEYCLOAK_ISSUER}"
-  clientId: kagent-ui
+ui:
+  backend:
+    oidc:
+      clientId: kagent-backend
+      secret: "${KAGENT_BACKEND_SECRET}"
+  frontend:
+    oidc:
+      clientId: kagent-ui
 EOF
 
 helm upgrade -i kagent-mgmt \
@@ -196,10 +215,16 @@ providers:
   openAI:
     apiKey: ${OPENAI_API_KEY}
 oidc:
+  issuer: "${KEYCLOAK_ISSUER}"
+  clientId: kagent-backend
+  secret: "${KAGENT_BACKEND_SECRET}"
   skipOBO: true
-  secret: "dummy-not-used"
-autoAuth:
-  enabled: false
+rbac:
+  roleMapping:
+    roleMappings:
+      admins: "global.Admin"
+      developers: "global.Writer"
+      viewers: "global.Reader"
 otel:
   tracing:
     enabled: true
@@ -226,13 +251,19 @@ ok "kagent Enterprise deployed"
 # ============================================================================
 # 6. Install arctl CLI
 # ============================================================================
-if ! command -v arctl >/dev/null 2>&1; then
-  info "Installing arctl CLI..."
+# The installer drops the binary at ~/.arctl/bin/arctl. Check/use that explicit
+# path (a pre-existing OSS arctl on /usr/local/bin would otherwise shadow it on
+# PATH and lacks the enterprise `user login` / `apply` commands), then prepend
+# ~/.arctl/bin so the rest of this script's `arctl` calls hit the Enterprise build.
+ARCTL_BIN="${HOME}/.arctl/bin/arctl"
+if ! "${ARCTL_BIN}" version 2>/dev/null | grep -q "v2026.6.0"; then
+  info "Installing arctl CLI (Enterprise v2026.6.0)..."
   curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.6.0 sh
   ok "arctl installed"
 else
-  ok "arctl already installed"
+  ok "arctl already installed (Enterprise v2026.6.0)"
 fi
+export PATH="${HOME}/.arctl/bin:${PATH}"
 
 # ============================================================================
 # 7. Start port-forwards

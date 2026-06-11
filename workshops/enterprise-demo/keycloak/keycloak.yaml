@@ -18,6 +18,10 @@ spec:
             - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: "admin" }
             - { name: KC_BOOTSTRAP_ADMIN_PASSWORD, value: "admin" }
             - { name: KC_HTTP_ENABLED, value: "true" }
+            # Pin issuer to the sslip.io host so the token `iss` claim is identical on
+            # the host (browser/arctl via port-forward) and in-cluster (via CoreDNS
+            # rewrite). Removes the need for an /etc/hosts alias.
+            - { name: KC_HOSTNAME, value: "http://keycloak.127.0.0.1.sslip.io:8080" }
             - { name: KC_HOSTNAME_STRICT, value: "false" }
             - { name: KC_HEALTH_ENABLED, value: "true" }
           ports:
