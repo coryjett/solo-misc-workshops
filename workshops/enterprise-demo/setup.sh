@@ -87,6 +87,28 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 ok "Namespaces and CRDs ready"
 
 # ============================================================================
+# 2b. Keycloak (shared IdP for agentregistry + kagent)
+# ============================================================================
+info "Deploying Keycloak..."
+kubectl create namespace keycloak 2>/dev/null || true
+
+export AR_BACKEND_SECRET="$(openssl rand -hex 32)"
+export KEYCLOAK_HOST="keycloak.keycloak.svc.cluster.local:8080"
+export KEYCLOAK_ISSUER="http://${KEYCLOAK_HOST}/realms/solo-ai-demo"
+
+# Substitute the backend client secret into the realm import, then load as ConfigMap.
+sed "s|\${AR_BACKEND_SECRET}|${AR_BACKEND_SECRET}|g" \
+  "$(dirname "$0")/keycloak/realm-solo-ai-demo.json" > /tmp/realm-solo-ai-demo.json
+kubectl create configmap keycloak-realm -n keycloak \
+  --from-file=realm-solo-ai-demo.json=/tmp/realm-solo-ai-demo.json \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl apply -f "$(dirname "$0")/keycloak/keycloak.yaml"
+kubectl -n keycloak rollout status deployment/keycloak --timeout=180s
+rm -f /tmp/realm-solo-ai-demo.json
+ok "Keycloak deployed (realm solo-ai-demo)"
+
+# ============================================================================
 # 3. Agent Registry
 # ============================================================================
 info "Deploying Agent Registry..."
