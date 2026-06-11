@@ -12,7 +12,7 @@
 # kagent agent.
 #
 # Prerequisites:
-#   - docker, kubectl, helm, curl installed
+#   - docker, kubectl, helm, curl, k3d, arctl (Enterprise v2026.6.0) installed
 #   - export OPENAI_API_KEY=sk-...
 #   - export SOLO_LICENSE_KEY=eyJ...
 #
@@ -40,6 +40,8 @@ command -v kubectl >/dev/null 2>&1 || fail "kubectl not found"
 command -v helm    >/dev/null 2>&1 || fail "helm not found"
 command -v curl    >/dev/null 2>&1 || fail "curl not found"
 command -v k3d     >/dev/null 2>&1 || fail "k3d not found"
+command -v arctl   >/dev/null 2>&1 || fail "arctl not found (install Enterprise v2026.6.0: https://storage.googleapis.com/agentregistry-enterprise/install.sh)"
+arctl version 2>/dev/null | grep -q "v2026.6.0" || fail "arctl must be Enterprise v2026.6.0 (a pre-existing OSS arctl on PATH lacks the 'user login' / 'apply' commands)"
 
 [[ -n "${OPENAI_API_KEY:-}" ]]            || fail "OPENAI_API_KEY not set"
 [[ -n "${SOLO_LICENSE_KEY:-}" ]]  || fail "SOLO_LICENSE_KEY not set"
@@ -244,24 +246,7 @@ kubectl rollout status deployment/solo-enterprise-ui -n kagent --timeout=120s
 ok "kagent Enterprise deployed"
 
 # ============================================================================
-# 6. Install arctl CLI
-# ============================================================================
-# The installer drops the binary at ~/.arctl/bin/arctl. Check/use that explicit
-# path (a pre-existing OSS arctl on /usr/local/bin would otherwise shadow it on
-# PATH and lacks the enterprise `user login` / `apply` commands), then prepend
-# ~/.arctl/bin so the rest of this script's `arctl` calls hit the Enterprise build.
-ARCTL_BIN="${HOME}/.arctl/bin/arctl"
-if ! "${ARCTL_BIN}" version 2>/dev/null | grep -q "v2026.6.0"; then
-  info "Installing arctl CLI (Enterprise v2026.6.0)..."
-  curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.6.0 sh
-  ok "arctl installed"
-else
-  ok "arctl already installed (Enterprise v2026.6.0)"
-fi
-export PATH="${HOME}/.arctl/bin:${PATH}"
-
-# ============================================================================
-# 7. Start port-forwards
+# 6. Start port-forwards
 # ============================================================================
 echo ""
 echo -e "${GREEN}========================================${NC}"

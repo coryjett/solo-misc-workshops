@@ -26,6 +26,7 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 ## Prerequisites
 
 - `docker`, `kubectl`, `helm`, `k3d` installed
+- `arctl` (Agent Registry Enterprise CLI, v2026.6.0) — install: `curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.6.0 sh`, then add `~/.arctl/bin` to your `PATH`
 - An OpenAI API key
 - A Solo license key — set as `SOLO_LICENSE_KEY` (one credential, used by Agent Gateway and kagent; the same Solo license also grants image-pull access to the enterprise chart registry `us-docker.pkg.dev`, so the Enterprise Agent Registry chart is entitled via that image-pull access and needs no `licenseKey` value of its own)
 - ~8 GB RAM available (for local k3d/kind cluster)
