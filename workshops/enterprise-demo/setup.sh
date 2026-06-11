@@ -96,6 +96,14 @@ export AR_BACKEND_SECRET="$(openssl rand -hex 32)"
 export KEYCLOAK_HOST="keycloak.keycloak.svc.cluster.local:8080"
 export KEYCLOAK_ISSUER="http://${KEYCLOAK_HOST}/realms/solo-ai-demo"
 
+# The OIDC issuer uses the in-cluster service DNS name so the token's `iss` claim
+# matches what agentregistry validates. arctl + the browser run on the host, so that
+# name must resolve to the port-forward. Fail fast if the one-time hosts alias is missing.
+if ! grep -q "keycloak.keycloak.svc.cluster.local" /etc/hosts 2>/dev/null; then
+  fail "Missing hosts alias. Run this once, then re-run setup:
+    echo '127.0.0.1 keycloak.keycloak.svc.cluster.local' | sudo tee -a /etc/hosts"
+fi
+
 # Substitute the backend client secret into the realm import, then load as ConfigMap.
 sed "s|\${AR_BACKEND_SECRET}|${AR_BACKEND_SECRET}|g" \
   "$(dirname "$0")/keycloak/realm-solo-ai-demo.json" > /tmp/realm-solo-ai-demo.json
@@ -246,8 +254,14 @@ sleep 2
 # Seed RBAC (admin logs in, applies AccessPolicies)
 # ----------------------------------------------------------------------------
 info "Seeding RBAC policies..."
-# NOTE: verify flag names against 'arctl user login --help' on first live run
-arctl user login --client ar-cli-password --username admin --password password
+# Password-grant login as admin via the ar-cli-password public client.
+# Flags verified against arctl v2026.6.0 'user login --help'.
+arctl user login \
+  --oidc-flow password-credentials \
+  --oidc-client-id ar-cli-password \
+  --oidc-issuer-url "${KEYCLOAK_ISSUER}" \
+  --oidc-username admin \
+  --oidc-password password
 for p in rbac/accesspolicy-admins.yaml rbac/accesspolicy-developers.yaml rbac/accesspolicy-viewers.yaml; do
   arctl apply -f "$(dirname "$0")/$p"
 done
