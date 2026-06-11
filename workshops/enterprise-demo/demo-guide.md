@@ -1,8 +1,16 @@
 # Solo.io AI Platform — Demo Guide
 
-> **Time:** ~45 minutes
-> **Products:** Agent Registry, Agent Gateway (Enterprise), kagent (Enterprise)
+> **Time:** ~50 minutes
+> **Products:** Agent Registry (Enterprise), Agent Gateway (Enterprise), kagent (Enterprise)
 > **Cluster:** Local k3d/kind cluster or cloud Kubernetes (GKE/EKS/AKS)
+
+| Part | Topic | Time |
+|------|-------|------|
+| Part 1 | Agent Registry (Enterprise) — SSO, RBAC, catalog | ~20 min |
+| Part 2 | Agent Gateway (Enterprise) | ~14 min |
+| Part 3 | kagent (Enterprise) | ~13 min |
+| Wrap-up | Putting it all together | ~3 min |
+| **Total** | | **~50 min** |
 
 ---
 
@@ -21,29 +29,51 @@ The script installs Agent Registry, Agent Gateway, and kagent. The demo itself w
 
 When setup completes, verify the UIs are accessible:
 - **Agent Registry:** http://localhost:12121
-- **Solo Enterprise UI:** http://localhost:8080
+- **Keycloak:** http://localhost:8080 (admin/admin)
+- **Solo Enterprise UI:** http://localhost:8082
+
+> **Demo users** (all password `password`): `admin` (group `admins`), `dev` (group `developers`), `viewer` (group `viewers`). All three products authenticate against the shared Keycloak realm `solo-ai-demo`, so group membership drives access across Agent Registry and kagent.
 
 ---
 
-## Part 1: Agent Registry (15 min)
+## Part 1: Agent Registry (Enterprise) (~20–22 min)
 
-> **Goal:** Show how Agent Registry solves the "where are my MCP servers?" problem.
+> **Goal:** Show how the enterprise registry solves the "where are my MCP servers?" problem — behind SSO and group-based RBAC.
 
 ### The Problem (2 min)
 
-> **Talk track:** "In most organizations, MCP servers are scattered everywhere — some on npm, some as Docker images, some as internal HTTP endpoints. Every developer has to manually find, configure, and connect to them. There's no central catalog, no versioning, no governance."
+> **Talk track:** "In most organizations, MCP servers are scattered everywhere — npm, Docker images, internal HTTP endpoints. No central catalog, no versioning, no governance — and no access control."
 
-### The Solution: A Central Catalog (3 min)
+### SSO Login (2 min)
 
-> **Talk track:** "Agent Registry gives you a single place to discover, publish, and manage all your AI artifacts — MCP servers, agents, skills, and prompts."
+**Open the Agent Registry UI** at `http://localhost:12121`. You're immediately redirected to Keycloak. Log in as **`admin`** / `password`.
 
-**Open the Agent Registry UI** at `http://localhost:12121`.
+> **Talk track:** "The enterprise registry is locked down — every user authenticates through your IdP. We're using Keycloak here; in your environment it's Okta, Entra, ForgeRock — anything that speaks OIDC."
+
+### The Catalog (2 min)
+
+> **Talk track:** "Agent Registry is a single place to discover, publish, and manage all your AI artifacts — MCP servers, agents, skills, and prompts."
 
 > **Show:** The catalog view — 183 community MCP servers pre-loaded. Browse, search, filter by type.
 
-### Build and Publish the Weather MCP Server (5 min)
+### Authenticate the CLI with `arctl user login` (2 min)
 
-> **Talk track:** "Let's build a real MCP server from scratch using Agent Registry's CLI, then publish it to the catalog."
+> **Talk track:** "The UI is SSO'd — and so is the CLI. `arctl` logs in through the same OIDC issuer using the device flow."
+
+```bash
+arctl user login \
+  --oidc-client-id ar-cli-interactive \
+  --oidc-issuer-url http://keycloak.keycloak.svc.cluster.local:8080/realms/solo-ai-demo
+# device-authorization is the default flow; the browser opens — log in as dev / password
+
+arctl user whoami
+```
+
+> **Talk track:** "`whoami` shows the identity we just authenticated and the `developers` group it belongs to — that group is what the registry uses to decide what `dev` can do."
+
+### Build and Publish the Weather MCP Server (4 min)
+
+> **Talk track:** "Let's build a real MCP server with the CLI and publish it to the catalog."
 
 **Step 1 — Scaffold the MCP server:**
 
@@ -126,6 +156,50 @@ arctl mcp publish weather-tools/ \
 
 > **Show:** Navigate to the Agent Registry UI — the weather-tools server now appears in the catalog.
 
+### RBAC: Deny → Grant (3 min)
+
+> **Talk track:** "That publish worked because we're `dev` — in the `developers` group. Let's see what happens as a read-only user."
+
+**Switch to `viewer` (password flow) and retry the publish:**
+
+```bash
+arctl user logout
+arctl user login \
+  --oidc-flow password-credentials \
+  --oidc-client-id ar-cli-password \
+  --oidc-issuer-url http://keycloak.keycloak.svc.cluster.local:8080/realms/solo-ai-demo \
+  --oidc-username viewer --oidc-password password
+
+arctl user whoami   # viewer → viewers group, read-only
+
+# Same publish — now denied
+arctl mcp publish weather-tools/ \
+  --type oci \
+  --package-id weather-tools:latest \
+  --overwrite
+# => forbidden
+```
+
+> **Talk track:** "Same command, different user — `forbidden`. The `viewer` lands in the `viewers` group, which the registry's AccessPolicy maps to read-only. Discovery yes, publish no."
+
+**Switch back to a writer and confirm it succeeds again:**
+
+```bash
+arctl user logout
+arctl user login \
+  --oidc-client-id ar-cli-interactive \
+  --oidc-issuer-url http://keycloak.keycloak.svc.cluster.local:8080/realms/solo-ai-demo
+# log in as dev (developers) — or admin (admins) for full control
+
+arctl mcp publish weather-tools/ \
+  --type oci \
+  --package-id weather-tools:latest \
+  --overwrite
+# => success
+```
+
+> **Talk track:** "Back as `dev`, the publish goes through. Group membership in your IdP maps straight to an AccessPolicy in the registry — no per-user config, no separate access system to maintain."
+
 **Step 5 — Deploy the MCP server to Kubernetes:**
 
 ```bash
@@ -169,9 +243,9 @@ EOF
 kubectl -n demo wait --for=condition=ready pod -l app=weather-tools --timeout=120s
 ```
 
-### Create a Prompt, Skill, and Agent (5 min)
+### Create a Prompt, Skill, and Agent (4 min)
 
-> **Talk track:** "Agent Registry isn't just for MCP servers. It's a catalog for all your AI artifacts — prompts, skills, and complete agents. Let's create all three and wire them together."
+> **Talk track:** "Agent Registry isn't just MCP servers — it catalogs prompts, skills, and complete agents. Let's create all three and wire them together."
 
 **Create a prompt** — a reusable system prompt published to the registry:
 
@@ -232,19 +306,15 @@ cd ..
 >
 > **Note:** The `add-mcp` and `add-skill` commands wire the agent to registry entries — this is catalog metadata for discovery, not a runtime connection. The actual runtime wiring (agent → Agent Gateway → MCP server) happens in Part 3 with kagent.
 
-### Semantic Search (2 min)
+### Semantic Search + Key Takeaway (1 min)
 
-> **Talk track:** "Now that we have MCP servers, prompts, skills, and agents registered, developers can search by what they need, not by what they know exists."
+> **Show in the UI:** Type "weather" in the search bar — our MCP server, prompt, skill, and agent all appear. Developers search by what they need, not by exact names.
 
-> **Show in the UI:** Type "weather" in the search bar. Our MCP server, prompt, skill, and agent all appear — developers can discover complete AI capabilities without knowing the exact names.
-
-### Key Takeaway (1 min)
-
-> **Talk track:** "Agent Registry is your single pane of glass for all AI artifacts — MCP servers, skills, prompts, and agents. Platform teams curate what's approved, developers discover what they need, and anyone can deploy from the catalog. But discovery is just step one — how do we actually *route* traffic to these servers securely? That's where Agent Gateway comes in."
+> **Talk track:** "So: a single pane of glass for all AI artifacts, behind SSO, with group-based RBAC deciding who can publish. Discovery is step one — how do we *route* to these servers securely? That's Agent Gateway."
 
 ---
 
-## Part 2: Agent Gateway (15 min)
+## Part 2: Agent Gateway (Enterprise) (~14 min)
 
 > **Goal:** Show how Agent Gateway secures and observes all agent-to-tool traffic.
 
@@ -486,7 +556,7 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 ### Show the Solo Enterprise UI — Agent Gateway Dashboards (2 min)
 
-**Open the Solo Enterprise UI** at `http://localhost:8080` and navigate to **Agent Gateway**.
+**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **Agent Gateway**.
 
 > **Talk track:** "Every request through Agent Gateway generates OpenTelemetry traces. The Solo Enterprise UI gives you pre-built dashboards for LLM traffic, MCP tool calls, cost tracking, and more."
 
@@ -500,7 +570,7 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 ---
 
-## Part 3: kagent (15 min)
+## Part 3: kagent (Enterprise) (~13 min)
 
 > **Goal:** Create an AI agent that uses the MCP tools we registered and secured.
 
@@ -617,7 +687,7 @@ kubectl get agent -n kagent
 
 ### Step 4: Use the Agent via the Solo Enterprise UI (3 min)
 
-**Open the Solo Enterprise UI** at `http://localhost:8080` and navigate to **kagent** > **Agents** > **weather-assistant**.
+**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **kagent** > **Agents** > **weather-assistant**.
 
 1. Open the **Chat** panel
 2. Type: **"What's the weather in San Francisco?"**
@@ -639,15 +709,15 @@ kubectl get agent -n kagent
 
 ---
 
-## Putting It All Together (5 min)
+## Putting It All Together (~3 min)
 
 ### The Three UIs
 
 | UI | URL | What It Shows |
 |----|-----|---------------|
 | **Agent Registry** | `http://localhost:12121` | MCP server catalog, semantic search, deployment status |
-| **Solo Enterprise UI — Agent Gateway** | `http://localhost:8080` (AGW tab) | LLM/MCP dashboards, cost tracking, OTEL traces, route status |
-| **Solo Enterprise UI — kagent** | `http://localhost:8080` (kagent tab) | Agent list, chat interface, tool execution, agent configuration |
+| **Solo Enterprise UI — Agent Gateway** | `http://localhost:8082` (AGW tab) | LLM/MCP dashboards, cost tracking, OTEL traces, route status |
+| **Solo Enterprise UI — kagent** | `http://localhost:8082` (kagent tab) | Agent list, chat interface, tool execution, agent configuration |
 
 ### What Each Product Contributed
 
@@ -714,7 +784,7 @@ helm uninstall kagent-crds -n kagent
 helm uninstall kagent-mgmt -n kagent
 helm uninstall enterprise-agentgateway -n agentgateway-system
 helm uninstall enterprise-agentgateway-crds -n agentgateway-system
-helm uninstall agentregistry -n agentregistry
+helm uninstall agentregistry -n agentregistry-system
 
 # Delete the local cluster (if using k3d/kind)
 k3d cluster delete solo-ai-demo
