@@ -89,7 +89,7 @@
 │  └───────────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐   │
-│  │                       agentregistry Namespace                                     │   │
+│  │                       agentregistry-system Namespace                              │   │
 │  │                                                                                   │   │
 │  │  ┌──────────────────────┐         ┌──────────────────────┐                        │   │
 │  │  │  Agent Registry       │         │  PostgreSQL + pgvector│                        │   │
@@ -99,6 +99,19 @@
 │  │  │  • Tool discovery     │         └──────────────────────┘                        │   │
 │  │  │  • OCI publishing     │                                                        │   │
 │  │  └──────────────────────┘                                                         │   │
+│  └───────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                       keycloak Namespace                                          │   │
+│  │                                                                                   │   │
+│  │  ┌──────────────────────────────────────────────────────────────────────────┐    │   │
+│  │  │  Keycloak (:8080)                                                          │    │   │
+│  │  │                                                                            │    │   │
+│  │  │  • realm: solo-ai-demo  (shared SSO for agentregistry + kagent)            │    │   │
+│  │  │  • OIDC login: ar-ui · arctl · Solo Enterprise UI ──► Keycloak             │    │   │
+│  │  │  • JWT validation (issuer/JWKS): agentregistry + kagent ──► Keycloak       │    │   │
+│  │  │  • groups: admins · developers · viewers ──► registry AccessPolicies       │    │   │
+│  │  └──────────────────────────────────────────────────────────────────────────┘    │   │
 │  └───────────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                         │
 │                                 ┌─────────────────┐                                     │
@@ -180,13 +193,42 @@ Developer workstation
 
 | Component | Namespace | Port | Purpose |
 |-----------|-----------|------|---------|
-| Agent Registry | agentregistry | 12121 | Catalog for MCP servers, skills, agents + tool discovery |
+| Agent Registry | agentregistry-system | 12121 | Catalog for MCP servers, skills, agents + tool discovery |
+| Keycloak | keycloak | 8080 | Shared OIDC SSO + group-based RBAC (realm: solo-ai-demo) |
 | AGW Controller | agentgateway-system | 9978 (xDS) | Translates Gateway API CRDs to proxy config |
 | AGW Proxy | agentgateway-system | 3000 | MCP-aware proxy with auth, routing, tracing |
 | kagent Controller | kagent | — | AI agent orchestration (Agent, ModelConfig CRDs) |
-| Solo Enterprise UI | kagent | 80 | Unified dashboard (kagent + AGW + Registry) |
+| Solo Enterprise UI | kagent | 8082 | Unified dashboard (kagent + AGW + Registry) |
 | OTEL Collector | kagent | 4317 | Telemetry pipeline (traces + metrics) |
 | ClickHouse | kagent | 9000 | Telemetry storage (traces, metrics, logs) |
 | Weather Tools | demo | 3000 | Demo MCP server (FastMCP, Streamable HTTP) |
 | Load Generator | demo | — | Continuous MCP traffic for dashboard data |
 | OpenAI API | external | 443 | LLM inference (gpt-4o-mini) |
+
+## Auth & RBAC
+
+The Solo Enterprise stack uses a **shared Keycloak realm (`solo-ai-demo`)** for single sign-on
+across both the enterprise Agent Registry and kagent. Keycloak runs in the `keycloak` namespace
+on port `8080` and is the single identity provider for the demo.
+
+**OIDC login (browser + CLI redirect to Keycloak):**
+
+- `ar-ui` (Registry browser) — interactive login.
+- `arctl` (CLI) — OIDC login flow for publish/deploy operations.
+- Solo Enterprise UI (kagent dashboard) — interactive login.
+
+**Token validation (resource servers verify JWTs against Keycloak's issuer/JWKS):**
+
+- Agent Registry (enterprise server) validates incoming bearer tokens against the realm's JWKS.
+- kagent validates incoming bearer tokens against the realm's JWKS.
+
+**Group → AccessPolicy mapping.** Keycloak group claims on the user's token drive the registry's
+RBAC AccessPolicies:
+
+| Keycloak group | Registry access |
+|----------------|-----------------|
+| `admins` | Full access (read + publish + deploy + manage) |
+| `developers` | Read + publish + deploy |
+| `viewers` | Read-only |
+
+> Token exchange / on-behalf-of (OBO) is out of scope for this workshop and is not configured.

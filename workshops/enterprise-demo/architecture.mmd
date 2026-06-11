@@ -7,8 +7,18 @@ graph TD
     AGW_PROXY["AGW Proxy :3000<br/>MCP-aware routing<br/>API Key Auth · RBAC · Tracing"]
     USER["User / curl"]
     WEATHER["Weather Tools MCP Server<br/>FastMCP :3000<br/>get_forecast · get_alerts"]
-    AR["Agent Registry :12121<br/>MCP server · prompt · skill · agent catalog<br/>Tool discovery + semantic search"]
-    AR_PG["PostgreSQL · pgvector"]
+    ARCTL["arctl CLI"]
+    AR_UI["ar-ui · Registry browser"]
+
+    subgraph AR_NS["agentregistry-system namespace"]
+        AR["Agent Registry :12121<br/>MCP server · prompt · skill · agent catalog<br/>Tool discovery + semantic search"]
+        AR_PG["PostgreSQL · pgvector"]
+    end
+
+    subgraph KC_NS["keycloak namespace"]
+        KC["Keycloak :8080<br/>realm: solo-ai-demo<br/>groups: admins · developers · viewers"]
+    end
+
     OTEL["OTEL Collector :4317<br/>traces + metrics pipelines"]
     CH["ClickHouse<br/>traces · metrics storage"]
 
@@ -23,16 +33,26 @@ graph TD
     OTEL -->|"store"| CH
     UI -->|"queries"| CH
 
+    %% OIDC SSO + RBAC
+    AR_UI -->|"OIDC login"| KC
+    ARCTL -->|"OIDC login"| KC
+    UI -->|"OIDC login"| KC
+    AR -->|"validate JWT / JWKS"| KC
+    KAGENT -->|"validate JWT / JWKS"| KC
+    AR_UI -->|"browse catalog"| AR
+
     classDef external fill:#2d1b69,stroke:#7c4dff,color:#e0e0e0,stroke-width:2px
     classDef gateway fill:#1a3a1a,stroke:#4caf50,color:#e0e0e0,stroke-width:2px
     classDef kagentStyle fill:#1a2a3a,stroke:#42a5f5,color:#e0e0e0,stroke-width:2px
     classDef registry fill:#3a2a1a,stroke:#ff9800,color:#e0e0e0,stroke-width:2px
     classDef demo fill:#1a1a2e,stroke:#7c7caa,color:#e0e0e0,stroke-width:2px
     classDef telemetry fill:#2a1a2a,stroke:#ce93d8,color:#e0e0e0,stroke-width:2px
+    classDef auth fill:#3a1a2a,stroke:#ec407a,color:#e0e0e0,stroke-width:2px
 
     class USER,OPENAI external
     class AGW_PROXY gateway
     class KAGENT,UI kagentStyle
-    class AR,AR_PG registry
+    class AR,AR_PG,AR_UI,ARCTL registry
     class WEATHER demo
     class OTEL,CH telemetry
+    class KC auth
