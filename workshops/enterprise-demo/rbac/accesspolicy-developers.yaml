@@ -1,0 +1,14 @@
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: developers
+spec:
+  description: "Developers can read, publish, and deploy"
+  principals:
+    - kind: Role
+      name: developers
+  rules:
+    - actions: ["registry:read", "registry:publish", "registry:deploy"]
+      resources:
+        - { kind: server, name: "*" }
+        - { kind: agent, name: "*" }
