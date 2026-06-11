@@ -1,0 +1,139 @@
+{
+  "realm": "solo-ai-demo",
+  "enabled": true,
+  "sslRequired": "none",
+  "groups": [
+    { "name": "admins" },
+    { "name": "developers" },
+    { "name": "viewers" }
+  ],
+  "users": [
+    {
+      "username": "admin", "enabled": true, "email": "admin@solo.io",
+      "firstName": "Demo", "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "groups": ["/admins"]
+    },
+    {
+      "username": "dev", "enabled": true, "email": "dev@solo.io",
+      "firstName": "Demo", "lastName": "Dev",
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "groups": ["/developers"]
+    },
+    {
+      "username": "viewer", "enabled": true, "email": "viewer@solo.io",
+      "firstName": "Demo", "lastName": "Viewer",
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "groups": ["/viewers"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "ar-backend", "enabled": true, "protocol": "openid-connect",
+      "publicClient": false, "secret": "${AR_BACKEND_SECRET}",
+      "standardFlowEnabled": false, "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "groups", "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "Groups", "full.path": "false",
+            "access.token.claim": "true", "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ar-ui", "enabled": true, "protocol": "openid-connect",
+      "publicClient": true, "standardFlowEnabled": true,
+      "redirectUris": ["*"], "webOrigins": ["*"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "groups", "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "Groups", "full.path": "false",
+            "access.token.claim": "true", "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "ar-backend-audience", "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "ar-backend",
+            "access.token.claim": "true", "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ar-cli-interactive", "enabled": true, "protocol": "openid-connect",
+      "publicClient": true, "standardFlowEnabled": false,
+      "attributes": { "oauth2.device.authorization.grant.enabled": "true" },
+      "protocolMappers": [
+        {
+          "name": "groups", "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "Groups", "full.path": "false",
+            "access.token.claim": "true", "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "ar-backend-audience", "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "ar-backend",
+            "access.token.claim": "true", "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ar-cli-password", "enabled": true, "protocol": "openid-connect",
+      "publicClient": true, "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "groups", "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "Groups", "full.path": "false",
+            "access.token.claim": "true", "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "ar-backend-audience", "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "ar-backend",
+            "access.token.claim": "true", "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "kagent-ui", "enabled": true, "protocol": "openid-connect",
+      "publicClient": true, "standardFlowEnabled": true,
+      "redirectUris": ["*"], "webOrigins": ["*"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "groups", "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "Groups", "full.path": "false",
+            "access.token.claim": "true", "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}
