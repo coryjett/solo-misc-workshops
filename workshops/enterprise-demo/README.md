@@ -16,7 +16,7 @@ This demo builds each layer progressively — by the end, you'll have a working 
 
 ```bash
 export OPENAI_API_KEY=sk-...
-export AGENTGATEWAY_LICENSE_KEY=eyJ...
+export SOLO_LICENSE_KEY=eyJ...
 
 ./setup.sh
 ```
@@ -27,7 +27,7 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 
 - `docker`, `kubectl`, `helm` installed
 - An OpenAI API key
-- A Solo license key — set as `AGENTGATEWAY_LICENSE_KEY` (the same Solo license also grants image-pull access to the enterprise chart registry `us-docker.pkg.dev`; the Enterprise Agent Registry chart is entitled via that image-pull access and needs no `licenseKey` value of its own)
+- A Solo license key — set as `SOLO_LICENSE_KEY` (one credential, used by Agent Gateway and kagent; the same Solo license also grants image-pull access to the enterprise chart registry `us-docker.pkg.dev`, so the Enterprise Agent Registry chart is entitled via that image-pull access and needs no `licenseKey` value of its own)
 - ~8 GB RAM available (for local k3d/kind cluster)
 - ~45 minutes (manual) or ~10 minutes (automated via `setup.sh`)
 

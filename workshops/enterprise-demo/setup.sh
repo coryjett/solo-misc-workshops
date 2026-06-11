@@ -14,7 +14,7 @@
 # Prerequisites:
 #   - docker, kubectl, helm, curl installed
 #   - export OPENAI_API_KEY=sk-...
-#   - export AGENTGATEWAY_LICENSE_KEY=eyJ...
+#   - export SOLO_LICENSE_KEY=eyJ...
 #
 # Usage:
 #   ./setup.sh
@@ -41,7 +41,7 @@ command -v helm    >/dev/null 2>&1 || fail "helm not found"
 command -v curl    >/dev/null 2>&1 || fail "curl not found"
 
 [[ -n "${OPENAI_API_KEY:-}" ]]            || fail "OPENAI_API_KEY not set"
-[[ -n "${AGENTGATEWAY_LICENSE_KEY:-}" ]]  || fail "AGENTGATEWAY_LICENSE_KEY not set"
+[[ -n "${SOLO_LICENSE_KEY:-}" ]]  || fail "SOLO_LICENSE_KEY not set"
 ok "Prerequisites met"
 
 CLUSTER_NAME="${CLUSTER_NAME:-solo-ai-demo}"
@@ -160,7 +160,7 @@ helm install enterprise-agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
   --namespace agentgateway-system \
   --version "${AGW_VERSION}" \
-  --set-string licensing.licenseKey="${AGENTGATEWAY_LICENSE_KEY}" \
+  --set-string licensing.licenseKey="${SOLO_LICENSE_KEY}" \
   --set agentgateway.enabled=true
 
 kubectl -n agentgateway-system wait --for=condition=ready pod \
@@ -209,7 +209,7 @@ helm upgrade -i kagent-crds \
 # Workload plane
 cat > /tmp/kagent.yaml <<EOF
 licensing:
-  licenseKey: ${AGENTGATEWAY_LICENSE_KEY}
+  licenseKey: ${SOLO_LICENSE_KEY}
 providers:
   default: openAI
   openAI:
