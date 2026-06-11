@@ -27,8 +27,7 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 
 - `docker`, `kubectl`, `helm` installed
 - An OpenAI API key
-- An Agent Gateway Enterprise license key
-- A Solo license / image-pull access to the enterprise chart registry (`us-docker.pkg.dev`) — the Enterprise Agent Registry chart is entitled via image-pull access (no `licenseKey` value is required for it)
+- A Solo license key — set as `AGENTGATEWAY_LICENSE_KEY` (the same Solo license also grants image-pull access to the enterprise chart registry `us-docker.pkg.dev`; the Enterprise Agent Registry chart is entitled via that image-pull access and needs no `licenseKey` value of its own)
 - ~8 GB RAM available (for local k3d/kind cluster)
 - ~45 minutes (manual) or ~10 minutes (automated via `setup.sh`)
 
