@@ -39,6 +39,7 @@ command -v docker  >/dev/null 2>&1 || fail "docker not found"
 command -v kubectl >/dev/null 2>&1 || fail "kubectl not found"
 command -v helm    >/dev/null 2>&1 || fail "helm not found"
 command -v curl    >/dev/null 2>&1 || fail "curl not found"
+command -v k3d     >/dev/null 2>&1 || fail "k3d not found"
 
 [[ -n "${OPENAI_API_KEY:-}" ]]            || fail "OPENAI_API_KEY not set"
 [[ -n "${SOLO_LICENSE_KEY:-}" ]]  || fail "SOLO_LICENSE_KEY not set"
@@ -55,12 +56,6 @@ info "Creating k3d cluster: ${CLUSTER_NAME}..."
 if k3d cluster list 2>/dev/null | grep -q "${CLUSTER_NAME}"; then
   warn "Cluster ${CLUSTER_NAME} already exists, using it"
 else
-  # Install k3d if missing
-  if ! command -v k3d >/dev/null 2>&1; then
-    info "Installing k3d..."
-    curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-  fi
-
   k3d cluster create "${CLUSTER_NAME}" \
     --servers 1 \
     --agents 2 \
