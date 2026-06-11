@@ -153,7 +153,7 @@ ok "Agent Gateway Enterprise deployed"
 info "Deploying kagent Enterprise ${KAGENT_ENT_VERSION}..."
 
 # Management plane
-cat > /tmp/management.yaml <<'EOF'
+cat > /tmp/management.yaml <<EOF
 cluster: solo-ai-demo
 products:
   kagent:
@@ -162,7 +162,8 @@ products:
     enabled: true
     namespace: agentgateway-system
 oidc:
-  issuer: ""
+  issuer: "${KEYCLOAK_ISSUER}"
+  clientId: kagent-ui
 EOF
 
 helm upgrade -i kagent-mgmt \
