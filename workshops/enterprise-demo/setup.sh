@@ -109,22 +109,23 @@ rm -f /tmp/realm-solo-ai-demo.json
 ok "Keycloak deployed (realm solo-ai-demo)"
 
 # ============================================================================
-# 3. Agent Registry
+# 3. Agent Registry (Enterprise)
 # ============================================================================
-info "Deploying Agent Registry..."
-helm install agentregistry \
-  oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --namespace agentregistry \
-  --set config.enableAnonymousAuth="true" \
-  --set config.disableBuiltinSeed="false" \
-  --set config.jwtPrivateKey="$(openssl rand -hex 32)" \
+info "Deploying Agent Registry Enterprise..."
+helm upgrade --install agentregistry \
+  oci://us-docker.pkg.dev/solo-public/agentregistry-enterprise/helm/agentregistry-enterprise \
+  --version 2026.6.0 \
+  --namespace agentregistry-system \
+  --create-namespace \
+  --set oidc.issuer="${KEYCLOAK_ISSUER}" \
+  --set oidc.clientId=ar-backend \
+  --set oidc.clientSecret="${AR_BACKEND_SECRET}" \
+  --set oidc.publicClientId=ar-ui \
+  --set oidc.roleClaim=Groups \
+  --set oidc.superuserRole=admins \
   --set database.postgres.vectorEnabled=true \
-  --set database.postgres.bundled.image.registry=docker.io \
-  --set database.postgres.bundled.image.repository=pgvector \
-  --set database.postgres.bundled.image.name=pgvector \
-  --set database.postgres.bundled.image.tag=pg18 \
   --wait --timeout 300s
-ok "Agent Registry deployed"
+ok "Agent Registry Enterprise deployed"
 
 # ============================================================================
 # 4. Agent Gateway Enterprise
