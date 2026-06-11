@@ -238,7 +238,7 @@ echo ""
 info "Starting port-forwards..."
 kubectl port-forward -n agentregistry-system svc/agentregistry-enterprise-server 12121:12121 &>/dev/null &
 kubectl port-forward -n agentgateway-system svc/ai-gateway 3001:3000 &>/dev/null &
-kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80 &>/dev/null &
+kubectl port-forward -n kagent svc/solo-enterprise-ui 8082:80 &>/dev/null &
 kubectl port-forward -n keycloak svc/keycloak 8080:8080 &>/dev/null &
 sleep 2
 
@@ -256,7 +256,7 @@ ok "RBAC policies applied"
 echo ""
 echo "UIs (port-forwards running in background):"
 echo "  Agent Registry:     http://localhost:12121"
-echo "  Solo Enterprise UI: http://localhost:8080"
+echo "  Solo Enterprise UI: http://localhost:8082"
 echo "  Keycloak:           http://localhost:8080 (admin/admin)"
 echo ""
 echo "The platform is ready. Continue to the Demo Guide (demo-guide.md)"
