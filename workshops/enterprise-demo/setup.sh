@@ -33,6 +33,10 @@ ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 fail()  { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 
+# Prefer the Enterprise arctl (installer default: ~/.arctl/bin) over any OSS
+# arctl that may shadow it earlier on PATH.
+[ -x "$HOME/.arctl/bin/arctl" ] && export PATH="$HOME/.arctl/bin:$PATH"
+
 # --- Pre-flight checks ---
 info "Checking prerequisites..."
 command -v docker  >/dev/null 2>&1 || fail "docker not found"
