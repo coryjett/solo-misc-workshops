@@ -677,11 +677,12 @@ spec:
     name: kagent-demo
   env:
     # Placeholder only — the real key lives in the gateway's openai-secret
-    # (Part 2). LiteLLM requires OPENAI_API_KEY to be non-empty; Agent Gateway
-    # overrides whatever the agent sends with the real key.
+    # (Part 2). The agent's model client requires OPENAI_API_KEY to be
+    # non-empty; Agent Gateway overrides whatever the agent sends with the
+    # real key.
     OPENAI_API_KEY: "sk-agw-managed"
     # Point the agent's model calls at the Agent Gateway LLM route from Part 2.
-    # LiteLLM appends /chat/completions to this base.
+    # The client appends /chat/completions to this base.
     OPENAI_BASE_URL: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
     OPENAI_API_BASE: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
     MCP_SERVERS_CONFIG: '[{"name":"weather","type":"remote","url":"http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp","headers":{"Authorization":"Bearer demo-key-12345"}}]'
