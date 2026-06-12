@@ -227,10 +227,11 @@ The registry creates a `Deployment` resource (`targetRef` → the published `wea
 > ```bash
 > arctl get deployments
 > # kagent deploys into the runtime's configured namespace (kagent) and names
-> # the Service <mcp-name>-<deployment-name>. Confirm the exact name/namespace —
-> # Part 2's Agent Gateway backend points at it:
-> kubectl get svc -A | grep weather-tools
-> # => kagent   weather-tools-weather-tools   ClusterIP   ...   3000/TCP
+> # the Service after the deployment. With Deployment Name = weather-tools the
+> # Service is simply `weather-tools`. Part 2's Agent Gateway backend points at it:
+> kubectl get svc -n kagent weather-tools
+> # => weather-tools   ClusterIP   ...   3000/TCP
+> kubectl get mcpservers.kagent.dev -n kagent weather-tools   # READY: True
 > ```
 
 > **Prefer the CLI?** The same deploy without the UI:
@@ -379,10 +380,10 @@ spec:
     targets:
     - name: weather
       # Host = the Service the registry created in Part 1 Step 5
-      # (<mcp-name>-<deployment-name> in the kagent runtime's namespace).
-      # Confirm with `kubectl get svc -A | grep weather-tools`.
+      # (named after the deployment, in the kagent runtime's namespace).
+      # Confirm with `kubectl get svc -n kagent weather-tools`.
       static:
-        host: weather-tools-weather-tools.kagent.svc.cluster.local
+        host: weather-tools.kagent.svc.cluster.local
         port: 3000
         protocol: StreamableHTTP
 EOF
