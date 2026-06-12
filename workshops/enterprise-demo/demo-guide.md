@@ -72,7 +72,15 @@ arctl user login \
   --oidc-issuer-url http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo
 # device-authorization is the default flow; the browser opens — log in as dev / password
 
-arctl user whoami
+# `arctl user whoami` resolves roles through the registry, which reads the bearer
+# token from $ARCTL_API_TOKEN. The `user` command group skips keychain token
+# resolution (a CLI limitation), so pass the token inline for this one call:
+ARCTL_API_TOKEN=$(curl -s -X POST \
+  http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=ar-cli-password \
+  -d username=dev -d password=password \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])') \
+  arctl user whoami
 ```
 
 > **Talk track:** "`whoami` shows the identity we just authenticated and the `developers` group it belongs to — that group is what the registry uses to decide what `dev` can do."
@@ -168,7 +176,13 @@ arctl user login \
   --oidc-issuer-url http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo \
   --oidc-username viewer --oidc-password password
 
-arctl user whoami   # viewer → viewers group, read-only
+# viewer → viewers group, read-only (token passed inline, see note above)
+ARCTL_API_TOKEN=$(curl -s -X POST \
+  http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=ar-cli-password \
+  -d username=viewer -d password=password \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])') \
+  arctl user whoami
 
 # Same publish — now denied
 arctl apply -f weather-tools/mcp.yaml
