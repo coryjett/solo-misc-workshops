@@ -6,3 +6,4 @@ weather-analysis/
 weatherassistant/
 weather-assistant-prompt.yaml
 agent-deployment.yaml
+weather-tools-remote.yaml

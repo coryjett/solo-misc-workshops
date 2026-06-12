@@ -298,7 +298,7 @@ arctl apply -f weatherassistant/agent.yaml
 
 > **Show:** The agent in the Agent Registry UI — click into it to see its model and configuration.
 >
-> **Note:** We publish the agent *without* binding it to the MCP server in the registry. Agent Registry's MCP mapping wires an agent straight to a tool's in-cluster address — which **bypasses** Agent Gateway. To route the agent's tool calls *through* the gateway (auth, RBAC, tracing), we wire the MCP connection at **deploy time** in Part 3, pointing the agent at the Agent Gateway route. That's the secure pattern this demo shows.
+> **Note:** We publish the agent *without* binding it to the MCP server yet. Binding it now to the in-cluster `weather-tools` server would wire the agent straight to the tool's Service address — **bypassing** Agent Gateway. Instead, in Part 3 (once the gateway exists) we register the *gateway route* as a remote `MCPServer` and bind the agent to that. The binding still lives declaratively in the registry, but every tool call flows *through* the gateway (auth, RBAC, tracing). That's the secure pattern this demo shows.
 
 ### Semantic Search + Key Takeaway (1 min)
 
@@ -656,13 +656,53 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 > **Talk track:** "We deploy the agent onto the same `kagent-demo` runtime we used for the MCP server in Part 1. The registry creates a kagent **BYO agent** — a managed workload running our agent image, fronted by kagent's A2A endpoint. There's no separate agent YAML to author; the registry and kagent build it for us."
 
-### Step 1: Deploy the Agent through Agent Gateway (4 min)
+### Step 1: Bind the Agent to its Tools via the Gateway (4 min)
 
-> **Talk track:** "We deploy the agent the same way we deployed the MCP server — through the registry — but this time we wire its tool connection through Agent Gateway. The registry's Deployment exposes an environment map; we use it to (a) hand the agent its model credentials and (b) point its MCP connection at the Agent Gateway route, carrying the gateway API key."
+> **Talk track:** "In Part 1 we published the agent *without* binding it to a tool, because Agent Registry's default MCP mapping wires an agent straight to a tool's in-cluster address — bypassing the gateway. Now that the gateway exists, we register the gateway route itself as a *remote* MCP server in the catalog, then bind the agent to it. The binding lives in the registry — discoverable, versioned, portable — and because the URL is the gateway route, every tool call still flows through Agent Gateway's auth, RBAC, and tracing."
+
+**Register the Agent Gateway weather route as a remote MCP server:**
 
 ```bash
-# OPENAI_API_KEY must be exported in your shell (see Quick Start).
-cat > agent-deployment.yaml <<EOF
+cat > weather-tools-remote.yaml <<'EOF'
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: weather-tools-remote
+spec:
+  description: Weather MCP, fronted by Agent Gateway
+  remote:
+    type: streamable-http
+    url: http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp
+    headers:
+    - name: Authorization
+      value: Bearer demo-key-12345
+EOF
+
+arctl apply -f weather-tools-remote.yaml
+```
+
+> **Talk track:** "`spec.remote.url` is the gateway's weather route from Part 2 — not the tool's in-cluster Service. `spec.remote.headers` carries the gateway API key (`Authorization: Bearer demo-key-12345`), so the agent authenticates to the gateway, the gateway validates the key and checks RBAC, and only then reaches the MCP server. The agent never talks to the tool directly."
+
+**Bind the agent to it** — add an `mcpServers` block to the scaffolded agent spec, then re-publish:
+
+```bash
+# Add the tool binding to the agent published in Part 1.
+cat >> weatherassistant/agent.yaml <<'EOF'
+  mcpServers:
+  - kind: MCPServer
+    name: weather-tools-remote
+    tag: latest
+EOF
+
+arctl apply -f weatherassistant/agent.yaml
+```
+
+> **Show:** Reopen the agent in the Agent Registry UI — it now lists `weather-tools-remote` under its tools/MCP servers.
+
+**Deploy the agent onto the kagent runtime:**
+
+```bash
+cat > agent-deployment.yaml <<'EOF'
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
@@ -685,15 +725,16 @@ spec:
     # The client appends /chat/completions to this base.
     OPENAI_BASE_URL: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
     OPENAI_API_BASE: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
-    MCP_SERVERS_CONFIG: '[{"name":"weather","type":"remote","url":"http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp","headers":{"Authorization":"Bearer demo-key-12345"}}]'
 EOF
 
 arctl apply -f agent-deployment.yaml
 ```
 
-> **Talk track:** "Two lines matter here. `OPENAI_BASE_URL` points the agent's *model* calls at the Agent Gateway LLM route from Part 2 — so the gateway, not the agent, holds the OpenAI key and every LLM call is authenticated and traced. `MCP_SERVERS_CONFIG` does the same for *tool* calls: a *remote* MCP whose URL is the gateway's weather route, carrying the `Authorization: Bearer demo-key-12345` header. Both the agent's LLM traffic and its tool traffic now flow through Agent Gateway."
+> **Talk track:** "Tool routing now comes from the *catalog* — the remote `MCPServer` we just bound, pointed at the gateway. The Deployment env only carries the *model* wiring: `OPENAI_BASE_URL` sends the agent's LLM calls through the gateway's LLM route, and the placeholder `OPENAI_API_KEY` satisfies the client's non-empty check — the gateway holds the real key. Both LLM and tool traffic flow through Agent Gateway; the agent itself holds no real credentials."
 >
-> **Security note:** The registry's Deployment `env` is a plaintext map (it can't reference a Kubernetes Secret), so we *don't* put the OpenAI key here — the agent carries only the placeholder `sk-agw-managed`. The real key lives solely in the gateway's `openai-secret` (created in Part 2), and the gateway injects it. This is the stronger pattern: the workload never holds the credential.
+> **Security note:** The registry's Deployment `env` is a plaintext map (it can't reference a Kubernetes Secret), so we *don't* put the OpenAI key here — the agent carries only the placeholder `sk-agw-managed`. The real key lives solely in the gateway's `openai-secret` (created in Part 2), and the gateway injects it. The tool API key lives in the catalog `MCPServer` instead of the deployment — for a real (non-demo) key, set `spec.remote.headers[].value` via shell expansion (`${...}`) at apply time, never a literal in committed YAML.
+>
+> **Verify on first run:** This catalog-binding path replaces the older deploy-time `MCP_SERVERS_CONFIG` env. On a fresh cluster, after the chat in Step 3, confirm in **Agent Gateway > Traces** that you see a `…/weather/mcp` span originating from the agent pod — that proves the running agent picked up the catalog-declared tool (and didn't silently fall back to no tools). If the agent reports no tools available, the runtime didn't project the catalog binding into the container; in that case re-add the `MCP_SERVERS_CONFIG` env entry (remote MCP, gateway URL, same `Authorization` header) as the fallback.
 
 ### Step 2: Confirm the Agent is Running (2 min)
 
@@ -784,7 +825,7 @@ Depending on audience interest, you can extend the demo with:
 ```bash
 # Remove local files created during the workshop
 rm -rf weather-tools/ weather-analysis/ weatherassistant/ \
-  weather-assistant-prompt.yaml agent-deployment.yaml
+  weather-assistant-prompt.yaml agent-deployment.yaml weather-tools-remote.yaml
 
 # Remove the registry deployments (this also removes the kagent BYO agent,
 # the MCP workload, and their Services that the registry created).
@@ -796,6 +837,7 @@ arctl delete deployment demo/weather-tools
 # Remove the registry artifacts
 arctl delete agent weatherassistant
 arctl delete mcp weather-tools
+arctl delete mcp weather-tools-remote
 arctl delete skill weather-analysis
 arctl delete prompt weather-assistant-prompt
 
