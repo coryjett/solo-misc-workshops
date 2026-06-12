@@ -54,7 +54,7 @@ When setup completes, verify the UIs are accessible:
 
 > **Talk track:** "Agent Registry is a single place to discover, publish, and manage all your AI artifacts — MCP servers, agents, skills, and prompts."
 
-> **Show:** The catalog view — 183 community MCP servers pre-loaded. Browse, search, filter by type.
+> **Show:** The catalog view. On a fresh install the registry starts empty — that's intentional. Over the next few minutes you'll publish an MCP server, an agent, a skill, and a prompt, and watch the catalog fill up live. Point out the type filters (MCP / Agent / Skill / Prompt) and search you'll be using shortly.
 
 ### Authenticate the CLI with `arctl user login` (2 min)
 
