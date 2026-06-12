@@ -654,7 +654,7 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 ### The Solution: Deploy the Registry Agent onto kagent (3 min)
 
-> **Talk track:** "Agent Registry's `kubernetes-default` runtime is kagent-backed. When we deploy the agent we published in Part 1, the registry creates a kagent **BYO agent** — a managed workload running our agent image, fronted by kagent's A2A endpoint. There's no separate agent YAML to author; the registry and kagent build it for us."
+> **Talk track:** "We deploy the agent onto the same `kagent-demo` runtime we used for the MCP server in Part 1. The registry creates a kagent **BYO agent** — a managed workload running our agent image, fronted by kagent's A2A endpoint. There's no separate agent YAML to author; the registry and kagent build it for us."
 
 ### Step 1: Deploy the Agent through Agent Gateway (4 min)
 
@@ -673,7 +673,7 @@ spec:
     name: weatherassistant
   runtimeRef:
     kind: Runtime
-    name: kubernetes-default
+    name: kagent-demo
   env:
     # Placeholder only — the real key lives in the gateway's openai-secret
     # (Part 2). LiteLLM requires OPENAI_API_KEY to be non-empty; Agent Gateway
@@ -700,13 +700,13 @@ arctl get deployments
 kubectl get agents.kagent.dev -A
 ```
 
-> **Show:** The registry Deployment moves from `STATUS: deploying` to running, and a kagent **BYO** agent named `weatherassistant-latest-weatherassistant` shows `ACCEPTED: True` and `READY: True`. The registry created that kagent resource automatically.
+> **Show:** The registry Deployment moves from `STATUS: deploying` to `STATUS: deployed`, and a kagent **BYO** agent named `weatherassistant` (in the `kagent` namespace, alongside the MCP server) shows `ACCEPTED: True` and `READY: True`. The registry created that kagent resource automatically.
 
 > **Talk track:** "One `arctl apply`, and the registry stood up a managed kagent agent running our image — wired to its tools through the gateway. No agent code, no hand-written kagent manifest."
 
 ### Step 3: Chat with the Agent in the Solo Enterprise UI (3 min)
 
-**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **kagent** > **Agents** > **weatherassistant-latest-weatherassistant**.
+**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **kagent** > **Agents** > **weatherassistant**.
 
 1. Open the **Chat** panel
 2. Type: **"What's the weather in Tokyo?"**
