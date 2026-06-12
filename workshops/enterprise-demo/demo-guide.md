@@ -206,43 +206,51 @@ arctl apply -f weather-tools/mcp.yaml
 
 > **Talk track:** "Back as `dev`, the publish goes through. Group membership in your IdP maps straight to an AccessPolicy in the registry — no per-user config, no separate access system to maintain."
 
-**Step 5 — Deploy the MCP server through a registry runtime:**
+**Step 5 — Deploy the MCP server from the Agent Registry UI:**
 
-> **Talk track:** "Publishing put the server in the catalog. The enterprise registry can also *deploy* it — you point a `Deployment` at the published server and one of the registry's registered runtimes, and the controller reconciles a live workload into the cluster. No hand-written kagent manifests."
+> **Talk track:** "Publishing put the server in the catalog. The enterprise registry can also *deploy* it — straight from the UI, no hand-written kagent manifests. The registry reconciles a live workload through one of its registered runtimes. `setup.sh` already connected this cluster as a **Kubernetes (kagent)** runtime, so it's ready to deploy onto."
 
-The catalog UI's Deploy button only targets **cloud** runtimes (AWS/GCP) for package-based servers, so deploy through the registry's `kubernetes-default` runtime with a `Deployment` resource — the same pattern you'll use for the agent in Part 3:
+1. In the Agent Registry UI, open the **weather-tools** MCP server's detail page.
+2. Click **Deploy**.
+3. In the dialog: choose **Platform = Kubernetes**, **Connection = `kagent-demo`**, and set **Deployment Name** to `weather-tools` (the field auto-fills a longer name — overwrite it so the Service name is predictable). Click **Deploy MCP Server**.
 
-```bash
-cat <<'EOF' | arctl apply -f -
-apiVersion: ar.dev/v1alpha1
-kind: Deployment
-metadata:
-  name: weather-tools
-spec:
-  targetRef:
-    kind: MCPServer
-    name: weather-tools
-  runtimeRef:
-    kind: Runtime
-    name: kubernetes-default
-EOF
-# => success
-```
+The registry creates a `Deployment` resource (`targetRef` → the published `weather-tools` server, `runtimeRef` → the `kagent-demo` runtime) and the kagent runtime reconciles it into a running `MCPServer` workload. Watch the deployment status reach **Running** in the UI, and tail the workload logs from the same page.
 
-The registry's controller reconciles the `Deployment` into a running kagent `MCPServer` workload. Watch it reach **Running** in the UI (or `arctl get deployments`), and tail logs from the same page.
+> **Why a runtime had to be connected first:** the catalog Deploy dialog only
+> offers a runtime of type `Kagent` (labeled "Kubernetes (kagent)" in the UI).
+> The chart pre-seeds a `kubernetes-default` runtime of type `Kubernetes` that
+> the UI does *not* recognize — so `setup.sh` seeds a proper `kagent-demo`
+> runtime (`runtimes/kagent-runtime.yaml`). Without it the dialog shows
+> "No cloud runtimes configured".
 
 > **Verify (CLI):**
 > ```bash
 > arctl get deployments
-> # The kubernetes-default runtime deploys into the registry's install
-> # namespace (agentregistry-system) and names the Service
-> # <mcp-name>-<deployment-name>. Note the name — Part 2's Agent Gateway
-> # backend points at it:
-> kubectl get svc -n agentregistry-system | grep weather-tools
-> # => weather-tools-weather-tools   ClusterIP   ...   3000/TCP
+> # kagent deploys into the runtime's configured namespace (kagent) and names
+> # the Service <mcp-name>-<deployment-name>. Confirm the exact name/namespace —
+> # Part 2's Agent Gateway backend points at it:
+> kubectl get svc -A | grep weather-tools
+> # => kagent   weather-tools-weather-tools   ClusterIP   ...   3000/TCP
 > ```
 
-> **Talk track:** "Same catalog, one declarative resource — and the server is running in the cluster, governed by the same SSO and RBAC. Developers deploy what they discover without hand-authoring raw kagent CRDs."
+> **Prefer the CLI?** The same deploy without the UI:
+> ```bash
+> cat <<'EOF' | arctl apply -f -
+> apiVersion: ar.dev/v1alpha1
+> kind: Deployment
+> metadata:
+>   name: weather-tools
+> spec:
+>   targetRef:
+>     kind: MCPServer
+>     name: weather-tools
+>   runtimeRef:
+>     kind: Runtime
+>     name: kagent-demo
+> EOF
+> ```
+
+> **Talk track:** "Same catalog, one click — and the server is running in the cluster, governed by the same SSO and RBAC. Developers deploy what they discover without ever touching raw kagent CRDs."
 
 ### Create a Prompt, Skill, and Agent (4 min)
 
@@ -371,10 +379,10 @@ spec:
     targets:
     - name: weather
       # Host = the Service the registry created in Part 1 Step 5
-      # (<mcp-name>-<deployment-name> in agentregistry-system). Confirm with
-      # `kubectl get svc -n agentregistry-system | grep weather-tools`.
+      # (<mcp-name>-<deployment-name> in the kagent runtime's namespace).
+      # Confirm with `kubectl get svc -A | grep weather-tools`.
       static:
-        host: weather-tools-weather-tools.agentregistry-system.svc.cluster.local
+        host: weather-tools-weather-tools.kagent.svc.cluster.local
         port: 3000
         protocol: StreamableHTTP
 EOF

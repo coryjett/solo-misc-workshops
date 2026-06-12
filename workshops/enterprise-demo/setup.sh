@@ -300,6 +300,15 @@ for p in rbac/accesspolicy-admins.yaml rbac/accesspolicy-developers.yaml rbac/ac
 done
 ok "RBAC policies applied"
 
+# ----------------------------------------------------------------------------
+# Seed the Kubernetes (kagent) runtime connection so the catalog Deploy dialog
+# can deploy package-based MCP servers from the UI. Without a type:Kagent
+# runtime the dialog reports "No cloud runtimes configured".
+# ----------------------------------------------------------------------------
+info "Seeding kagent runtime connection..."
+arctl apply -f "$(dirname "$0")/runtimes/kagent-runtime.yaml"
+ok "kagent runtime connection applied"
+
 echo ""
 echo "UIs (port-forwards running in background):"
 echo "  Agent Registry:     http://localhost:12121"

@@ -1,0 +1,20 @@
+# Kubernetes (kagent) runtime connection.
+#
+# The catalog Deploy dialog only offers a runtime to deploy onto if a Runtime
+# of type `Kagent` exists (the UI labels this platform "Kubernetes (kagent)").
+# The chart pre-seeds a `kubernetes-default` runtime of type `Kubernetes` with
+# an empty config — the UI does NOT recognize that type, so without this the
+# Deploy dialog shows "No cloud runtimes configured".
+#
+# type: Kagent + config.kagentUrl is what makes it deployable from the UI.
+# config.namespace is where kagent creates the workload (MCPServer CRD +
+# Service). Part 2's Agent Gateway backend points at that Service.
+apiVersion: ar.dev/v1alpha1
+kind: Runtime
+metadata:
+  name: kagent-demo
+spec:
+  type: Kagent
+  config:
+    kagentUrl: http://kagent-controller.kagent:8083
+    namespace: kagent
