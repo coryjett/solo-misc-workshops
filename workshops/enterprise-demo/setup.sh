@@ -148,12 +148,12 @@ ok "Agent Registry Enterprise deployed"
 # 4. Agent Gateway Enterprise
 # ============================================================================
 info "Deploying Agent Gateway Enterprise ${AGW_VERSION}..."
-helm install enterprise-agentgateway-crds \
+helm upgrade --install enterprise-agentgateway-crds \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
   --namespace agentgateway-system \
   --version "${AGW_VERSION}"
 
-helm install enterprise-agentgateway \
+helm upgrade --install enterprise-agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
   --namespace agentgateway-system \
   --version "${AGW_VERSION}" \
