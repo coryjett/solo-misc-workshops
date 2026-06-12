@@ -40,9 +40,10 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 
 | Time | Section | Product | What You'll See |
 |------|---------|---------|-----------------|
-| 0:00 | [Part 1: Agent Registry](demo-guide.md#part-1-agent-registry-15-min) | Agent Registry (Enterprise) | Build, publish, and deploy an MCP server + prompt + skill + agent |
-| 0:15 | [Part 2: Agent Gateway](demo-guide.md#part-2-agent-gateway-15-min) | Agent Gateway | Configure routing, add API key auth + RBAC, see traces in Solo Enterprise UI |
-| 0:30 | [Part 3: kagent](demo-guide.md#part-3-kagent-15-min) | kagent | Create an agent as YAML, connect to tools via AGW, chat in Solo Enterprise UI |
+| 0:00 | [Part 1: Agent Registry](demo-guide.md#part-1-agent-registry-enterprise-2022-min) | Agent Registry (Enterprise) | Build, publish, and deploy an MCP server + prompt + skill + agent |
+| 0:20 | [Part 2: Agent Gateway](demo-guide.md#part-2-agent-gateway-enterprise-14-min) | Agent Gateway | Configure routing, add API key auth + RBAC, see traces in Solo Enterprise UI |
+| 0:34 | [Part 3: kagent](demo-guide.md#part-3-kagent-enterprise-13-min) | kagent | Deploy the Part-1 agent as a kagent BYO workload, wire its tools through AGW, chat in Solo Enterprise UI |
+| 0:47 | [Putting It All Together](demo-guide.md#putting-it-all-together-3-min) | All three | End-to-end flow, three UIs, each product's contribution |
 
 ## Service URLs & Namespaces
 
@@ -62,7 +63,6 @@ Demo users (all with password `password`), provisioned in the `solo-ai-demo` rea
 | `admin` | `admins` |
 | `dev` | `developers` |
 | `viewer` | `viewers` |
-| 0:40 | [Putting It All Together](demo-guide.md#putting-it-all-together-5-min) | All three | End-to-end flow, three UIs, each product's contribution |
 
 ## Architecture
 

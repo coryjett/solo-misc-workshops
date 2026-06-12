@@ -84,83 +84,75 @@ arctl user whoami
 **Step 1 — Scaffold the MCP server:**
 
 ```bash
-arctl mcp init python weather-tools --non-interactive \
-  --description "Weather forecast MCP server" \
-  --author "demo-user" \
-  --no-git
+arctl init mcp weather-tools \
+  --framework fastmcp \
+  --language python \
+  --description "Weather forecast MCP server"
 ```
 
-**Step 2 — Replace the generated code with a simple FastMCP server:**
+> This scaffolds a FastMCP project with a *dynamic tool loader*: `src/main.py` auto-discovers any function decorated with `@mcp.tool()` under `src/tools/`. You add a tool by dropping a file in that directory — no manual registration.
+
+**Step 2 — Add a weather tool:**
 
 ```bash
-cat > weather-tools/src/main.py << 'PYEOF'
-"""Simple weather MCP server."""
-import random
-from fastmcp import FastMCP
+cat > weather-tools/src/tools/weather.py << 'PYEOF'
+"""Weather forecast tool for the weather-tools MCP server."""
 
-mcp = FastMCP(name="weather-tools")
+from core.server import mcp
 
-@mcp.tool()
+_FORECASTS = {
+    "san francisco": "Foggy, 58°F, light wind from the west.",
+    "new york": "Partly cloudy, 71°F, humid.",
+    "london": "Rain, 54°F, overcast all day.",
+    "tokyo": "Clear, 77°F, calm.",
+}
+
+_ALERTS = {
+    "CA": "Heat Advisory: high temperatures inland through Thursday.",
+    "FL": "Tropical Storm Watch: monitor the Gulf Coast.",
+    "TX": "Severe Thunderstorm Warning: large hail and damaging winds possible.",
+    "NY": "Winter Weather Advisory: 3–5 inches of snow overnight.",
+}
+
+_STATE_CODES = {
+    "california": "CA",
+    "florida": "FL",
+    "texas": "TX",
+    "new york": "NY",
+}
+
+
+@mcp.tool(description="Get the current weather forecast for a city.")
 def get_forecast(city: str) -> str:
-    """Get the current weather forecast for a city.
-    Args:
-        city: The city name (e.g., "San Francisco", "New York")
-    Returns:
-        A weather forecast for the specified city
-    """
-    conditions = ["Sunny", "Partly Cloudy", "Cloudy", "Light Rain", "Clear Skies"]
-    temp = random.randint(55, 85)
-    humidity = random.randint(30, 80)
-    condition = random.choice(conditions)
-    return (
-        f"Weather for {city}:\n"
-        f"  Condition: {condition}\n"
-        f"  Temperature: {temp}F\n"
-        f"  Humidity: {humidity}%\n"
-        f"  Wind: {random.randint(5, 20)} mph"
-    )
+    """Return a short weather forecast for the given city."""
+    return _FORECASTS.get(city.strip().lower(), f"No forecast on file for {city}.")
 
-@mcp.tool()
+
+@mcp.tool(description="Get active weather alerts for a US state (name or two-letter code).")
 def get_alerts(state: str) -> str:
-    """Get active weather alerts for a US state.
-    Args:
-        state: Two-letter US state code (e.g., "CA", "NY")
-    Returns:
-        Active weather alerts for the specified state
-    """
-    alerts = {
-        "CA": "Heat Advisory: High temperatures expected in inland areas through Thursday.",
-        "FL": "Tropical Storm Watch: Monitor conditions along the Gulf Coast.",
-        "TX": "Severe Thunderstorm Warning: Large hail and damaging winds possible.",
-        "NY": "Winter Weather Advisory: 3-5 inches of snow expected overnight.",
-    }
-    state = state.upper()
-    if state in alerts:
-        return f"Active alerts for {state}:\n  {alerts[state]}"
-    return f"No active weather alerts for {state}."
-
-if __name__ == "__main__":
-    mcp.run(transport="http", host="0.0.0.0", port=3000, path="/mcp")
+    """Return active weather alerts for a US state name or two-letter code."""
+    key = state.strip()
+    code = key.upper() if len(key) == 2 else _STATE_CODES.get(key.lower(), key.upper())
+    return _ALERTS.get(code, f"No active weather alerts for {state}.")
 PYEOF
 ```
 
-**Step 3 — Build the Docker image and load into the cluster:**
+**Step 3 — Build the image and load it into the cluster:**
 
 ```bash
-docker build -t weather-tools:latest weather-tools/
-k3d image import weather-tools:latest -c solo-ai-demo
+arctl build weather-tools/
+k3d image import localhost:5001/weather-tools:latest -c solo-ai-demo
 ```
+
+> `arctl build` reads the project's resource spec (`weather-tools/mcp.yaml`) and tags the image from `spec.source.package.origin.identifier` → `localhost:5001/weather-tools:latest`. `k3d image import` loads that tag onto the cluster nodes — the registry deploys with `imagePullPolicy: IfNotPresent`, so no external image registry is required.
 
 **Step 4 — Publish to Agent Registry:**
 
 ```bash
-arctl mcp publish weather-tools/ \
-  --type oci \
-  --package-id weather-tools:latest \
-  --overwrite
+arctl apply -f weather-tools/mcp.yaml
 ```
 
-> **Show:** Navigate to the Agent Registry UI — the weather-tools server now appears in the catalog.
+> **Show:** Navigate to the Agent Registry UI — the `weather-tools` server now appears in the catalog.
 
 ### RBAC: Deny → Grant (3 min)
 
@@ -179,10 +171,7 @@ arctl user login \
 arctl user whoami   # viewer → viewers group, read-only
 
 # Same publish — now denied
-arctl mcp publish weather-tools/ \
-  --type oci \
-  --package-id weather-tools:latest \
-  --overwrite
+arctl apply -f weather-tools/mcp.yaml
 # => forbidden
 ```
 
@@ -197,120 +186,79 @@ arctl user login \
   --oidc-issuer-url http://keycloak.127.0.0.1.sslip.io:8080/realms/solo-ai-demo
 # log in as dev (developers) — or admin (admins) for full control
 
-arctl mcp publish weather-tools/ \
-  --type oci \
-  --package-id weather-tools:latest \
-  --overwrite
+arctl apply -f weather-tools/mcp.yaml
 # => success
 ```
 
 > **Talk track:** "Back as `dev`, the publish goes through. Group membership in your IdP maps straight to an AccessPolicy in the registry — no per-user config, no separate access system to maintain."
 
-**Step 5 — Deploy the MCP server to Kubernetes:**
+**Step 5 — Deploy the MCP server from the Agent Registry UI:**
 
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: weather-tools
-  namespace: demo
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: weather-tools
-  template:
-    metadata:
-      labels:
-        app: weather-tools
-    spec:
-      containers:
-      - name: weather-tools
-        image: weather-tools:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 3000
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: weather-tools
-  namespace: demo
-spec:
-  selector:
-    app: weather-tools
-  ports:
-  - port: 3000
-    targetPort: 3000
-EOF
+> **Talk track:** "Publishing put the server in the catalog. The enterprise registry can also *deploy* it — straight from the UI, no hand-written Kubernetes YAML. The registry reconciles a live workload through one of its registered runtimes."
 
-# Wait for pod
-kubectl -n demo wait --for=condition=ready pod -l app=weather-tools --timeout=120s
-```
+1. In the Agent Registry UI, open the **weather-tools** MCP server's detail page.
+2. Click **Deploy**.
+3. Choose the **`kubernetes-default`** runtime and the **`demo`** namespace, then confirm.
+
+The registry creates a `Deployment` resource (`targetRef` → the published `weather-tools` server, `runtimeRef` → `kubernetes-default`) and its controller reconciles it into a running workload in the cluster. Watch the deployment status reach **Running** in the UI, and tail the workload logs from the same page.
+
+> **Verify (optional, CLI):**
+> ```bash
+> arctl get deployments
+> # The registry names the workload's Service <mcp-name>-<deployment-name>.
+> # Note the exact name — Part 2's Agent Gateway backend points at it:
+> kubectl get svc -n demo
+> # => weather-tools-weather-tools   ClusterIP   ...   3000/TCP
+> ```
+
+> **Talk track:** "Same catalog, one click — and the server is running in the cluster, governed by the same SSO and RBAC. Developers deploy what they discover without ever touching raw Kubernetes manifests."
 
 ### Create a Prompt, Skill, and Agent (4 min)
 
-> **Talk track:** "Agent Registry isn't just MCP servers — it catalogs prompts, skills, and complete agents. Let's create all three and wire them together."
+> **Talk track:** "Agent Registry isn't just MCP servers — it catalogs prompts, skills, and complete agents. Let's create all three and publish them to the catalog."
 
 **Create a prompt** — a reusable system prompt published to the registry:
 
 ```bash
-cat > weather-assistant-prompt.md << 'EOF'
-You are a friendly weather assistant. Use your tools to fetch
-real-time weather data before answering. Be concise but thorough.
-EOF
+arctl init prompt weather-assistant-prompt \
+  --description "System prompt for the weather assistant agent" \
+  --content "You are a friendly weather assistant. Use your tools to fetch real-time weather data before answering. Be concise but thorough."
 
-arctl prompt publish weather-assistant-prompt.md \
-  --name weather-assistant-prompt \
-  --version 1.0.0 \
-  --description "System prompt for the weather assistant agent"
+arctl apply -f weather-assistant-prompt.yaml
 ```
 
-> **Show:** The prompt in the Agent Registry UI — `arctl prompt list` to verify.
+> **Show:** The prompt in the Agent Registry UI — `arctl get prompts` to verify.
 
-**Create a skill** — a reusable set of instructions for weather analysis:
+**Create a skill** — a reusable capability published to the registry:
 
 ```bash
-arctl skill init weather-analysis --no-git
+arctl init skill weather-analysis \
+  --description "Weather analysis skill"
 
-arctl skill publish weather-analysis/ \
-  --docker-image weather-analysis:latest \
-  --version 1.0.0
+arctl apply -f weather-analysis/skill.yaml
 ```
 
 > **Show:** The skill in the Agent Registry UI under the Skills tab.
 
-**Create an agent** — wire together the model, MCP server, prompt, and skill:
+**Create an agent** — scaffold, build, and publish a complete agent:
 
 ```bash
-arctl agent init adk python weatherassistant \
-  --model-provider OpenAI \
+arctl init agent weatherassistant \
+  --framework adk \
+  --language python \
+  --model-provider openai \
   --model-name gpt-4o-mini \
-  --description "AI weather assistant with forecasts and alerts" \
-  --instruction-file weather-assistant-prompt.md
+  --description "AI weather assistant with forecasts and alerts"
 
-cd weatherassistant
+arctl build weatherassistant/
+k3d image import localhost:5001/weatherassistant:latest -c solo-ai-demo
 
-# Add the MCP server from the registry
-arctl agent add-mcp weather-tools \
-  --registry-server-name weather-tools \
-  --registry-url http://localhost:12121
-
-# Add the skill from the registry
-arctl agent add-skill weather-analysis \
-  --registry-skill-name weather-analysis
-
-# Build and publish the complete agent
-arctl agent build .
-arctl agent publish .
-
-cd ..
+arctl apply -f weatherassistant/agent.yaml
 ```
 
-> **Show:** The agent in the Agent Registry UI — click into it to see its MCP servers, skills, and configuration. Developers can now discover and deploy this entire agent from the catalog.
+> **Show:** The agent in the Agent Registry UI — click into it to see its model and configuration.
 >
-> **Note:** The `add-mcp` and `add-skill` commands wire the agent to registry entries — this is catalog metadata for discovery, not a runtime connection. The actual runtime wiring (agent → Agent Gateway → MCP server) happens in Part 3 with kagent.
+> **Note:** We publish the agent *without* binding it to the MCP server in the registry. Agent Registry's MCP mapping wires an agent straight to a tool's in-cluster address — which **bypasses** Agent Gateway. To route the agent's tool calls *through* the gateway (auth, RBAC, tracing), we wire the MCP connection at **deploy time** in Part 3, pointing the agent at the Agent Gateway route. That's the secure pattern this demo shows.
 
 ### Semantic Search + Key Takeaway (1 min)
 
@@ -391,8 +339,10 @@ spec:
   mcp:
     targets:
     - name: weather
+      # Host = the Service the registry created in Part 1 Step 5
+      # (<mcp-name>-<deployment-name>). Confirm with `kubectl get svc -n demo`.
       static:
-        host: weather-tools.demo.svc.cluster.local
+        host: weather-tools-weather-tools.demo.svc.cluster.local
         port: 3000
         protocol: StreamableHTTP
 EOF
@@ -578,140 +528,78 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 ## Part 3: kagent (Enterprise) (~13 min)
 
-> **Goal:** Create an AI agent that uses the MCP tools we registered and secured.
+> **Goal:** Run the agent we built in Part 1 as a managed Kubernetes workload, wired to its tools through Agent Gateway, and chat with it.
 
 ### The Problem (2 min)
 
-> **Talk track:** "We have tools in our registry and a secure gateway in front of them. But how do we actually build an agent that uses them? Most teams write custom Python/JS code to wire up LLMs to tools. Every agent is a snowflake. kagent lets you define agents as Kubernetes resources — declarative, GitOps-friendly, and fully managed."
+> **Talk track:** "We have a tool in the registry, a secure gateway in front of it, and an agent published to the catalog. But a published agent is just an artifact — how do we actually *run* it? Most teams hand-write Kubernetes manifests and custom glue code for every agent. kagent runs agents as first-class Kubernetes resources, managed for you."
 
-### The Solution: Agents as Kubernetes Resources (3 min)
+### The Solution: Deploy the Registry Agent onto kagent (3 min)
 
-> **Talk track:** "With kagent, an agent is just a YAML file. You define the model, the system prompt, and which MCP tools it can use. Apply it to the cluster, and it's running."
+> **Talk track:** "Agent Registry's `kubernetes-default` runtime is kagent-backed. When we deploy the agent we published in Part 1, the registry creates a kagent **BYO agent** — a managed workload running our agent image, fronted by kagent's A2A endpoint. There's no separate agent YAML to author; the registry and kagent build it for us."
 
-### Step 1: Configure the Model (2 min)
+### Step 1: Deploy the Agent through Agent Gateway (4 min)
+
+> **Talk track:** "We deploy the agent the same way we deployed the MCP server — through the registry — but this time we wire its tool connection through Agent Gateway. The registry's Deployment exposes an environment map; we use it to (a) hand the agent its model credentials and (b) point its MCP connection at the Agent Gateway route, carrying the gateway API key."
 
 ```bash
-# Create secrets for the agent
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
+# OPENAI_API_KEY must be exported in your shell (see Quick Start).
+cat > agent-deployment.yaml <<EOF
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
 metadata:
-  name: demo-keys
-  namespace: kagent
-stringData:
-  openai-api-key: "${OPENAI_API_KEY}"
-  agw-api-key: "Bearer demo-key-12345"
-EOF
-
-# ModelConfig — OpenAI model
-kubectl apply -f - <<'EOF'
-apiVersion: kagent.dev/v1alpha2
-kind: ModelConfig
-metadata:
-  name: gpt-4o-mini
-  namespace: kagent
+  name: weatherassistant
 spec:
-  provider: OpenAI
-  model: gpt-4o-mini
-  apiKeySecret: demo-keys
-  apiKeySecretKey: openai-api-key
-EOF
-```
-
-> **Talk track:** "The ModelConfig tells kagent which LLM to use. The API key is stored in a Kubernetes Secret — no credentials in your agent definition."
-
-### Step 2: Connect the MCP Server via Agent Gateway (2 min)
-
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: kagent.dev/v1alpha2
-kind: RemoteMCPServer
-metadata:
-  name: weather-tools
-  namespace: kagent
-spec:
-  url: http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp
-  protocol: STREAMABLE_HTTP
-  description: "Weather forecast and alerts MCP server"
-  headersFrom:
-  - name: Authorization
-    valueFrom:
-      name: demo-keys
-      key: agw-api-key
-      type: Secret
-EOF
-```
-
-> **Talk track:** "The RemoteMCPServer points to the Agent Gateway route we created in Part 2 — not directly to the MCP server. The `headersFrom` field injects the API key from a Kubernetes Secret. The agent never connects to backends directly. All traffic flows through the gateway."
-
-**Wait for tool discovery:**
-
-```bash
-sleep 15
-kubectl get remotemcpserver weather-tools -n kagent
-```
-
-> **Talk track:** "The kagent controller automatically connected to the MCP server through Agent Gateway, authenticated with the API key, and discovered the available tools: `get_forecast` and `get_alerts`."
-
-### Step 3: Create the Agent (3 min)
-
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: kagent.dev/v1alpha2
-kind: Agent
-metadata:
-  name: weather-assistant
-  namespace: kagent
-spec:
-  type: Declarative
-  description: "An AI assistant that can check weather forecasts and alerts"
-  declarative:
-    modelConfig: gpt-4o-mini
-    systemMessage: |
-      You are a helpful weather assistant. You can check weather forecasts
-      for cities and weather alerts for US states. Use the available tools
-      to answer weather-related questions.
-    tools:
-    - type: McpServer
-      mcpServer:
-        name: weather-tools
-        kind: RemoteMCPServer
-        apiGroup: kagent.dev
-        toolNames:
-        - get_forecast
-        - get_alerts
+  targetRef:
+    kind: Agent
+    name: weatherassistant
+  runtimeRef:
+    kind: Runtime
+    name: kubernetes-default
+  env:
+    OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    MCP_SERVERS_CONFIG: '[{"name":"weather","type":"remote","url":"http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp","headers":{"Authorization":"Bearer demo-key-12345"}}]'
 EOF
 
-# Wait for agent to be ready
-sleep 20
-kubectl get agent -n kagent
+arctl apply -f agent-deployment.yaml
 ```
 
-> **Show:** The agent is `ACCEPTED: True` and `READY: True`.
+> **Talk track:** "`MCP_SERVERS_CONFIG` is the line that matters. Instead of a direct cluster address, it declares a *remote* MCP whose URL is the Agent Gateway route from Part 2 — and it carries the `Authorization: Bearer demo-key-12345` header the gateway requires. Every tool call the agent makes now flows through Agent Gateway: authenticated, authorized, traced."
+>
+> **Security note:** The registry's Deployment `env` is a plaintext map (it can't reference a Kubernetes Secret). For the demo we inject `OPENAI_API_KEY` from your shell at apply time — the heredoc expands it, so the literal key never lands in a committed file. In production, prefer a runtime that sources credentials from a secret store.
 
-> **Talk track:** "That's the entire agent definition. Apply it, and it's live. No Docker images, no custom code, no framework lock-in."
+### Step 2: Confirm the Agent is Running (2 min)
 
-### Step 4: Use the Agent via the Solo Enterprise UI (3 min)
+```bash
+arctl get deployments
+kubectl get agents.kagent.dev -A
+```
 
-**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **kagent** > **Agents** > **weather-assistant**.
+> **Show:** The registry Deployment moves from `STATUS: deploying` to running, and a kagent **BYO** agent named `weatherassistant-latest-weatherassistant` shows `ACCEPTED: True` and `READY: True`. The registry created that kagent resource automatically.
+
+> **Talk track:** "One `arctl apply`, and the registry stood up a managed kagent agent running our image — wired to its tools through the gateway. No agent code, no hand-written kagent manifest."
+
+### Step 3: Chat with the Agent in the Solo Enterprise UI (3 min)
+
+**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **kagent** > **Agents** > **weatherassistant-latest-weatherassistant**.
 
 1. Open the **Chat** panel
-2. Type: **"What's the weather in San Francisco?"**
+2. Type: **"What's the weather in Tokyo?"**
 
 > **Show:** The agent:
 > 1. Receives the question
-> 2. Calls the `get_forecast` tool via Agent Gateway
-> 3. Agent Gateway validates the API key, checks RBAC, logs the trace
-> 4. Weather MCP server returns data
-> 5. Agent formats and returns the response
+> 2. Calls the `get_forecast` tool — *through Agent Gateway*
+> 3. Agent Gateway validates the API key, checks RBAC, records the trace
+> 4. The weather MCP server returns the forecast
+> 5. The agent formats and returns the answer
 
 3. Type: **"Any weather alerts for California?"**
 
 > **Show:** The agent calls `get_alerts` with state "CA".
 
-> **Talk track:** "That chat message just exercised the entire stack. The agent called a tool registered in Agent Registry, routed through Agent Gateway with API key auth and RBAC, and the weather MCP server returned the data. Let's see that in the Solo Enterprise UI traces."
+> **Talk track:** "That chat exercised the entire stack: an agent built and deployed by Agent Registry, running on kagent, calling a tool that's also in the registry — with every tool call routed through Agent Gateway's auth, RBAC, and tracing."
 
-> **Show in the Solo Enterprise UI:** Navigate to **Agent Gateway** > **Traces** — find the trace for this request and show the spans.
+> **Show in the Solo Enterprise UI:** Navigate to **Agent Gateway** > **Traces** — find this request and show the spans: `agent → gateway → MCP server`.
 
 ---
 
@@ -731,7 +619,7 @@ kubectl get agent -n kagent
 |---------|------|-------------|
 | **Agent Registry** | Catalog & Discovery | MCP servers, prompts, skills, and agents were published to the catalog. Developers searched "weather" and found them. |
 | **Agent Gateway** | Routing & Security | Routed the MCP call, validated the API key, enforced RBAC, generated OTEL traces. Zero changes to the agent or MCP server. |
-| **kagent** | Agent Lifecycle | The agent was defined as K8s resources (YAML), connected to tools via the gateway, and accessible through the Solo Enterprise chat UI. No custom code. |
+| **kagent** | Agent Lifecycle | The registry-built agent ran as a managed kagent **BYO** workload, wired to its tools through the gateway, and accessible through the Solo Enterprise chat UI. No hand-written agent manifest. |
 
 ### The Value: Each Product Works Alone, Better Together
 
@@ -767,22 +655,29 @@ Depending on audience interest, you can extend the demo with:
 
 ```bash
 # Remove local files created during the workshop
-rm -rf weather-tools/ weather-analysis/ weatherassistant/ weather-assistant-prompt.md
+rm -rf weather-tools/ weather-analysis/ weatherassistant/ \
+  weather-assistant-prompt.yaml agent-deployment.yaml
 
-# Remove demo resources
-kubectl delete agent weather-assistant -n kagent
-kubectl delete remotemcpserver weather-tools -n kagent
-kubectl delete modelconfig gpt-4o-mini -n kagent
-kubectl delete secret demo-keys -n kagent
+# Remove the registry deployments (this also removes the kagent BYO agent,
+# the MCP workload, and their Services that the registry created).
+# Deployments are namespaced — list them first, then delete by the shown <ns>/<name>:
+arctl get deployments
+arctl delete deployment default/weatherassistant
+arctl delete deployment demo/weather-tools
+
+# Remove the registry artifacts
+arctl delete agent weatherassistant
+arctl delete mcp weather-tools
+arctl delete skill weather-analysis
+arctl delete prompt weather-assistant-prompt
+
+# Remove the Agent Gateway resources
+kubectl delete secret demo-api-keys -n agentgateway-system
 kubectl delete agentgatewaypolicy weather-security tracing -n agentgateway-system
 kubectl delete httproute weather-tools -n agentgateway-system
 kubectl delete agentgatewaybackend weather-tools -n agentgateway-system
 kubectl delete gateway ai-gateway -n agentgateway-system
 kubectl delete referencegrant agw-to-collector -n kagent
-
-# Remove MCP server deployment
-kubectl delete deployment weather-tools -n demo
-kubectl delete service weather-tools -n demo
 
 # Remove products (if desired)
 helm uninstall kagent -n kagent
