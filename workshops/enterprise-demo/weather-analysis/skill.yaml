@@ -1,0 +1,7 @@
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: weather-analysis
+spec:
+  description: Weather analysis skill
+  title: weather-analysis
