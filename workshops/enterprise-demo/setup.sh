@@ -259,11 +259,29 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 
 info "Starting port-forwards..."
-kubectl port-forward -n agentregistry-system svc/agentregistry-enterprise-server 12121:12121 &>/dev/null &
-kubectl port-forward -n agentgateway-system svc/ai-gateway 3001:3000 &>/dev/null &
-kubectl port-forward -n kagent svc/solo-enterprise-ui 8082:80 &>/dev/null &
-kubectl port-forward -n keycloak svc/keycloak 8080:8080 &>/dev/null &
-sleep 2
+# Durable background port-forwards that survive this script exiting (nohup +
+# disown), each verified to actually be listening before we move on.
+# Note: the ai-gateway forward (localhost:3001) is intentionally NOT started
+# here — its Gateway/service is created later in demo-guide.md Part 2. Start it
+# then, per the guide.
+start_pf() {  # start_pf <local_port> <namespace> <service> <remote_port>
+  local lport=$1 ns=$2 svc=$3 rport=$4 code
+  for attempt in 1 2 3; do
+    pkill -f "port-forward.*svc/${svc} ${lport}:" 2>/dev/null || true
+    nohup kubectl port-forward -n "$ns" "svc/$svc" "${lport}:${rport}" >/dev/null 2>&1 &
+    disown
+    for _ in $(seq 1 10); do
+      code=$(curl -s -o /dev/null --max-time 2 -w '%{http_code}' "http://localhost:${lport}/" 2>/dev/null || echo 000)
+      [ "$code" != "000" ] && { ok "port-forward localhost:${lport} ready"; return 0; }
+      sleep 1
+    done
+    warn "port-forward localhost:${lport} not ready (attempt ${attempt}/3); retrying..."
+  done
+  warn "port-forward localhost:${lport} (${ns}/${svc}) failed to start — start it manually"
+}
+start_pf 12121 agentregistry-system agentregistry-enterprise-server 12121
+start_pf 8082  kagent               solo-enterprise-ui               80
+start_pf 8080  keycloak             keycloak                         8080
 
 # ----------------------------------------------------------------------------
 # Seed RBAC (admin logs in, applies AccessPolicies)
