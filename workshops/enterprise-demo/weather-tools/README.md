@@ -37,29 +37,17 @@ tests/                  # Generated tests
 
 2. **Run the Server**:
    ```bash
-   # Stdio mode (default MCP transport)
+   # HTTP mode (default; binds localhost:3000)
    uv run python src/main.py
-   
-   # HTTP mode with WebSocket MCP endpoint
-   uv run python src/main.py --http
-   
-   # HTTP mode with custom host/port
-   uv run python src/main.py --http --host 0.0.0.0 --port 8080
-   ```
 
-3. **Using uv Scripts**:
-   ```bash
-   # Development mode (HTTP on port 3000)
-   uv run dev
-   
-   # HTTP mode
-   uv run dev-http
-   
    # Stdio mode
-   uv run start
+   uv run python src/main.py --transport stdio
+
+   # Custom port
+   uv run python src/main.py --port 8080
    ```
 
-4. **Add New Tools**:
+3. **Add New Tools**:
    ```bash
    # Create a new tool (no tool types needed!)
    arctl mcp add-tool weather
@@ -72,38 +60,40 @@ tests/                  # Generated tests
 
 1. **Build Docker Image**:
    ```bash
-   arctl mcp build --verbose
+   arctl build --verbose
    ```
 
-2. **Run in Container**:
+2. **Run in Container** (Dockerfile sets `HOST=0.0.0.0` so the http default is reachable):
    ```bash
-   docker run -i weather-tools:latest
+   # HTTP (default)
+   docker run -p 3000:3000 weather-tools:latest
+
+   # Stdio (pipe to an MCP client)
+   docker run -i weather-tools:latest --transport stdio
    ```
 
 3. **Add New Tools**:
    ```bash
    # Create a new tool
    arctl mcp add-tool weather
-   
+
    # Edit the tool file, then rebuild
-   arctl mcp build
+   arctl build
    ```
 
-## HTTP Transport Mode
+## Transport Modes
 
-The server supports running in HTTP mode for development and integration purposes.
-
-### Starting in HTTP Mode
+The server defaults to HTTP. Use `--transport stdio` to switch.
 
 ```bash
-# Command line flag
-python src/main.py --http
+# HTTP (default; binds localhost:3000 — set HOST=0.0.0.0 to bind all interfaces)
+python src/main.py
 
-# Environment variable
-MCP_TRANSPORT_MODE=http python src/main.py
+# Stdio
+python src/main.py --transport stdio
 
 # Custom host and port
-python src/main.py --http --host localhost --port 8080
+python src/main.py --host 0.0.0.0 --port 8080
 ```
 
 ## Creating Tools
@@ -199,8 +189,8 @@ uv run mypy .
 
 ```bash
 # Build image (handles lockfile automatically)
-arctl mcp build
+arctl build
 
-# Run container
-docker run -i weather-tools:latest
+# Run container (HTTP default; -p maps the container's :3000 to the host)
+docker run -p 3000:3000 weather-tools:latest
 ```

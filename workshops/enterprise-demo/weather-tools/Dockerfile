@@ -56,16 +56,17 @@ RUN chown -R mcpuser:mcpuser /app
 USER mcpuser
 
 # Expose port (if needed for HTTP transport)
-EXPOSE 8080
+EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import src.main; print('healthy')"
+    CMD python3 -c "import src.main; print('healthy')"
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV OTEL_SERVICE_NAME=weather-tools
+# Bind 0.0.0.0 so the http default is reachable from outside the container.
+ENV HOST=0.0.0.0
 
-# Default command
-CMD ["python", "src/main.py"]
+ENTRYPOINT ["python3", "src/main.py"]

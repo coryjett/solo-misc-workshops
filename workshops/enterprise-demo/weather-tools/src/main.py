@@ -1,47 +1,86 @@
-"""Simple weather MCP server."""
-import random
-from fastmcp import FastMCP
+#!/usr/bin/env python3
+"""weather-tools MCP server with dynamic tool loading.
 
-mcp = FastMCP(name="weather-tools")
+This server automatically discovers and loads tools from the src/tools/ directory.
+Each tool file should contain a function decorated with @mcp.tool().
 
-@mcp.tool()
-def get_forecast(city: str) -> str:
-    """Get the current weather forecast for a city.
-    Args:
-        city: The city name (e.g., "San Francisco", "New York")
-    Returns:
-        A weather forecast for the specified city
-    """
-    conditions = ["Sunny", "Partly Cloudy", "Cloudy", "Light Rain", "Clear Skies"]
-    temp = random.randint(55, 85)
-    humidity = random.randint(30, 80)
-    condition = random.choice(conditions)
-    return (
-        f"Weather for {city}:\n"
-        f"  Condition: {condition}\n"
-        f"  Temperature: {temp}F\n"
-        f"  Humidity: {humidity}%\n"
-        f"  Wind: {random.randint(5, 20)} mph"
+Usage:
+  python src/main.py --transport stdio
+  python src/main.py --transport http --host 0.0.0.0 --port 3000 [--stateless-http]
+"""
+
+import argparse
+import logging
+import os
+import sys
+from pathlib import Path
+
+# Add src to Python path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from core.server import DynamicMCPServer  # noqa: E402
+
+
+def main() -> None:
+    """Main entry point for the MCP server."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="weather-tools MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="http",
+        help="Transport mode: stdio, or http (default: http)"
+    )
+    parser.add_argument(
+        "--host",
+        default=os.getenv("HOST", "localhost"),
+        help="Host to bind to in HTTP mode (default: localhost)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("PORT", "3000")),
+        help="Port to bind to in HTTP mode (default: 3000)"
     )
 
-@mcp.tool()
-def get_alerts(state: str) -> str:
-    """Get active weather alerts for a US state.
-    Args:
-        state: Two-letter US state code (e.g., "CA", "NY")
-    Returns:
-        Active weather alerts for the specified state
-    """
-    alerts = {
-        "CA": "Heat Advisory: High temperatures expected in inland areas through Thursday.",
-        "FL": "Tropical Storm Watch: Monitor conditions along the Gulf Coast.",
-        "TX": "Severe Thunderstorm Warning: Large hail and damaging winds possible.",
-        "NY": "Winter Weather Advisory: 3-5 inches of snow expected overnight.",
-    }
-    state = state.upper()
-    if state in alerts:
-        return f"Active alerts for {state}:\n  {alerts[state]}"
-    return f"No active weather alerts for {state}."
+    parser.add_argument(
+        "--stateless-http",
+        action="store_true",
+        default=os.getenv("MCP_STATELESS_HTTP", "false").lower() == "true",
+        help="Enable stateless HTTP mode (default: false)"
+    )
+
+    args = parser.parse_args()
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stderr)
+        ]
+    )
+
+    try:
+        # Create server with dynamic tool loading
+        server = DynamicMCPServer(
+            name="weather-tools",
+            tools_dir="src/tools"
+        )
+
+        # Load tools and start server
+        server.load_tools()
+
+        server.run(transport_mode=args.transport,
+                   host=args.host,
+                   port=args.port,
+                   stateless_http=args.stateless_http)
+
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+    except Exception as e:
+        print(f"Server error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
-    mcp.run(transport="http", host="0.0.0.0", port=3000, path="/mcp")
+    main()
