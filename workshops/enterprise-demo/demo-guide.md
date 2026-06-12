@@ -671,6 +671,7 @@ spec:
   targetRef:
     kind: Agent
     name: weatherassistant
+    tag: latest
   runtimeRef:
     kind: Runtime
     name: kagent-demo
