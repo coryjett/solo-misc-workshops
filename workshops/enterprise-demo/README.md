@@ -7,7 +7,7 @@ A 45-minute guided demo of the Solo.io AI platform: **Agent Registry (Enterprise
 You're a platform engineer building an AI-powered developer experience. You need to:
 
 1. **Catalog and discover** MCP servers your teams have built (Agent Registry (Enterprise))
-2. **Route, secure, and observe** all agent-to-tool traffic (Agent Gateway)
+2. **Route, secure, and observe** all agent traffic — both LLM and tool calls (Agent Gateway)
 3. **Create and run** an AI agent that uses those tools (kagent)
 
 This demo builds each layer progressively — by the end, you'll have a working agent calling MCP tools through a secured gateway, with full observability.
@@ -41,9 +41,9 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 | Time | Section | Product | What You'll See |
 |------|---------|---------|-----------------|
 | 0:00 | [Part 1: Agent Registry](demo-guide.md#part-1-agent-registry-enterprise-2022-min) | Agent Registry (Enterprise) | Build, publish, and deploy an MCP server + prompt + skill + agent |
-| 0:20 | [Part 2: Agent Gateway](demo-guide.md#part-2-agent-gateway-enterprise-14-min) | Agent Gateway | Configure routing, add API key auth + RBAC, see traces in Solo Enterprise UI |
-| 0:34 | [Part 3: kagent](demo-guide.md#part-3-kagent-enterprise-13-min) | kagent | Deploy the Part-1 agent as a kagent BYO workload, wire its tools through AGW, chat in Solo Enterprise UI |
-| 0:47 | [Putting It All Together](demo-guide.md#putting-it-all-together-3-min) | All three | End-to-end flow, three UIs, each product's contribution |
+| 0:20 | [Part 2: Agent Gateway](demo-guide.md#part-2-agent-gateway-enterprise-17-min) | Agent Gateway | Configure MCP + LLM routing, add API key auth + RBAC, see traces in Solo Enterprise UI |
+| 0:37 | [Part 3: kagent](demo-guide.md#part-3-kagent-enterprise-13-min) | kagent | Deploy the Part-1 agent as a kagent BYO workload, wire its tools through AGW, chat in Solo Enterprise UI |
+| 0:50 | [Putting It All Together](demo-guide.md#putting-it-all-together-3-min) | All three | End-to-end flow, three UIs, each product's contribution |
 
 ## Service URLs & Namespaces
 

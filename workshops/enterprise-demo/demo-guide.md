@@ -7,7 +7,7 @@
 | Part | Topic | Time |
 |------|-------|------|
 | Part 1 | Agent Registry (Enterprise) — SSO, RBAC, catalog | ~20 min |
-| Part 2 | Agent Gateway (Enterprise) | ~14 min |
+| Part 2 | Agent Gateway (Enterprise) | ~17 min |
 | Part 3 | kagent (Enterprise) | ~13 min |
 | Wrap-up | Putting it all together | ~3 min |
 | **Total** | | **~50 min** |
@@ -308,7 +308,7 @@ arctl apply -f weatherassistant/agent.yaml
 
 ---
 
-## Part 2: Agent Gateway (Enterprise) (~14 min)
+## Part 2: Agent Gateway (Enterprise) (~17 min)
 
 > **Goal:** Show how Agent Gateway secures and observes all agent-to-tool traffic.
 
@@ -419,6 +419,83 @@ EOF
 ```bash
 kubectl get gateway,httproute,agentgatewaybackend -n agentgateway-system
 ```
+
+### Route the LLM through the Gateway (3 min)
+
+> **Talk track:** "Agent Gateway doesn't just front MCP tools — it fronts the LLM too. Let's add an `ai` backend for OpenAI so every model call our agent makes flows through the gateway: the gateway holds the API key, and gets auth, RBAC, and tracing on LLM traffic. The agent never sees the real key."
+
+**Step 1 — Store the OpenAI key in a Secret the gateway owns:**
+
+```bash
+# The gateway injects this value as the `Authorization` header on every LLM
+# call — so it must be the full `Bearer <key>` string. The agent we deploy in
+# Part 3 carries only a placeholder; the gateway overrides it with this key.
+kubectl create secret generic openai-secret -n agentgateway-system \
+  --from-literal=Authorization="Bearer $OPENAI_API_KEY" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+**Step 2 — Create the AI (LLM) Backend:**
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: openai
+  namespace: agentgateway-system
+spec:
+  ai:
+    groups:
+    - providers:
+      - name: openai
+        openai:
+          model: gpt-4o-mini
+        policies:
+          auth:
+            secretRef:
+              name: openai-secret
+EOF
+```
+
+**Step 3 — Create the HTTPRoute (OpenAI-compatible path):**
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: openai
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+  - name: ai-gateway
+    sectionName: mcp
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /openai
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: openai
+EOF
+```
+
+**Verify the LLM route — a chat completion through the gateway:**
+
+```bash
+# No Authorization header — the gateway injects it from openai-secret.
+kubectl run agw-llm-test --rm -i --restart=Never \
+  --image=curlimages/curl:8.10.1 -n agentgateway-system --quiet -- \
+  -sS -X POST "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"reply with just the word PONG"}]}'
+# => {... "content":"PONG" ...}
+```
+
+> **Talk track:** "That call carried no API key — the gateway supplied it. In Part 3 we point the agent's `OPENAI_BASE_URL` at this route, so the agent's model calls are governed and traced here too, and the key lives only in the gateway."
 
 ### Add Security: API Key Auth + RBAC (3 min)
 
@@ -598,16 +675,23 @@ spec:
     kind: Runtime
     name: kubernetes-default
   env:
-    OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    # Placeholder only — the real key lives in the gateway's openai-secret
+    # (Part 2). LiteLLM requires OPENAI_API_KEY to be non-empty; Agent Gateway
+    # overrides whatever the agent sends with the real key.
+    OPENAI_API_KEY: "sk-agw-managed"
+    # Point the agent's model calls at the Agent Gateway LLM route from Part 2.
+    # LiteLLM appends /chat/completions to this base.
+    OPENAI_BASE_URL: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
+    OPENAI_API_BASE: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
     MCP_SERVERS_CONFIG: '[{"name":"weather","type":"remote","url":"http://ai-gateway.agentgateway-system.svc.cluster.local:3000/weather/mcp","headers":{"Authorization":"Bearer demo-key-12345"}}]'
 EOF
 
 arctl apply -f agent-deployment.yaml
 ```
 
-> **Talk track:** "`MCP_SERVERS_CONFIG` is the line that matters. Instead of a direct cluster address, it declares a *remote* MCP whose URL is the Agent Gateway route from Part 2 — and it carries the `Authorization: Bearer demo-key-12345` header the gateway requires. Every tool call the agent makes now flows through Agent Gateway: authenticated, authorized, traced."
+> **Talk track:** "Two lines matter here. `OPENAI_BASE_URL` points the agent's *model* calls at the Agent Gateway LLM route from Part 2 — so the gateway, not the agent, holds the OpenAI key and every LLM call is authenticated and traced. `MCP_SERVERS_CONFIG` does the same for *tool* calls: a *remote* MCP whose URL is the gateway's weather route, carrying the `Authorization: Bearer demo-key-12345` header. Both the agent's LLM traffic and its tool traffic now flow through Agent Gateway."
 >
-> **Security note:** The registry's Deployment `env` is a plaintext map (it can't reference a Kubernetes Secret). For the demo we inject `OPENAI_API_KEY` from your shell at apply time — the heredoc expands it, so the literal key never lands in a committed file. In production, prefer a runtime that sources credentials from a secret store.
+> **Security note:** The registry's Deployment `env` is a plaintext map (it can't reference a Kubernetes Secret), so we *don't* put the OpenAI key here — the agent carries only the placeholder `sk-agw-managed`. The real key lives solely in the gateway's `openai-secret` (created in Part 2), and the gateway injects it. This is the stronger pattern: the workload never holds the credential.
 
 ### Step 2: Confirm the Agent is Running (2 min)
 
@@ -629,18 +713,19 @@ kubectl get agents.kagent.dev -A
 
 > **Show:** The agent:
 > 1. Receives the question
-> 2. Calls the `get_forecast` tool — *through Agent Gateway*
-> 3. Agent Gateway validates the API key, checks RBAC, records the trace
-> 4. The weather MCP server returns the forecast
-> 5. The agent formats and returns the answer
+> 2. Calls its LLM — *through Agent Gateway* (the gateway supplies the OpenAI key, records the trace)
+> 3. Calls the `get_forecast` tool — *also through Agent Gateway*
+> 4. Agent Gateway validates the API key, checks RBAC, records the trace
+> 5. The weather MCP server returns the forecast
+> 6. The agent formats and returns the answer
 
 3. Type: **"Any weather alerts for California?"**
 
 > **Show:** The agent calls `get_alerts` with state "CA".
 
-> **Talk track:** "That chat exercised the entire stack: an agent built and deployed by Agent Registry, running on kagent, calling a tool that's also in the registry — with every tool call routed through Agent Gateway's auth, RBAC, and tracing."
+> **Talk track:** "That chat exercised the entire stack: an agent built and deployed by Agent Registry, running on kagent — with *both* its LLM calls and its tool calls routed through Agent Gateway's auth, RBAC, and tracing. The agent itself holds no credentials."
 
-> **Show in the Solo Enterprise UI:** Navigate to **Agent Gateway** > **Traces** — find this request and show the spans: `agent → gateway → MCP server`.
+> **Show in the Solo Enterprise UI:** Navigate to **Agent Gateway** > **Traces** — find this request and show the spans: `agent → gateway → OpenAI` (the LLM call) and `agent → gateway → MCP server` (the tool call).
 
 ---
 
@@ -659,7 +744,7 @@ kubectl get agents.kagent.dev -A
 | Product | Role | What It Did |
 |---------|------|-------------|
 | **Agent Registry** | Catalog & Discovery | MCP servers, prompts, skills, and agents were published to the catalog. Developers searched "weather" and found them. |
-| **Agent Gateway** | Routing & Security | Routed the MCP call, validated the API key, enforced RBAC, generated OTEL traces. Zero changes to the agent or MCP server. |
+| **Agent Gateway** | Routing & Security | Routed both the agent's LLM calls and its MCP tool calls, held the OpenAI key, validated the API key, enforced RBAC, generated OTEL traces. Zero changes to the agent or MCP server. |
 | **kagent** | Agent Lifecycle | The registry-built agent ran as a managed kagent **BYO** workload, wired to its tools through the gateway, and accessible through the Solo Enterprise chat UI. No hand-written agent manifest. |
 
 ### The Value: Each Product Works Alone, Better Together
@@ -713,10 +798,10 @@ arctl delete skill weather-analysis
 arctl delete prompt weather-assistant-prompt
 
 # Remove the Agent Gateway resources
-kubectl delete secret demo-api-keys -n agentgateway-system
+kubectl delete secret demo-api-keys openai-secret -n agentgateway-system
 kubectl delete agentgatewaypolicy weather-security tracing -n agentgateway-system
-kubectl delete httproute weather-tools -n agentgateway-system
-kubectl delete agentgatewaybackend weather-tools -n agentgateway-system
+kubectl delete httproute weather-tools openai -n agentgateway-system
+kubectl delete agentgatewaybackend weather-tools openai -n agentgateway-system
 kubectl delete gateway ai-gateway -n agentgateway-system
 kubectl delete referencegrant agw-to-collector -n kagent
 
