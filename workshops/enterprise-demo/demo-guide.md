@@ -329,7 +329,7 @@ arctl apply -f weatherassistant/agent.yaml
 
 > **Show:** The agent in the Agent Registry UI — click into it to see its model and configuration.
 >
-> **Note:** We publish the agent *without* binding it to the MCP server yet. Binding it now to the in-cluster `weather-tools` server would wire the agent straight to the tool's Service address — **bypassing** Agent Gateway. Instead, in Part 3 (once the gateway exists) we register the *gateway route* as a remote `MCPServer` and bind the agent to that. The binding still lives declaratively in the registry, but every tool call flows *through* the gateway (auth, RBAC, tracing). That's the secure pattern this demo shows.
+> **Note:** We publish the agent *without* a tool binding. Binding to the in-cluster `weather-tools` Service now would bypass Agent Gateway; in Part 3 we bind it to the gateway route instead, so every tool call is authed and traced.
 
 ### Semantic Search + Key Takeaway (1 min)
 
@@ -689,7 +689,7 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 ### Step 1: Bind the Agent to its Tools via the Gateway (4 min)
 
-> **Talk track:** "In Part 1 we published the agent *without* binding it to a tool, because Agent Registry's default MCP mapping wires an agent straight to a tool's in-cluster address — bypassing the gateway. Now that the gateway exists, we register the gateway route itself as a *remote* MCP server in the catalog, then bind the agent to it. The binding lives in the registry — discoverable, versioned, portable — and because the URL is the gateway route, every tool call still flows through Agent Gateway's auth, RBAC, and tracing."
+> **Talk track:** "We left the agent unbound in Part 1. Now we register the gateway's weather route as a *remote* MCP server and bind the agent to that — so tool calls flow through Agent Gateway (auth, RBAC, tracing) instead of straight to the Service. The binding lives in the catalog: discoverable, versioned, portable."
 
 **Register the Agent Gateway weather route as a remote MCP server:**
 
@@ -712,7 +712,7 @@ EOF
 arctl apply -f weather-tools-remote.yaml
 ```
 
-> **Talk track:** "`spec.remote.url` is the gateway's weather route from Part 2 — not the tool's in-cluster Service. `spec.remote.headers` carries the gateway API key (`Authorization: Bearer demo-key-12345`), so the agent authenticates to the gateway, the gateway validates the key and checks RBAC, and only then reaches the MCP server. The agent never talks to the tool directly."
+> **Talk track:** "`remote.url` is the gateway route from Part 2, not the tool's Service; `remote.headers` carries the gateway API key. The agent authenticates to the gateway, which validates the key, checks RBAC, then reaches the MCP server — the agent never talks to the tool directly."
 
 **Bind the agent to it** — add an `mcpServers` block to the scaffolded agent spec, then re-publish:
 
