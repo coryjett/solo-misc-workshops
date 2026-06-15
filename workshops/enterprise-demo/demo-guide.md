@@ -12,6 +12,37 @@
 | Wrap-up | Putting it all together | ~3 min |
 | **Total** | | **~50 min** |
 
+## Contents
+
+- [Setup (Before the Demo)](#setup-before-the-demo)
+- **[Part 1: Agent Registry](#part-1-agent-registry-enterprise-2022-min)** — catalog MCP servers behind SSO + group RBAC
+  - [The Problem](#the-problem-2-min) — MCP servers scattered, no catalog, no governance
+  - [SSO Login](#sso-login-2-min) — registry UI redirects to Keycloak; log in as `admin`
+  - [The Catalog](#the-catalog-2-min) — tour the (empty) catalog, type filters, search
+  - [Authenticate the CLI](#authenticate-the-cli-with-arctl-user-login-2-min) — `arctl user login` device flow; `whoami` shows the `developers` group
+  - [Build and Publish the Weather MCP Server](#build-and-publish-the-weather-mcp-server-4-min) — scaffold FastMCP, add `get_forecast`/`get_alerts`, build, publish
+  - [RBAC: Deny → Grant](#rbac-deny--grant-3-min) — `viewer` publish = forbidden, `dev` = success; then deploy MCP from the UI
+  - [Create a Prompt, Skill, and Agent](#create-a-prompt-skill-and-agent-4-min) — publish a prompt, skill, and ADK agent (agent left unbound on purpose)
+  - [Semantic Search + Key Takeaway](#semantic-search--key-takeaway-1-min) — search "weather" surfaces all four artifacts
+- **[Part 2: Agent Gateway](#part-2-agent-gateway-enterprise-17-min)** — secure + observe all agent-to-tool traffic
+  - [The Problem](#the-problem-2-min-1) — agents hit MCP directly: no auth, no limits, no visibility
+  - [The Solution: An AI-Native Proxy](#the-solution-an-ai-native-proxy-3-min) — Envoy-based proxy: routing, auth, RBAC, rate limit, guardrails, traces
+  - [Configure the Gateway and Route](#configure-the-gateway-and-route-5-min) — Gateway + MCP backend + HTTPRoute `/weather`
+  - [Route the LLM through the Gateway](#route-the-llm-through-the-gateway-3-min) — `ai` backend + `/openai` route; gateway holds the key
+  - [Add Security: API Key Auth + RBAC](#add-security-api-key-auth--rbac-3-min) — API keys with role metadata, CEL authz policy, tracing
+  - [Show the Solo Enterprise UI — Dashboards](#show-the-solo-enterprise-ui--agent-gateway-dashboards-2-min) — MCP rate/error/latency + trace drill-down
+  - [Key Takeaway](#key-takeaway-1-min) — single control point, zero agent changes
+- **[Part 3: kagent](#part-3-kagent-enterprise-13-min)** — run the Part 1 agent as a managed workload, wired through the gateway
+  - [The Problem](#the-problem-2-min-2) — a published agent is just an artifact; how do you run it?
+  - [The Solution: Deploy the Registry Agent onto kagent](#the-solution-deploy-the-registry-agent-onto-kagent-3-min) — registry creates a kagent BYO agent, no YAML
+  - [Step 1: Bind the Agent to its Tools via the Gateway](#step-1-bind-the-agent-to-its-tools-via-the-gateway-4-min) — register the gateway route as a remote MCP server, bind, deploy
+  - [Step 2: Confirm the Agent is Running](#step-2-confirm-the-agent-is-running-2-min) — `arctl get deployments` + `kubectl get agents`
+  - [Step 3: Chat with the Agent](#step-3-chat-with-the-agent-in-the-solo-enterprise-ui-3-min) — ask Tokyo weather + CA alerts; LLM + tool calls both traced
+- **[Putting It All Together](#putting-it-all-together-3-min)** — three UIs, per-product contribution, alone-vs-together value
+  - [What to Demo Next](#what-to-demo-next) — token exchange, rate limiting, guardrails, multi-agent, observability
+- [Cleanup](#cleanup)
+- [Reference](#reference)
+
 ---
 
 ## Setup (Before the Demo)
