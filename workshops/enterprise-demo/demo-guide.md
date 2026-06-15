@@ -247,13 +247,6 @@ arctl apply -f weather-tools/mcp.yaml
 
 The registry creates a `Deployment` resource (`targetRef` → the published `weather-tools` server, `runtimeRef` → the `kagent-demo` runtime) and the kagent runtime reconciles it into a running `MCPServer` workload. Watch the deployment status reach **Running** in the UI, and tail the workload logs from the same page.
 
-> **Why a runtime had to be connected first:** the catalog Deploy dialog only
-> offers a runtime of type `Kagent` (labeled "Kubernetes (kagent)" in the UI).
-> The chart pre-seeds a `kubernetes-default` runtime of type `Kubernetes` that
-> the UI does *not* recognize — so `setup.sh` seeds a proper `kagent-demo`
-> runtime (`runtimes/kagent-runtime.yaml`). Without it the dialog shows
-> "No cloud runtimes configured".
-
 > **Verify (CLI):**
 > ```bash
 > arctl get deployments
@@ -765,7 +758,7 @@ arctl apply -f agent-deployment.yaml
 >
 > **Security note:** The registry's Deployment `env` is a plaintext map (it can't reference a Kubernetes Secret), so we *don't* put the OpenAI key here — the agent carries only the placeholder `sk-agw-managed`. The real key lives solely in the gateway's `openai-secret` (created in Part 2), and the gateway injects it. The tool API key lives in the catalog `MCPServer` instead of the deployment — for a real (non-demo) key, set `spec.remote.headers[].value` via shell expansion (`${...}`) at apply time, never a literal in committed YAML.
 >
-> **Verify on first run:** This catalog-binding path replaces the older deploy-time `MCP_SERVERS_CONFIG` env. On a fresh cluster, after the chat in Step 3, confirm in **Agent Gateway > Traces** that you see a `…/weather/mcp` span originating from the agent pod — that proves the running agent picked up the catalog-declared tool (and didn't silently fall back to no tools). If the agent reports no tools available, the runtime didn't project the catalog binding into the container; in that case re-add the `MCP_SERVERS_CONFIG` env entry (remote MCP, gateway URL, same `Authorization` header) as the fallback.
+> **Verify on first run:** After the chat in Step 3, confirm in **Agent Gateway > Traces** that a `…/weather/mcp` span originates from the agent pod — that proves the running agent picked up the catalog-declared tool.
 
 ### Step 2: Confirm the Agent is Running (2 min)
 
