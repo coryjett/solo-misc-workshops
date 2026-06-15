@@ -1,6 +1,6 @@
 # Solo.io AI Platform — End-to-End Demo
 
-A 45-minute guided demo of the Solo.io AI platform: **Agent Registry (Enterprise)**, **Agent Gateway**, and **kagent** — three products that work independently but are most powerful together. All three products share a single Keycloak SSO (realm `solo-ai-demo`) providing group-based RBAC across Agent Registry and kagent.
+A 50-minute guided demo of the Solo.io AI platform: **Agent Registry (Enterprise)**, **Agent Gateway**, and **kagent** — three products that work independently but are most powerful together. All three products share a single Keycloak SSO (realm `solo-ai-demo`) providing group-based RBAC across Agent Registry and kagent.
 
 ## The Story
 
@@ -28,9 +28,9 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 - `docker`, `kubectl`, `helm`, `k3d` installed
 - `arctl` (Agent Registry Enterprise CLI, v2026.6.0) — install: `curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.6.0 sh`, then add `~/.arctl/bin` to your `PATH`
 - An OpenAI API key
-- A Solo license key — set as `SOLO_LICENSE_KEY` (one credential, used by Agent Gateway and kagent; the same Solo license also grants image-pull access to the enterprise chart registry `us-docker.pkg.dev`, so the Enterprise Agent Registry chart is entitled via that image-pull access and needs no `licenseKey` value of its own)
+- A Solo license key — set as `SOLO_LICENSE_KEY`
 - ~8 GB RAM available (for local k3d/kind cluster)
-- ~45 minutes (manual) or ~10 minutes (automated via `setup.sh`)
+- ~50 minutes (manual) or ~10 minutes (automated via `setup.sh`)
 
 > **No host config required.** The OIDC issuer uses `keycloak.127.0.0.1.sslip.io`, which resolves to `127.0.0.1` via public wildcard DNS — no `/etc/hosts` edit. `setup.sh` adds a CoreDNS rewrite so in-cluster validators resolve the same name to the Keycloak Service.
 
