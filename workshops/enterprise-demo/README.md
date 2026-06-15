@@ -51,10 +51,10 @@ The setup script provisions a k3d cluster and installs the three products. Then 
 |---------|-----|-----------|
 | Agent Registry (Enterprise) | http://localhost:12121 | `agentregistry-system` |
 | Keycloak (SSO, realm `solo-ai-demo`) | http://localhost:8080 (admin/admin) | `keycloak` |
-| Solo Enterprise UI (kagent) | http://localhost:8082 | `kagent` |
-| Agent Gateway | — | `agentgateway-system` |
+| kagent UI | http://localhost:8082/ke/ | `kagent` |
+| Agent Gateway UI | http://localhost:8082/age/ | `agentgateway-system` |
 
-> **Port note:** the Solo Enterprise UI (kagent) is served at `localhost:8082` — it was moved off `8080` to avoid a collision with Keycloak, which keeps `8080`.
+> **Port note:** the Solo Enterprise UI is served at `localhost:8082` (kagent at `/ke/`, Agent Gateway at `/age/`) — it was moved off `8080` to avoid a collision with Keycloak, which keeps `8080`.
 
 Demo users (all with password `password`), provisioned in the `solo-ai-demo` realm:
 

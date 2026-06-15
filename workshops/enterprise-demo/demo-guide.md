@@ -61,7 +61,8 @@ The script installs Agent Registry, Agent Gateway, and kagent. The demo itself w
 When setup completes, verify the UIs are accessible:
 - **Agent Registry:** http://localhost:12121
 - **Keycloak:** http://localhost:8080 (admin/admin)
-- **Solo Enterprise UI:** http://localhost:8082
+- **kagent UI:** http://localhost:8082/ke/
+- **Agent Gateway UI:** http://localhost:8082/age/
 
 > **Demo users** (all password `password`): `admin` (group `admins`), `dev` (group `developers`), `viewer` (group `viewers`). All three products authenticate against the shared Keycloak realm `solo-ai-demo`, so group membership drives access across Agent Registry and kagent.
 
@@ -653,13 +654,13 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 ### Show the Solo Enterprise UI — Agent Gateway Dashboards (2 min)
 
-**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **Agent Gateway**.
+**Open the Agent Gateway UI** at `http://localhost:8082/age/`.
 
-> **Talk track:** "Every request through Agent Gateway generates OpenTelemetry traces. The Solo Enterprise UI gives you pre-built dashboards for LLM traffic, MCP tool calls, cost tracking, and more."
+> **Talk track:** "Every request through Agent Gateway generates OpenTelemetry traces. The Agent Gateway UI gives you pre-built dashboards for LLM traffic, MCP tool calls, cost tracking, and more."
 
 > **Show:**
-> - **MCP dashboard** — request rate by tool name, error rates, latency
-> - **Traces** — drill into a specific request to see the full path: agent -> gateway -> MCP server
+> - **Dashboard** — overview: global error rate, token usage by model, latency
+> - **Tracing** — drill into a specific request to see the full path: agent -> gateway -> MCP server
 
 ### Key Takeaway (1 min)
 
@@ -754,7 +755,7 @@ arctl apply -f agent-deployment.yaml
 >
 > **Security note:** The Deployment `env` is plaintext (no Secret refs), so the agent gets only the placeholder `sk-agw-managed` — the real OpenAI key stays in the gateway's `openai-secret`. For a real tool key, set `spec.remote.headers[].value` via shell expansion at apply time, never a literal in committed YAML.
 >
-> **Verify on first run:** After the chat in Step 3, confirm in **Agent Gateway > Traces** that a `…/weather/mcp` span originates from the agent pod — that proves the running agent picked up the catalog-declared tool.
+> **Verify on first run:** After the chat in Step 3, confirm in the **Agent Gateway UI** (`localhost:8082/age/`) **> Tracing** that a `…/weather/mcp` span originates from the agent pod — that proves the running agent picked up the catalog-declared tool.
 
 ### Step 2: Confirm the Agent is Running (2 min)
 
@@ -769,7 +770,7 @@ kubectl get agents.kagent.dev -A
 
 ### Step 3: Chat with the Agent in the Solo Enterprise UI (3 min)
 
-**Open the Solo Enterprise UI** at `http://localhost:8082` and navigate to **kagent** > **Agents** > **weatherassistant**.
+**Open the kagent UI** at `http://localhost:8082/ke/` and navigate to **Agents** > **weatherassistant**.
 
 1. Open the **Chat** panel
 2. Type: **"What's the weather in Tokyo?"**
@@ -788,7 +789,7 @@ kubectl get agents.kagent.dev -A
 
 > **Talk track:** "That chat exercised the entire stack: an agent built and deployed by Agent Registry, running on kagent — with *both* its LLM calls and its tool calls routed through Agent Gateway's auth, RBAC, and tracing. The agent itself holds no credentials."
 
-> **Show in the Solo Enterprise UI:** Navigate to **Agent Gateway** > **Traces** — find this request and show the spans: `agent → gateway → OpenAI` (the LLM call) and `agent → gateway → MCP server` (the tool call).
+> **Show in the Agent Gateway UI** (`localhost:8082/age/`)**:** Open **Tracing** — find this request and show the spans: `agent → gateway → OpenAI` (the LLM call) and `agent → gateway → MCP server` (the tool call).
 
 ---
 
@@ -799,8 +800,8 @@ kubectl get agents.kagent.dev -A
 | UI | URL | What It Shows |
 |----|-----|---------------|
 | **Agent Registry** | `http://localhost:12121` | MCP server catalog, semantic search, deployment status |
-| **Solo Enterprise UI — Agent Gateway** | `http://localhost:8082` (AGW tab) | LLM/MCP dashboards, cost tracking, OTEL traces, route status |
-| **Solo Enterprise UI — kagent** | `http://localhost:8082` (kagent tab) | Agent list, chat interface, tool execution, agent configuration |
+| **Agent Gateway UI** | `http://localhost:8082/age/` | Dashboard, Playground, Tracing, Gateways — LLM/MCP metrics, cost, OTEL traces |
+| **kagent UI** | `http://localhost:8082/ke/` | Agent list, chat interface, tool execution, agent configuration |
 
 ### What Each Product Contributed
 
