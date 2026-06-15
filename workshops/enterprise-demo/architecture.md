@@ -57,24 +57,13 @@
 │  │                                        ▲                                          │   │
 │  └────────────────────────────────────────┼──────────────────────────────────────────┘   │
 │                                           │ MCP (Streamable HTTP)                        │
-│                          ┌────────────────┼────────────────────┐                         │
-│                          │                │                    │                         │
-│               kagent Agent         Load Generator        User / curl                    │
-│               (weather-assistant)  (agw-load-generator)                                 │
-│                          │                │                    │                         │
-│  ┌───────────────────────┼────────────────┼────────────────────┼─────────────────────┐   │
+│                          ┌─────────────────────────────────────┐                         │
+│                          │                                     │                         │
+│               kagent Agent                              User / curl                     │
+│               (weather-assistant)                                                       │
+│                          │                                     │                         │
+│  ┌───────────────────────┼─────────────────────────────────────┼─────────────────────┐   │
 │  │                       │   demo Namespace                    │                     │   │
-│  │                       │                │                    │                     │   │
-│  │                       │         ┌──────┴──────────┐         │                     │   │
-│  │                       │         │  Load Generator  │         │                     │   │
-│  │                       │         │  (curlimages/    │         │                     │   │
-│  │                       │         │   curl)          │         │                     │   │
-│  │                       │         │                  │         │                     │   │
-│  │                       │         │  Every 10s:      │         │                     │   │
-│  │                       │         │  • initialize    │         │                     │   │
-│  │                       │         │  • tools/list    │         │                     │   │
-│  │                       │         │  • tools/call    │         │                     │   │
-│  │                       │         └─────────────────┘         │                     │   │
 │  │                       │                                     │                     │   │
 │  │                       ▼                                     │                     │   │
 │  │               ┌──────────────────┐                          │                     │   │
@@ -202,7 +191,6 @@ Developer workstation
 | OTEL Collector | kagent | 4317 | Telemetry pipeline (traces + metrics) |
 | ClickHouse | kagent | 9000 | Telemetry storage (traces, metrics, logs) |
 | Weather Tools | demo | 3000 | Demo MCP server (FastMCP, Streamable HTTP) |
-| Load Generator | demo | — | Continuous MCP traffic for dashboard data |
 | OpenAI API | external | 443 | LLM inference (gpt-4o-mini) |
 
 ## Auth & RBAC
