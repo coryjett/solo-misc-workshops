@@ -129,7 +129,7 @@ arctl init mcp weather-tools \
   --description "Weather forecast MCP server"
 ```
 
-> This scaffolds a FastMCP project with a *dynamic tool loader*: `src/main.py` auto-discovers any function decorated with `@mcp.tool()` under `src/tools/`. You add a tool by dropping a file in that directory — no manual registration.
+> Scaffolds a FastMCP project with a dynamic tool loader: `src/main.py` auto-discovers any `@mcp.tool()` function under `src/tools/`, so you add a tool by dropping in a file (next step) — no manual registration.
 
 **Step 2 — Add a weather tool:**
 
@@ -183,7 +183,7 @@ arctl build weather-tools/
 k3d image import localhost:5001/weather-tools:latest -c solo-ai-demo
 ```
 
-> `arctl build` reads the project's resource spec (`weather-tools/mcp.yaml`) and tags the image from `spec.source.package.origin.identifier` → `localhost:5001/weather-tools:latest`. `k3d image import` loads that tag onto the cluster nodes — the registry deploys with `imagePullPolicy: IfNotPresent`, so no external image registry is required.
+> `arctl build` tags the image `localhost:5001/weather-tools:latest` (from `mcp.yaml`); `k3d image import` loads it onto the cluster nodes, so no external image registry is required.
 
 **Step 4 — Publish to Agent Registry:**
 
@@ -756,7 +756,7 @@ arctl apply -f agent-deployment.yaml
 
 > **Talk track:** "Tool routing now comes from the *catalog* — the remote `MCPServer` we just bound, pointed at the gateway. The Deployment env only carries the *model* wiring: `OPENAI_BASE_URL` sends the agent's LLM calls through the gateway's LLM route, and the placeholder `OPENAI_API_KEY` satisfies the client's non-empty check — the gateway holds the real key. Both LLM and tool traffic flow through Agent Gateway; the agent itself holds no real credentials."
 >
-> **Security note:** The registry's Deployment `env` is a plaintext map (it can't reference a Kubernetes Secret), so we *don't* put the OpenAI key here — the agent carries only the placeholder `sk-agw-managed`. The real key lives solely in the gateway's `openai-secret` (created in Part 2), and the gateway injects it. The tool API key lives in the catalog `MCPServer` instead of the deployment — for a real (non-demo) key, set `spec.remote.headers[].value` via shell expansion (`${...}`) at apply time, never a literal in committed YAML.
+> **Security note:** The Deployment `env` is plaintext (no Secret refs), so the agent gets only the placeholder `sk-agw-managed` — the real OpenAI key stays in the gateway's `openai-secret`. For a real tool key, set `spec.remote.headers[].value` via shell expansion at apply time, never a literal in committed YAML.
 >
 > **Verify on first run:** After the chat in Step 3, confirm in **Agent Gateway > Traces** that a `…/weather/mcp` span originates from the agent pod — that proves the running agent picked up the catalog-declared tool.
 
