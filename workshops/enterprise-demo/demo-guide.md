@@ -85,7 +85,7 @@ When setup completes, verify the UIs are accessible:
 
 > **Talk track:** "Agent Registry is a single place to discover, publish, and manage all your AI artifacts — MCP servers, agents, skills, and prompts."
 
-> **Show:** The catalog view. On a fresh install the registry starts empty — that's intentional. Over the next few minutes you'll publish an MCP server, an agent, a skill, and a prompt, and watch the catalog fill up live. Point out the type filters (MCP / Agent / Skill / Prompt) and search you'll be using shortly.
+> **Show:** The catalog starts empty — intentional. Over the next few minutes you'll publish an MCP server, agent, skill, and prompt and watch it fill up live. Point out the type filters (MCP / Agent / Skill / Prompt) and search.
 
 ### Authenticate the CLI with `arctl user login` (2 min)
 
@@ -239,7 +239,7 @@ arctl apply -f weather-tools/mcp.yaml
 
 **Step 5 — Deploy the MCP server from the Agent Registry UI:**
 
-> **Talk track:** "Publishing put the server in the catalog. The enterprise registry can also *deploy* it — straight from the UI, no hand-written kagent manifests. The registry reconciles a live workload through one of its registered runtimes. `setup.sh` already connected this cluster as a **Kubernetes (kagent)** runtime, so it's ready to deploy onto."
+> **Talk track:** "Publishing put the server in the catalog; the registry can also *deploy* it straight from the UI — no hand-written kagent manifests. `setup.sh` already connected this cluster as a **Kubernetes (kagent)** runtime, so it's ready to deploy onto."
 
 1. In the Agent Registry UI, open the **weather-tools** MCP server's detail page.
 2. Click **Deploy**.
@@ -446,14 +446,13 @@ kubectl get gateway,httproute,agentgatewaybackend -n agentgateway-system
 
 ### Route the LLM through the Gateway (3 min)
 
-> **Talk track:** "Agent Gateway doesn't just front MCP tools — it fronts the LLM too. Let's add an `ai` backend for OpenAI so every model call our agent makes flows through the gateway: the gateway holds the API key, and gets auth, RBAC, and tracing on LLM traffic. The agent never sees the real key."
+> **Talk track:** "Agent Gateway fronts the LLM too. We add an `ai` backend for OpenAI so every model call flows through the gateway — it holds the API key and gets auth, RBAC, and tracing on LLM traffic. The agent never sees the real key."
 
 **Step 1 — Store the OpenAI key in a Secret the gateway owns:**
 
 ```bash
-# The gateway injects this value as the `Authorization` header on every LLM
-# call — so it must be the full `Bearer <key>` string. The agent we deploy in
-# Part 3 carries only a placeholder; the gateway overrides it with this key.
+# Gateway injects this as the Authorization header on every LLM call —
+# must be the full `Bearer <key>` string.
 kubectl create secret generic openai-secret -n agentgateway-system \
   --from-literal=Authorization="Bearer $OPENAI_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -740,13 +739,10 @@ spec:
     kind: Runtime
     name: kagent-demo
   env:
-    # Placeholder only — the real key lives in the gateway's openai-secret
-    # (Part 2). The agent's model client requires OPENAI_API_KEY to be
-    # non-empty; Agent Gateway overrides whatever the agent sends with the
-    # real key.
+    # Placeholder — client needs OPENAI_API_KEY non-empty; the gateway
+    # overrides it with the real key (openai-secret, Part 2).
     OPENAI_API_KEY: "sk-agw-managed"
-    # Point the agent's model calls at the Agent Gateway LLM route from Part 2.
-    # The client appends /chat/completions to this base.
+    # Route the agent's model calls through the Agent Gateway LLM route (Part 2).
     OPENAI_BASE_URL: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
     OPENAI_API_BASE: "http://ai-gateway.agentgateway-system.svc.cluster.local:3000/openai/v1"
 EOF
@@ -754,7 +750,7 @@ EOF
 arctl apply -f agent-deployment.yaml
 ```
 
-> **Talk track:** "Tool routing now comes from the *catalog* — the remote `MCPServer` we just bound, pointed at the gateway. The Deployment env only carries the *model* wiring: `OPENAI_BASE_URL` sends the agent's LLM calls through the gateway's LLM route, and the placeholder `OPENAI_API_KEY` satisfies the client's non-empty check — the gateway holds the real key. Both LLM and tool traffic flow through Agent Gateway; the agent itself holds no real credentials."
+> **Talk track:** "Tool routing comes from the *catalog* (the remote `MCPServer` we just bound); the Deployment env only carries the *model* wiring — `OPENAI_BASE_URL` points LLM calls at the gateway. Both LLM and tool traffic flow through Agent Gateway; the agent holds no real credentials."
 >
 > **Security note:** The Deployment `env` is plaintext (no Secret refs), so the agent gets only the placeholder `sk-agw-managed` — the real OpenAI key stays in the gateway's `openai-secret`. For a real tool key, set `spec.remote.headers[].value` via shell expansion at apply time, never a literal in committed YAML.
 >
