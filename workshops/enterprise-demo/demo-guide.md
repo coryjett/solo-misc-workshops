@@ -30,14 +30,14 @@
   - [Configure the Gateway and Route](#configure-the-gateway-and-route-5-min) — Gateway + MCP backend + HTTPRoute `/weather`
   - [Route the LLM through the Gateway](#route-the-llm-through-the-gateway-3-min) — `ai` backend + `/openai` route; gateway holds the key
   - [Add Security: API Key Auth + RBAC](#add-security-api-key-auth--rbac-3-min) — API keys with role metadata, CEL authz policy, tracing
-  - [Show the Solo Enterprise UI — Dashboards](#show-the-solo-enterprise-ui--agent-gateway-dashboards-2-min) — MCP rate/error/latency + trace drill-down
+  - [Show the Agent Gateway UI — Dashboards](#show-the-agent-gateway-ui--dashboards-2-min) — MCP rate/error/latency + trace drill-down
   - [Key Takeaway](#key-takeaway-1-min) — single control point, zero agent changes
 - **[Part 3: kagent](#part-3-kagent-enterprise-13-min)** — run the Part 1 agent as a managed workload, wired through the gateway
   - [The Problem](#the-problem-2-min-2) — a published agent is just an artifact; how do you run it?
   - [The Solution: Deploy the Registry Agent onto kagent](#the-solution-deploy-the-registry-agent-onto-kagent-3-min) — registry creates a kagent BYO agent, no YAML
   - [Step 1: Bind the Agent to its Tools via the Gateway](#step-1-bind-the-agent-to-its-tools-via-the-gateway-4-min) — register the gateway route as a remote MCP server, bind, deploy
   - [Step 2: Confirm the Agent is Running](#step-2-confirm-the-agent-is-running-2-min) — `arctl get deployments` + `kubectl get agents`
-  - [Step 3: Chat with the Agent](#step-3-chat-with-the-agent-in-the-solo-enterprise-ui-3-min) — ask Tokyo weather + CA alerts; LLM + tool calls both traced
+  - [Step 3: Chat with the Agent](#step-3-chat-with-the-agent-in-the-kagent-ui-3-min) — ask Tokyo weather + CA alerts; LLM + tool calls both traced
 - **[Putting It All Together](#putting-it-all-together-3-min)** — three UIs, per-product contribution, alone-vs-together value
   - [What to Demo Next](#what-to-demo-next) — token exchange, rate limiting, guardrails, multi-agent, observability
 - [Cleanup](#cleanup)
@@ -652,7 +652,7 @@ curl -s http://localhost:3001/weather/mcp -X POST \
 
 > **Talk track:** "No key? Rejected. Valid key with the right role? The MCP server initializes. This is the same auth that our kagent agent will use."
 
-### Show the Solo Enterprise UI — Agent Gateway Dashboards (2 min)
+### Show the Agent Gateway UI — Dashboards (2 min)
 
 **Open the Agent Gateway UI** at `http://localhost:8082/age/`.
 
@@ -768,7 +768,7 @@ kubectl get agents.kagent.dev -A
 
 > **Talk track:** "One `arctl apply`, and the registry stood up a managed kagent agent running our image — wired to its tools through the gateway. No agent code, no hand-written kagent manifest."
 
-### Step 3: Chat with the Agent in the Solo Enterprise UI (3 min)
+### Step 3: Chat with the Agent in the kagent UI (3 min)
 
 **Open the kagent UI** at `http://localhost:8082/ke/` and navigate to **Agents** > **weatherassistant**.
 
