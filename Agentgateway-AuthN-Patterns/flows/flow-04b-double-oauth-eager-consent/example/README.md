@@ -1,4 +1,4 @@
-# Flow 4b: Double OAuth — Eager + Consent — Working Example
+# Flow 4b: Double OAuth Flow (Eager) — Working Example
 
 Deploys the **eager** double-OAuth config: the MCP backend advertises the gateway's
 own OAuth issuer, so a spec-compliant MCP client runs the full OAuth handshake

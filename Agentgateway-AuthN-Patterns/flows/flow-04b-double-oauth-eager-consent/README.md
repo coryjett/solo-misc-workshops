@@ -1,6 +1,6 @@
-# Double OAuth — Eager (Up-Front) with Consent Screen
+# Double OAuth Flow (Eager)
 
-Same trust model as [Flow 4 (Double OAuth)](../flow-04-double-oauth/), but the second OAuth leg is gathered **eagerly** — before the first tool call — and an optional **gateway-hosted consent screen** is shown between the two legs.
+Same trust model as [Flow 4 (Double OAuth)](../flow-04-double-oauth/), but the second OAuth leg is gathered **eagerly** — before the first tool call. An **optional** gateway-hosted consent screen can be shown between the two legs (see [Consent screen](#consent-screen-optional)).
 
 Where Flow 4 (lazy) defers upstream credential gathering until a tool needs it and completes it out-of-band in the Solo Enterprise UI, this variant advertises the gateway's own OAuth issuer in the MCP backend's protected-resource metadata. A spec-compliant MCP client therefore runs the **entire** OAuth handshake up front: downstream IdP login → gateway consent screen → upstream OAuth → bearer JWT. No `PENDING` URL, no retry, no separate approval UI.
 
@@ -46,8 +46,19 @@ Both flows are user-delegated double OAuth: two user-facing OAuth legs (downstre
 10. **Gateway injects the stored upstream token** (replacing the inbound JWT) → upstream API sees the user's real credential and never sees Keycloak/STS.
 11. Subsequent calls reuse the stored token (refreshed silently) until the refresh token expires — consent is then re-prompted (or every time, with `consent.force_refresh: true`).
 
-> **Delegation, not impersonation.** No token is minted here (contrast [Flow 13](../flow-13-gateway-mediated-exchange/)). The gateway carries the user's *real* upstream token, obtained via a real OAuth grant the user authorized. That is exactly what the consent screen gates.
+> **Delegation, not impersonation.** No token is minted here (contrast [Flow 13](../flow-13-gateway-mediated-exchange/)). The gateway carries the user's *real* upstream token, obtained via a real OAuth grant the user authorized.
 
-> **Working Example:** [example/](example/) — deploy the full eager + consent config on k3d + AGW Enterprise.
+### Consent screen (optional)
+
+The gateway-hosted consent screen is **optional** — the eager flow works with or without it. It is an in-house "Allow" interstitial rendered by the gateway's OAuth issuer *after* downstream login and *before* upstream OAuth (Phase 2 above), separate from the upstream provider's own authorization page. Use it when you need an explicit consent gate on top of the provider's, e.g. for a security review.
+
+- **Enable globally:** add a `consent` block to the controller's `KGW_OAUTH_ISSUER_CONFIG` (`enabled: true`, `platform_name`, optional `logo_url` / `legal_text`).
+- **Disable / omit:** leave the `consent` block out (or `enabled: false`) — eager flow runs login → upstream OAuth with no interstitial.
+- **Per-backend overrides / opt-out:** set `consent_platform_name` / `consent_logo_url` / `consent_legal_text`, or `consent_disabled: "true"` to skip it for one backend while it's enabled globally.
+- **Persistence:** a granted consent is reused for the refresh-token lifetime; `consent.force_refresh: true` prompts on every flow.
+
+See the [example](example/) for the exact config, and the [MCP consent screen docs](https://docs.solo.io/agentgateway/latest/mcp/token-exchange/elicitations/consent-screen/).
+
+> **Working Example:** [example/](example/) — deploys the eager flow with the optional consent screen enabled, on k3d + AGW Enterprise.
 
 Back to [Auth Patterns overview](../../README.md)
