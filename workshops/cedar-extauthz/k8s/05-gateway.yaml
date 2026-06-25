@@ -1,0 +1,16 @@
+# The agentgateway data-plane Gateway. The Enterprise controller provisions a proxy
+# Deployment + Service for this resource. Routes (20/40) attach via parentRefs: agentgateway.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentgateway
+  namespace: agentgateway-system
+spec:
+  gatewayClassName: enterprise-agentgateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All

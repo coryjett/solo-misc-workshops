@@ -1,0 +1,30 @@
+# Delegate authorization for the OpenAI route to the Cedar ext_authz service.
+#
+# traffic.extAuth is the BYO ext_authz path (generic external-authorization gRPC contract).
+# It is distinct from traffic.entExtAuth, which is the Solo ext-auth-service + AuthConfig path.
+#
+# - failureMode: FailClosed   -> if Cedar is unreachable, deny (safe for a security demo).
+# - forwardBody               -> send the request body so Cedar can read the OpenAI `model`.
+# - grpc.contextExtensions    -> tells the Cedar service which route family this is.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: cedar-authz-openai
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - kind: HTTPRoute
+      name: openai
+      group: gateway.networking.k8s.io
+  traffic:
+    extAuth:
+      backendRef:
+        name: cedar-authz-server
+        kind: Service
+        port: 9090
+      failureMode: FailClosed
+      forwardBody:
+        maxSize: 8Ki
+      grpc:
+        contextExtensions:
+          route_type: llm

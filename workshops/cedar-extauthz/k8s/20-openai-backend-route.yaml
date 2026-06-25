@@ -1,0 +1,39 @@
+# OpenAI LLM backend + route.
+# SKIP THIS FILE if the hosted demo platform already exposes a "Basic Routing (OpenAI)"
+# route — in that case just target that route's HTTPRoute name in 30-policy-openai-extauth.yaml.
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: openai
+  namespace: agentgateway-system
+spec:
+  ai:
+    provider:
+      openai:
+        model: gpt-4o
+  policies:
+    auth:
+      # API key for the upstream OpenAI provider, stored as a K8s Secret.
+      secretRef:
+        name: openai-secret
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: openai
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+    - name: agentgateway
+      namespace: agentgateway-system
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1/chat/completions
+      backendRefs:
+        - name: openai
+          namespace: agentgateway-system
+          group: agentgateway.dev
+          kind: AgentgatewayBackend

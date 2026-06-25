@@ -1,0 +1,61 @@
+# Demo requests — allowed vs denied pairs, OpenAI + MCP.
+# Get a token:  JWT=$(./get-token.sh --raw)   then paste it into @jwt below.
+# The Keycloak cedar-demo client-credentials token carries team=GTM, tier=premium, scp=[api.read]
+# — that's what the allow cases below rely on. Decode it with ./get-token.sh to show claims live.
+#
+# Use with the VS Code REST Client / IntelliJ HTTP client, or translate to curl.
+
+@host = https://YOUR-GATEWAY-HOST
+@jwt  = PASTE_JWT_HERE
+
+### ── LLM: ALLOWED — GTM team + premium tier + allowlisted model ──
+POST {{host}}/v1/chat/completions
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "model": "gpt-4o", "messages": [{"role": "user", "content": "hello"}] }
+
+### ── LLM: DENIED — model not on the allowlist (Cedar default-deny) ──
+POST {{host}}/v1/chat/completions
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": "hello"}] }
+
+### ── LLM: DENIED — org-wide forbid on gpt-4-turbo (forbid beats permit) ──
+POST {{host}}/v1/chat/completions
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "model": "gpt-4-turbo", "messages": [{"role": "user", "content": "hello"}] }
+
+### ── MCP: ALLOWED — list tools on solo-docs ──
+POST {{host}}/mcp
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} }
+
+### ── MCP: ALLOWED — call search_solo_docs within /docs (per-arg constraint satisfied) ──
+POST {{host}}/mcp
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+  "params": { "name": "search_solo_docs", "arguments": { "path": "/docs/agentgateway", "query": "ext_authz" } } }
+
+### ── MCP: DENIED — same tool, argument escapes /docs (per-ARGUMENT forbid) ──
+POST {{host}}/mcp
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+  "params": { "name": "search_solo_docs", "arguments": { "path": "/etc/secrets", "query": "x" } } }
+
+### ── MCP: DENIED — forbidden tool for everyone ──
+POST {{host}}/mcp
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+  "params": { "name": "delete_page", "arguments": { "path": "/docs/home" } } }

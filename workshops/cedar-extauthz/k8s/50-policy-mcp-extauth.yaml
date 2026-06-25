@@ -1,0 +1,28 @@
+# THE MAKE-OR-BREAK: per-MCP-tool authorization delegated to the external Cedar engine.
+#
+# Same traffic.extAuth hook as the OpenAI route, but route_type=mcp. forwardBody ships the
+# JSON-RPC tools/call body so Cedar can authorize on BOTH the tool name (params.name) and the
+# tool ARGUMENTS (params.arguments) — proving CEL is not the only path to per-tool decisions.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: cedar-authz-mcp
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - kind: HTTPRoute
+      name: solo-docs-mcp
+      group: gateway.networking.k8s.io
+  traffic:
+    extAuth:
+      backendRef:
+        name: cedar-authz-server
+        kind: Service
+        port: 9090
+      failureMode: FailClosed
+      forwardBody:
+        # MCP tool-call bodies are small; 16Ki is generous headroom for arguments.
+        maxSize: 16Ki
+      grpc:
+        contextExtensions:
+          route_type: mcp

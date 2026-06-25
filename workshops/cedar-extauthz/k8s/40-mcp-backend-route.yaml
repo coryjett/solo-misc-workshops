@@ -1,0 +1,40 @@
+# MCP backend + route. Uses the Solo.io Docs remote MCP server (streamableHTTP) — the same
+# upstream the hosted platform's "Solo.io Docs (remote streamableHTTP)" demo uses, so the
+# tool names (e.g. search_solo_docs) line up with the Cedar policy.
+#
+# SKIP if the platform already exposes this route; just point 50-policy-mcp-extauth.yaml at it.
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: solo-docs-mcp
+  namespace: agentgateway-system
+spec:
+  mcp:
+    targets:
+      - name: solo-docs
+        static:
+          host: docs.solo.io          # replace with the actual remote MCP host used by the tenant
+          port: 443
+          protocol: StreamableHTTP
+          path: /mcp
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: solo-docs-mcp
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+    - name: agentgateway
+      namespace: agentgateway-system
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+      backendRefs:
+        - name: solo-docs-mcp
+          namespace: agentgateway-system
+          group: agentgateway.dev
+          kind: AgentgatewayBackend

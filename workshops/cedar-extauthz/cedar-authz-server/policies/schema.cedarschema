@@ -1,0 +1,44 @@
+// Cedar schema for the agentgateway Cedar ext_authz demo.
+// Two action families: LLM chat (model allowlist) and MCP tool calls (per-tool + per-arg).
+
+// Attributes mirror the IdP token claims (team -> Group parent; tier/org/scp as attrs).
+entity User in [Group] {
+  "sub": String,
+  "team": String,
+  "tier": String,
+  "org": String,
+  "scp": Set<String>,
+};
+
+entity Group;
+
+entity Model;
+
+entity Tool {
+  // the upstream MCP server this tool belongs to (e.g. "solo-docs")
+  "server": String,
+};
+
+action "llm:chat" appliesTo {
+  principal: User,
+  resource: Model,
+  context: {
+    // populated from the OpenAI request body / headers
+    "stream": Bool,
+  },
+};
+
+action "mcp:listTools" appliesTo {
+  principal: User,
+  resource: Tool,
+  context: {},
+};
+
+action "mcp:callTool" appliesTo {
+  principal: User,
+  resource: Tool,
+  context: {
+    // arguments map from the JSON-RPC params, flattened to strings for the demo
+    "args": { "path": String, "query": String, "owner": String },
+  },
+};

@@ -1,0 +1,99 @@
+# cedar-authz-server: the BYO Cedar (cedar-go) ext_authz service.
+# Policies are delivered via ConfigMap so you can edit them live in the demo
+# (kubectl edit cm cedar-policies -> restart pod) without rebuilding the image.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cedar-policies
+  namespace: agentgateway-system
+data:
+  authz.cedar: |
+    // GTM team on the premium tier may use approved chat models (from the IdP token claims).
+    permit (
+      principal in Group::"GTM",
+      action == Action::"llm:chat",
+      resource
+    )
+    when { resource in [Model::"gpt-4o", Model::"gpt-4o-mini"] }
+    when { principal.tier == "premium" };
+
+    // org-wide hard deny (forbid wins over any permit).
+    forbid (
+      principal,
+      action == Action::"llm:chat",
+      resource == Model::"gpt-4-turbo"
+    );
+
+    permit (
+      principal in Group::"GTM",
+      action == Action::"mcp:listTools",
+      resource
+    )
+    when { resource.server == "solo-docs" };
+
+    permit (
+      principal in Group::"GTM",
+      action == Action::"mcp:callTool",
+      resource == Tool::"search_solo_docs"
+    );
+
+    // per-argument constraint: the search path must stay under /docs.
+    forbid (
+      principal,
+      action == Action::"mcp:callTool",
+      resource == Tool::"search_solo_docs"
+    )
+    unless { context.args.path like "/docs*" };
+
+    forbid (
+      principal,
+      action == Action::"mcp:callTool",
+      resource == Tool::"delete_page"
+    );
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cedar-authz-server
+  namespace: agentgateway-system
+  labels: { app: cedar-authz-server }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cedar-authz-server }
+  template:
+    metadata:
+      labels: { app: cedar-authz-server }
+    spec:
+      containers:
+        - name: cedar-authz-server
+          # local image imported via `make load` (k3d image import) — never pulled from a registry.
+          image: cedar-authz:local
+          imagePullPolicy: Never
+          ports:
+            - { name: grpc, containerPort: 9090 }
+          env:
+            - { name: LISTEN_ADDR, value: ":9090" }
+            - { name: CEDAR_POLICY, value: "/policies/authz.cedar" }
+          volumeMounts:
+            - { name: policies, mountPath: /policies }
+      volumes:
+        - name: policies
+          configMap: { name: cedar-policies }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cedar-authz-server
+  namespace: agentgateway-system
+  labels: { app: cedar-authz-server }
+spec:
+  selector: { app: cedar-authz-server }
+  ports:
+    - name: grpc
+      port: 9090
+      targetPort: 9090
+      # agentgateway connects over h2c (gRPC). Mark the port's app protocol so the
+      # gateway negotiates HTTP/2 cleartext to the ext_authz backend.
+      appProtocol: kubernetes.io/h2c

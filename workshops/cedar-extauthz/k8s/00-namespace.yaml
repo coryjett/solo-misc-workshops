@@ -1,0 +1,6 @@
+# The cedar-authz-server lives alongside the gateway. Adjust if your tenant uses a
+# different namespace than agentgateway-system.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentgateway-system
