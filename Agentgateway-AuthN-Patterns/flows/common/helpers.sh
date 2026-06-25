@@ -31,6 +31,17 @@ kill_pf() {
   sleep 1
 }
 
+# Wait until a local URL accepts TCP connections (any HTTP response, incl. 401/403).
+# Avoids the race where a test curl runs before `kubectl port-forward` is ready.
+wait_for_pf() {
+  local url="$1" tries="${2:-30}"
+  for _ in $(seq 1 "$tries"); do
+    curl -s -o /dev/null --max-time 2 "$url" && return 0
+    sleep 1
+  done
+  return 0  # don't hard-fail; let the test's own curls report the real status
+}
+
 # Get a Keycloak admin token
 get_admin_token() {
   local kc_url="${1:-http://localhost:8080}"
