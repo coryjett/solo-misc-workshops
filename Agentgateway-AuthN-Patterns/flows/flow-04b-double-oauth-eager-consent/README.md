@@ -48,6 +48,47 @@ Both flows are user-delegated double OAuth: two user-facing OAuth legs (downstre
 
 > **Delegation, not impersonation.** No token is minted here (contrast [Flow 13](../flow-13-gateway-mediated-exchange/)). The gateway carries the user's *real* upstream token, obtained via a real OAuth grant the user authorized.
 
+### Diagram
+
+Source: [`../../diagrams/4b-double-oauth-eager.mmd`](../../diagrams/4b-double-oauth-eager.mmd)
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant AGW as Agentgateway Proxy
+    participant Issuer as AGW OAuth Issuer (control plane)
+    participant IdP as Downstream IdP (Keycloak)
+    participant OAuth as Upstream OAuth Provider
+    participant STS as Token Exchange Server (STS)
+    participant API as Upstream MCP Server
+
+    Note over Client,API: Phase 1 — Eager discovery + downstream OIDC
+    Client->>AGW: Connect /mcp/<backend> (no token)
+    AGW->>Client: 401 + protected-resource metadata (points at OAuth issuer)
+    Client->>Issuer: GET /oauth-issuer/authorize
+    Issuer->>IdP: Redirect for downstream login
+    IdP->>Issuer: Authorization code + ID token
+
+    Note over Client,API: Phase 2 — Consent screen (optional)
+    Issuer->>Client: Render gateway-hosted consent screen
+    Client->>Issuer: User clicks Allow
+
+    Note over Client,API: Phase 3 — Upstream OAuth (user-delegated)
+    Issuer->>OAuth: Begin upstream authorization
+    OAuth->>Issuer: User authorizes → upstream tokens
+    Issuer->>STS: Store upstream token (userId, resource)
+    Issuer->>Client: Authorization code → bearer JWT
+
+    Note over Client,API: Phase 4 — Authenticated MCP traffic
+    Client->>AGW: POST /mcp/<backend> with bearer JWT
+    AGW->>AGW: Validate JWT (downstream IdP JWKS)
+    AGW->>STS: Fetch stored upstream token
+    STS->>AGW: Return upstream token
+    AGW->>API: Forward request, inject upstream token
+    API-->>AGW: MCP response
+    AGW-->>Client: Result
+```
+
 ### Consent screen (optional)
 
 The gateway-hosted consent screen is **optional** — the eager flow works with or without it. It is an in-house "Allow" interstitial rendered by the gateway's OAuth issuer *after* downstream login and *before* upstream OAuth (Phase 2 above), separate from the upstream provider's own authorization page. Use it when you need an explicit consent gate on top of the provider's, e.g. for a security review.
