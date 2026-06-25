@@ -16,7 +16,8 @@ All patterns documented in **[agentgateway-auth-patterns.md](agentgateway-auth-p
 | | **[Mutual TLS (mTLS)](flows/flow-mtls/)** | Client certificate authentication via TLS handshake — validated against trusted CA root |
 | | **[Passthrough Token](flows/flow-05-passthrough/)** | Gateway forwards client's existing token as-is — no validation or exchange |
 | | **[Standard OIDC Authentication](flows/flow-01-oidc-auth/)** | Authorization Code Flow → bearer JWT for all requests |
-| **Token Exchange** | **[Double OAuth Flow](flows/flow-04-double-oauth/)** | OIDC auth + elicitation — two sequential user-facing OAuth flows for downstream auth and upstream API credentials |
+| **Token Exchange** | **[Double OAuth Flow](flows/flow-04-double-oauth/)** | OIDC auth + elicitation — two sequential user-facing OAuth flows for downstream auth and upstream API credentials (**lazy**: upstream creds gathered on first tool call) |
+| | **[Double OAuth — Eager + Consent](flows/flow-04b-double-oauth-eager-consent/)** | Same trust model as Flow 4, but upstream OAuth runs **up front** via the gateway issuer with an optional gateway-hosted consent screen — no `PENDING` URL, no separate UI |
 | | **[Gateway-Mediated Token Exchange](flows/flow-13-gateway-mediated-exchange/)** | AGW automatically exchanges client JWT at built-in STS before forwarding — client never calls STS |
 | | **[OBO Delegation (Dual Identity)](flows/flow-02a-obo-delegation/)** | RFC 8693 exchange with `may_act` — STS JWT contains both `sub` (user) and `act` (agent) |
 | | **[OBO Impersonation (Token Swap)](flows/flow-02b-obo-impersonation/)** | RFC 8693 exchange without actor — STS JWT replaces IdP token, same `sub`, no `act` |
