@@ -11,7 +11,7 @@ warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 fail()  { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AGW_VERSION="${AGW_VERSION:-v2.2.0}"
+AGW_VERSION="${AGW_VERSION:-v2026.6.1}"
 GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.5.0}"
 CLUSTER_NAME="${CLUSTER_NAME:-agw-auth-patterns}"
 KEYCLOAK_IMAGE="${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.5.2}"

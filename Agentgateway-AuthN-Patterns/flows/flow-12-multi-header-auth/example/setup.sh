@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Pin to the first version that ships `traffic.*.location`. Override via
 # AGW_VERSION=… if you want to try a newer beta. Anything in the v2.x.x
 # line will fail because the field didn't exist yet.
-export AGW_VERSION="${AGW_VERSION:-v2026.5.0-beta.3}"
+# AGW_VERSION inherited from common/setup-env.sh (shared GA v2026.6.1; multi-header needs >= v2026.5.0-beta.1)
 
 source "${SCRIPT_DIR}/../../common/setup-env.sh"   # shared cluster + AGW + Keycloak + STS
 
