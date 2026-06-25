@@ -50,17 +50,43 @@ get_admin_token() {
     | jq -r '.access_token'
 }
 
+# (Re)establish the Keycloak port-forward and wait for it. Long flows can outlive the
+# original port-forward (kubectl port-forward drops during helm rollouts), so call this
+# right before fetching a token if much has happened since deploy-keycloak ran.
+ensure_kc_pf() {
+  local port="${KEYCLOAK_PORT:-8080}" url
+  url="http://localhost:${port}/realms/${KEYCLOAK_REALM:-agw-demo}"
+  kill_pf "svc/keycloak"; sleep 2   # let port 8080 release before rebinding
+  for _ in 1 2 3 4 5 6; do
+    kubectl port-forward -n keycloak svc/keycloak "${port}:8080" &>/dev/null &
+    sleep 3
+    curl -sf -o /dev/null --max-time 3 "$url" 2>/dev/null && return 0  # serving (200)?
+    kill_pf "svc/keycloak"; sleep 2
+  done
+  return 1
+}
+
 # Get a user token from Keycloak (password grant)
 get_user_token() {
   local kc_url="$1" realm="$2" client_id="$3" client_secret="$4" username="$5" password="$6"
   local host_header="${7:-}"
   local extra_args=()
   [[ -n "$host_header" ]] && extra_args+=(-H "Host: ${host_header}")
-  curl -sf -X POST "${kc_url}/realms/${realm}/protocol/openid-connect/token" \
-    "${extra_args[@]}" \
-    -d "username=${username}" -d "password=${password}" -d "grant_type=password" \
-    -d "client_id=${client_id}" -d "client_secret=${client_secret}" \
-    | jq -r '.access_token'
+  # Retry: under heavy concurrent load (e.g. an STS helm rollout) Keycloak can return a
+  # transient 4xx/5xx. Retry a few times and tolerate a single bad response.
+  # NOTE: `|| true` on both substitutions — without it, set -e aborts the function on
+  # the first failed curl/jq and the retry loop never runs.
+  local resp tok
+  for _ in 1 2 3 4 5; do
+    resp=$(curl -s -X POST "${kc_url}/realms/${realm}/protocol/openid-connect/token" \
+      "${extra_args[@]}" \
+      -d "username=${username}" -d "password=${password}" -d "grant_type=password" \
+      -d "client_id=${client_id}" -d "client_secret=${client_secret}" 2>/dev/null || true)
+    tok=$(echo "$resp" | jq -r '.access_token // empty' 2>/dev/null || true)
+    [[ -n "$tok" ]] && { echo "$tok"; return 0; }
+    sleep 2
+  done
+  return 1
 }
 
 # Decode JWT payload (no verification)

@@ -254,6 +254,7 @@ curl -s "http://localhost:8888/.well-known/oauth-protected-resource/mcp" | jq . 
 
 # Test 3: With pre-obtained JWT (simulating post-DCR OAuth flow)
 info "Step 3: Authenticate with JWT (simulating completed OAuth flow)..."
+ensure_kc_pf   # refresh the Keycloak port-forward — this flow's DCR + STS steps can outlive it
 USER_JWT=$(get_user_token "${KEYCLOAK_URL}" "${KEYCLOAK_REALM}" "${KEYCLOAK_CLIENT}" "${KEYCLOAK_SECRET}" \
   "testuser" "testuser" "keycloak.keycloak.svc.cluster.local:8080")
 
@@ -261,10 +262,12 @@ INIT=$(curl -s -D /tmp/mcp-headers --max-time 10 -X POST "http://localhost:8888/
   -H "Authorization: Bearer ${USER_JWT}" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' 2>/dev/null || true)
-SID=$(grep -i "mcp-session-id" /tmp/mcp-headers 2>/dev/null | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r\n')
+# `|| true`: grep exits 1 when there's no session header (e.g. the init returned a
+# JSON-RPC error), which would abort the script under set -e/pipefail.
+SID=$(grep -i "mcp-session-id" /tmp/mcp-headers 2>/dev/null | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r\n' || true)
 
 # Parse SSE data if present
-SSE_DATA=$(echo "$INIT" | grep '^data: ' | sed 's/^data: //' | head -1)
+SSE_DATA=$(echo "$INIT" | grep '^data: ' | sed 's/^data: //' | head -1 || true)
 
 if [[ -n "$SID" ]]; then
   ok "MCP session created: ${SID}"
