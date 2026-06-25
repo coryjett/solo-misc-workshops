@@ -9,18 +9,23 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/helpers.sh"
 check_prereqs
 
 # ── k3d cluster ──────────────────────────────────────────────────────────────
-info "Creating k3d cluster: ${CLUSTER_NAME}..."
-if k3d cluster list 2>/dev/null | grep -q "${CLUSTER_NAME}"; then
+info "Ensuring k3d cluster: ${CLUSTER_NAME}..."
+# `k3d cluster list <name>` exits 0 iff the cluster exists — more reliable than
+# grepping the table (which flaked under load and caused spurious create attempts).
+if k3d cluster list "${CLUSTER_NAME}" >/dev/null 2>&1; then
   warn "Cluster ${CLUSTER_NAME} already exists, reusing"
 else
   if ! command -v k3d >/dev/null 2>&1; then
     info "Installing k3d..."
     curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
   fi
+  # Tolerate a racy "already exists" — verify existence rather than aborting on it.
   k3d cluster create "${CLUSTER_NAME}" \
     --servers 1 --agents 1 \
     --k3s-arg "--disable=traefik@server:0" \
-    --wait
+    --wait \
+    || k3d cluster list "${CLUSTER_NAME}" >/dev/null 2>&1 \
+    || fail "k3d cluster create failed for ${CLUSTER_NAME}"
 fi
 kubectl config use-context "k3d-${CLUSTER_NAME}"
 kubectl get nodes

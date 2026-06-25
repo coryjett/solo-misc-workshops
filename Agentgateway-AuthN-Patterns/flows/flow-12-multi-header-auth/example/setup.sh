@@ -267,6 +267,7 @@ kubectl get enterpriseagentgatewaypolicy -n default -l '' -o custom-columns="NAM
 
 # ── Port-forward and test ────────────────────────────────────────────────────
 kill_pf "${FLOW}-gateway"
+kubectl rollout status deploy/${FLOW}-gateway --timeout=180s 2>/dev/null || true
 kubectl port-forward svc/${FLOW}-gateway 8888:80 &>/dev/null &
 wait_for_pf http://localhost:8888/
 

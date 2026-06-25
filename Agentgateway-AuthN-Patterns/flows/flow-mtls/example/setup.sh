@@ -164,6 +164,7 @@ ok "Gateway ready"
 
 # ── Port-forward and test ────────────────────────────────────────────────────
 kill_pf "${FLOW}-gateway"
+kubectl rollout status deploy/${FLOW}-gateway --timeout=180s 2>/dev/null || true
 kubectl port-forward svc/${FLOW}-gateway 8443:443 &>/dev/null &
 wait_for_pf https://localhost:8443/
 

@@ -267,6 +267,7 @@ ok "Eager MCP backend + policy applied"
 
 # ── Headless check: the eager discriminator ──────────────────────────────────
 kill_pf "${FLOW}-gateway"
+kubectl rollout status -n agentgateway-system deploy/${FLOW}-gateway --timeout=180s 2>/dev/null || true
 kubectl port-forward -n agentgateway-system svc/${FLOW}-gateway 8888:80 &>/dev/null &
 wait_for_pf http://localhost:8888/
 
