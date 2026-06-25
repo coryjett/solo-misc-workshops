@@ -36,7 +36,7 @@ kill_pf() {
 wait_for_pf() {
   local url="$1" tries="${2:-30}"
   for _ in $(seq 1 "$tries"); do
-    curl -s -o /dev/null --max-time 2 "$url" && return 0
+    curl -sk -o /dev/null --max-time 2 "$url" && return 0
     sleep 1
   done
   return 0  # don't hard-fail; let the test's own curls report the real status
