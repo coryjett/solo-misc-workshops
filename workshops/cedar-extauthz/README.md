@@ -122,6 +122,20 @@ curl -sS localhost:8080/mcp -H "Authorization: Bearer $JWT" \
 
 `make logs` shows the matching `ALLOW` / `DENY` line with the reason for each.
 
+> **Verified end-to-end** (k3d + AGW Enterprise + this Keycloak realm): all Cedar decisions
+> are correct — LLM `gpt-4o` allowed (200 from OpenAI), `gpt-3.5-turbo`/`gpt-4-turbo` denied
+> (403); MCP `tools/list` + `search_solo_docs` under `/docs` allowed, `/etc/secrets` and
+> `delete_page` denied (403). ext_authz runs **before** the gateway's MCP session layer, so
+> the deny decisions apply even to session-less calls.
+>
+> **MCP allowed calls need a real MCP client + reachable upstream.** The gateway requires an
+> MCP session (`initialize` first — a raw `tools/list` returns `400 session header is
+> required`), and the example backend host in
+> [`k8s/40-mcp-backend-route.yaml`](k8s/40-mcp-backend-route.yaml) is a placeholder — point
+> it at a reachable streamable-HTTP MCP server and drive it with an MCP client (Inspector /
+> VS Code / Cursor). The **authorization** is what this workshop demonstrates, and it is
+> enforced regardless (provable in `make logs` and the 403 deny responses).
+
 ## How the wiring works
 
 - [`k8s/30-policy-openai-extauth.yaml`](k8s/30-policy-openai-extauth.yaml) and
