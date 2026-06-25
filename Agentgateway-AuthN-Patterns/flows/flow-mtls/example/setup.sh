@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/../../common/setup-base.sh"
+source "${SCRIPT_DIR}/../../common/setup-env.sh"   # shared cluster + AGW + Keycloak + STS
 
 FLOW="flow-mtls"
 
@@ -165,7 +165,7 @@ ok "Gateway ready"
 # ── Port-forward and test ────────────────────────────────────────────────────
 kill_pf "${FLOW}-gateway"
 kubectl port-forward svc/${FLOW}-gateway 8443:443 &>/dev/null &
-sleep 2
+wait_for_pf https://localhost:8443/
 
 echo ""
 echo "=== Testing Flow: Mutual TLS ==="

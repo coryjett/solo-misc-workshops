@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # line will fail because the field didn't exist yet.
 export AGW_VERSION="${AGW_VERSION:-v2026.5.0-beta.3}"
 
-source "${SCRIPT_DIR}/../../common/setup-base.sh"
+source "${SCRIPT_DIR}/../../common/setup-env.sh"   # shared cluster + AGW + Keycloak + STS
 
 FLOW="flow-12"
 
@@ -268,7 +268,7 @@ kubectl get enterpriseagentgatewaypolicy -n default -l '' -o custom-columns="NAM
 # ── Port-forward and test ────────────────────────────────────────────────────
 kill_pf "${FLOW}-gateway"
 kubectl port-forward svc/${FLOW}-gateway 8888:80 &>/dev/null &
-sleep 2
+wait_for_pf http://localhost:8888/
 
 TOKEN_A=$(cat "${WORKLOAD_DIR}/issuer-a.jwt")
 TOKEN_B=$(cat "${WORKLOAD_DIR}/issuer-b.jwt")

@@ -4,11 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-KEYCLOAK_REALM="flow02a-realm"
-
-source "${SCRIPT_DIR}/../../common/setup-base.sh"
-source "${SCRIPT_DIR}/../../common/deploy-keycloak.sh"
-enable_sts "${KEYCLOAK_REALM}"
+source "${SCRIPT_DIR}/../../common/setup-env.sh"   # shared cluster + AGW + Keycloak + STS
 
 FLOW="flow-02a"
 
@@ -239,7 +235,7 @@ ok "Gateway ready"
 # ── Port-forward and test ────────────────────────────────────────────────────
 kill_pf "${FLOW}-gateway"
 kubectl port-forward svc/${FLOW}-gateway 8888:80 &>/dev/null &
-sleep 2
+wait_for_pf http://localhost:8888/
 
 echo ""
 echo "=== Testing Flow 2a: OBO Delegation ==="

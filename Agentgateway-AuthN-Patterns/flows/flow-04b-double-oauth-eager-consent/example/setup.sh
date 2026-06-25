@@ -19,7 +19,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-KEYCLOAK_REALM="flow04b-realm"
+source "${SCRIPT_DIR}/../../common/setup-env.sh"   # shared cluster + AGW + Keycloak + STS
 FLOW="flow-04b"
 
 # Externally reachable gateway address (port-forwarded below). The issuer base_url,
@@ -33,10 +33,6 @@ ISSUER_CLIENT_SECRET="${ISSUER_CLIENT_SECRET:-agw-issuer-secret}"
 UPSTREAM_BASE_URL="${UPSTREAM_BASE_URL:-https://mcp.atlassian.com}"
 UPSTREAM_SCOPES="${UPSTREAM_SCOPES:-read:jira-work read:confluence-content.summary offline_access}"
 UPSTREAM_CLIENT_NAME="${UPSTREAM_CLIENT_NAME:-Atlassian}"
-
-source "${SCRIPT_DIR}/../../common/setup-base.sh"
-source "${SCRIPT_DIR}/../../common/deploy-keycloak.sh"
-enable_sts "${KEYCLOAK_REALM}"
 
 # ── Register the agw-issuer confidential client in Keycloak ───────────────────
 # Lets the gateway's OAuth issuer federate with Keycloak for the downstream leg.
@@ -272,7 +268,7 @@ ok "Eager MCP backend + policy applied"
 # ── Headless check: the eager discriminator ──────────────────────────────────
 kill_pf "${FLOW}-gateway"
 kubectl port-forward -n agentgateway-system svc/${FLOW}-gateway 8888:80 &>/dev/null &
-sleep 2
+wait_for_pf http://localhost:8888/
 
 echo ""
 echo "=== Flow 4b: verifying EAGER discovery (401 -> gateway issuer) ==="
