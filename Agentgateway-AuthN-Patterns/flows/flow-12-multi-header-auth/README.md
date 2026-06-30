@@ -4,8 +4,8 @@ Validate two **independent** credentials carried in **different headers** of the
 
 > **Requires AGW Enterprise `v2026.5.0-beta.1` or later** — the `traffic.jwtAuthentication.location` (and `apiKeyAuthentication.location`, `basicAuthentication.location`) field landed in PR #1555 (commit `08229837e`, 2026-04-20). Older charts (every `v2.x.x` tag including `v2.3.2`) read JWT credentials only from `Authorization: Bearer …` and reject `location` at apply time.
 >
-> **Docs:** [JWT Auth — token location](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/) (covers `Authorization`-only behavior; `location` is documented inline in the API reference)
-> **API:** [`AuthorizationLocation`](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#authorizationlocation) · [`JWTAuthentication`](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#jwtauthentication)
+> **Docs:** [JWT Auth — token location](https://docs.solo.io/agentgateway/latest/security/jwt/setup/) (covers `Authorization`-only behavior; `location` is documented inline in the API reference)
+> **API:** [`AuthorizationLocation`](https://docs.solo.io/agentgateway/latest/reference/api/api/#authorizationlocation) · [`JWTAuthentication`](https://docs.solo.io/agentgateway/latest/reference/api/solo/#jwtauthentication)
 
 ### Use cases
 

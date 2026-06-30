@@ -6,8 +6,8 @@ Two independent TLS features that can be used separately or combined for end-to-
 
 - **BackendTLS (outbound TLS origination):** The gateway originates a new TLS connection to the backend. Configured either as a standalone Kubernetes `BackendTLSPolicy` resource (applied to Services) or inline via the `BackendTLS` field in `EnterpriseAgentgatewayPolicy`. Verifies the backend's server certificate against `caCertificateRefs` (ConfigMap) or `wellKnownCACertificates: System`. Used when backends only accept TLS connections (in-cluster or external services).
 
-> **Docs:** [Set up mTLS (FrontendTLS)](https://docs.solo.io/agentgateway/2.2.x/setup/listeners/mtls/) · [BackendTLS](https://docs.solo.io/agentgateway/2.2.x/security/backendtls/)
-> **API:** [FrontendTLS](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#frontendtls) · [BackendTLS](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#backendtls)
+> **Docs:** [Set up mTLS (FrontendTLS)](https://docs.solo.io/agentgateway/latest/setup/listeners/mtls/) · [BackendTLS](https://docs.solo.io/agentgateway/latest/security/backendtls/)
+> **API:** [FrontendTLS](https://docs.solo.io/agentgateway/latest/reference/api/api/#frontendtls) · [BackendTLS](https://docs.solo.io/agentgateway/latest/reference/api/solo/#backendtls)
 
 ### How it works
 

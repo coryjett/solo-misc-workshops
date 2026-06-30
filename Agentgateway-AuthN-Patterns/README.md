@@ -1,6 +1,6 @@
 # Agent Gateway Auth Patterns
 
-Comprehensive audit of all authentication patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/).
+Comprehensive audit of all authentication patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/latest/).
 
 All patterns documented in **[agentgateway-auth-patterns.md](agentgateway-auth-patterns.md)** (single-page reference) and as individual pages linked below.
 
@@ -43,7 +43,7 @@ cd flows/flow-08-api-key-auth/example
 
 ## Reference
 
-- [Agent Gateway Docs](https://docs.solo.io/agentgateway/2.2.x/)
-- [Enterprise API Reference](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/)
-- [OSS API Reference](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/)
-- [Helm Values Reference](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/)
+- [Agent Gateway Docs](https://docs.solo.io/agentgateway/latest/)
+- [Enterprise API Reference](https://docs.solo.io/agentgateway/latest/reference/api/solo/)
+- [OSS API Reference](https://docs.solo.io/agentgateway/latest/reference/api/api/)
+- [Helm Values Reference](https://docs.solo.io/agentgateway/latest/reference/helm/agentgateway/)

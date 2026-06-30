@@ -2,8 +2,8 @@
 
 Validate the inbound OIDC JWT, inspect a claim (sub, team, tier), then use a CEL transformation to inject a per-user or per-group static opaque token. Enables differentiated backend access based on identity attributes.
 
-> **Docs:** [CEL Transformations](https://docs.solo.io/agentgateway/2.2.x/traffic-management/transformations/) · [JWT Auth for MCP Services](https://docs.solo.io/agentgateway/2.2.x/mcp/mcp-access/)
-> **API:** [EnterpriseAgentgatewayPolicyBackend](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewaybackendpolicy) · [EnterpriseAgentgatewayPolicyTraffic](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewaytrafficpolicy)
+> **Docs:** [CEL Transformations](https://docs.solo.io/agentgateway/latest/traffic-management/transformations/) · [JWT Auth for MCP Services](https://docs.solo.io/agentgateway/latest/mcp/mcp-access/)
+> **API:** [EnterpriseAgentgatewayPolicyBackend](https://docs.solo.io/agentgateway/latest/reference/api/solo/#enterpriseagentgatewaybackendpolicy) · [EnterpriseAgentgatewayPolicyTraffic](https://docs.solo.io/agentgateway/latest/reference/api/solo/#enterpriseagentgatewaytrafficpolicy)
 
 ### How it works
 

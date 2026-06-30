@@ -60,7 +60,7 @@ source ../common/cleanup.sh
 
 ## Docs
 
-- [API Keys — Manage API Keys](https://docs.solo.io/agentgateway/2.2.x/llm/api-keys/)
-- [BackendAuth API](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#backendauth)
+- [API Keys — Manage API Keys](https://docs.solo.io/agentgateway/latest/llm/api-keys/)
+- [BackendAuth API](https://docs.solo.io/agentgateway/latest/reference/api/api/#backendauth)
 
 Back to [Flow 6 description](../README.md) · [Auth Patterns overview](../../../README.md)

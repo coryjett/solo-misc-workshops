@@ -54,7 +54,7 @@ source ../common/cleanup.sh
 
 ## Docs
 
-- [BYO Ext Auth Service](https://docs.solo.io/agentgateway/2.2.x/security/extauth/byo-ext-auth-service/)
-- [EnterpriseAgentgatewayExtAuth API](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#enterpriseagentgatewayextauth)
+- [BYO Ext Auth Service](https://docs.solo.io/agentgateway/latest/security/extauth/byo-ext-auth-service/)
+- [EnterpriseAgentgatewayExtAuth API](https://docs.solo.io/agentgateway/latest/reference/api/solo/#enterpriseagentgatewayextauth)
 
 Back to [Flow 10 description](../README.md) · [Auth Patterns overview](../../../README.md)

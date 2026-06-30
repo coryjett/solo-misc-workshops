@@ -15,7 +15,7 @@ Clients authenticate with a static API key stored in a Kubernetes secret. The ga
 
 This script:
 1. Creates a k3d cluster
-2. Installs Enterprise Agentgateway ([Helm install docs](https://docs.solo.io/agentgateway/2.2.x/install/helm/))
+2. Installs Enterprise Agentgateway ([Helm install docs](https://docs.solo.io/agentgateway/latest/install/helm/))
 3. Deploys an echo backend
 4. Creates a Kubernetes secret with an API key (labeled `agw-auth: api-key`)
 5. Creates a Gateway + HTTPRoute + `EnterpriseAgentgatewayPolicy` with `apiKeyAuthentication`
@@ -62,7 +62,7 @@ source ../common/cleanup.sh
 
 ## Docs
 
-- [API Key Auth](https://docs.solo.io/agentgateway/2.2.x/security/extauth/apikey/)
-- [APIKeyAuthentication API](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#apikeyauthentication)
+- [API Key Auth](https://docs.solo.io/agentgateway/latest/security/extauth/apikey/)
+- [APIKeyAuthentication API](https://docs.solo.io/agentgateway/latest/reference/api/solo/#apikeyauthentication)
 
 Back to [Flow 8 description](../README.md) · [Auth Patterns overview](../../../README.md)

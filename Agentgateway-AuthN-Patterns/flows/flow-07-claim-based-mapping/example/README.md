@@ -57,7 +57,7 @@ source ../common/cleanup.sh
 
 ## Docs
 
-- [CEL Transformations](https://docs.solo.io/agentgateway/2.2.x/traffic-management/transformations/)
-- [JWT Auth for MCP Services](https://docs.solo.io/agentgateway/2.2.x/mcp/mcp-access/)
+- [CEL Transformations](https://docs.solo.io/agentgateway/latest/traffic-management/transformations/)
+- [JWT Auth for MCP Services](https://docs.solo.io/agentgateway/latest/mcp/mcp-access/)
 
 Back to [Flow 7 description](../README.md) · [Auth Patterns overview](../../../README.md)

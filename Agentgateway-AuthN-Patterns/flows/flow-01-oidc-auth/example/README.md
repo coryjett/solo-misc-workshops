@@ -65,7 +65,7 @@ source ../common/cleanup.sh
 
 ## Docs
 
-- [JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/)
-- [JWTAuthentication API](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#jwtauthentication)
+- [JWT Auth](https://docs.solo.io/agentgateway/latest/security/jwt/setup/)
+- [JWTAuthentication API](https://docs.solo.io/agentgateway/latest/reference/api/solo/#jwtauthentication)
 
 Back to [Flow 1 description](../README.md) · [Auth Patterns overview](../../../README.md)

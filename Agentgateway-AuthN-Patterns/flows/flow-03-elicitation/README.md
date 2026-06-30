@@ -13,8 +13,8 @@ When a request needs to call an upstream API on behalf of a user but no upstream
 7. **Client retries the original request** → Proxy fetches the stored token from STS → forwards the request with the injected upstream OAuth token
 8. **Upstream API responds** → Proxy returns the result to the client
 
-> **Docs:** [Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/elicitations/) · [About OBO & Elicitations](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/about/)
-> **API:** [TokenExchangeMode](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#tokenexchangemode)
+> **Docs:** [Elicitations](https://docs.solo.io/agentgateway/latest/security/obo-elicitations/elicitations/) · [About OBO & Elicitations](https://docs.solo.io/agentgateway/latest/security/obo-elicitations/about/)
+> **API:** [TokenExchangeMode](https://docs.solo.io/agentgateway/latest/reference/api/solo/#tokenexchangemode)
 
 ![Diagram](../../images/3-elicitation.png)
 

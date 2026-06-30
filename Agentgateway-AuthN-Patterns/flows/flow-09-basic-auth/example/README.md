@@ -53,7 +53,7 @@ source ../common/cleanup.sh
 
 ## Docs
 
-- [Basic Auth](https://docs.solo.io/agentgateway/2.2.x/security/extauth/basic/)
-- [BasicAuthentication API](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#basicauthentication)
+- [Basic Auth](https://docs.solo.io/agentgateway/latest/security/extauth/basic/)
+- [BasicAuthentication API](https://docs.solo.io/agentgateway/latest/reference/api/solo/#basicauthentication)
 
 Back to [Flow 9 description](../README.md) · [Auth Patterns overview](../../../README.md)

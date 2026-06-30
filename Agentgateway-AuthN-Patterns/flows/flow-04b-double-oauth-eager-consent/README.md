@@ -5,7 +5,7 @@ Same trust model as [Flow 4 (Double OAuth)](../flow-04-double-oauth/), but the s
 Where Flow 4 (lazy) defers upstream credential gathering until a tool needs it and completes it out-of-band in the Solo Enterprise UI, this variant advertises the gateway's own OAuth issuer in the MCP backend's protected-resource metadata. A spec-compliant MCP client therefore runs the **entire** OAuth handshake up front: downstream IdP login → gateway consent screen → upstream OAuth → bearer JWT. No `PENDING` URL, no retry, no separate approval UI.
 
 > **Docs:** [MCP consent screen](https://docs.solo.io/agentgateway/latest/mcp/token-exchange/elicitations/consent-screen/) · [Elicitation infrastructure setup](https://docs.solo.io/agentgateway/latest/mcp/token-exchange/elicitations/setup/) · [Auth-only MCP setup](https://docs.solo.io/agentgateway/latest/mcp/token-exchange/auth-only/setup/)
-> **API:** [TokenExchangeMode](https://docs.solo.io/agentgateway/2.2.x/reference/api/solo/#tokenexchangemode)
+> **API:** [TokenExchangeMode](https://docs.solo.io/agentgateway/latest/reference/api/solo/#tokenexchangemode)
 
 ### Eager vs lazy — same family, different second-leg mechanism
 

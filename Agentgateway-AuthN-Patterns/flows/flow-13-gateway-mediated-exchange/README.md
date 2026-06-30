@@ -8,8 +8,8 @@ Two variants depending on STS deployment:
 
 Uses AGW's built-in token exchange server (`enterprise-agentgateway:7777`). Configured via `ExchangeOnly` mode on `EnterpriseAgentgatewayPolicy`. The STS validates the user JWT (JWKS) and agent identity (K8s SA token), then issues a new JWT with both `sub` (user) and `act` (agent). Best for environments where AGW owns the trust domain.
 
-> **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/2.2.x/security/obo-elicitations/obo/) · [Set up JWT Auth](https://docs.solo.io/agentgateway/2.2.x/security/jwt/setup/)
-> **API:** [Helm tokenExchange values](https://docs.solo.io/agentgateway/2.2.x/reference/helm/agentgateway/)
+> **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/latest/security/obo-elicitations/obo/) · [Set up JWT Auth](https://docs.solo.io/agentgateway/latest/security/jwt/setup/)
+> **API:** [Helm tokenExchange values](https://docs.solo.io/agentgateway/latest/reference/helm/agentgateway/)
 
 #### How it works
 

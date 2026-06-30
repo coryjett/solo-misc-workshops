@@ -59,7 +59,7 @@ source ../common/cleanup.sh
 
 ## Docs
 
-- [API Keys — Passthrough Token](https://docs.solo.io/agentgateway/2.2.x/llm/api-keys/)
-- [BackendAuth API](https://docs.solo.io/agentgateway/2.2.x/reference/api/api/#backendauth)
+- [API Keys — Passthrough Token](https://docs.solo.io/agentgateway/latest/llm/api-keys/)
+- [BackendAuth API](https://docs.solo.io/agentgateway/latest/reference/api/api/#backendauth)
 
 Back to [Flow 5 description](../README.md) · [Auth Patterns overview](../../../README.md)
