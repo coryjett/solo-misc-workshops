@@ -15,7 +15,10 @@
 #   (or VS Code / Cursor / Claude Code) against a REAL upstream MCP OAuth provider
 #   (Atlassian / GitHub / Slack). See example/README.md "Completing the flow".
 #
-# NOT RUN END-TO-END against a live cluster by the author — verify before publishing.
+# VALIDATED on a fresh k3d cluster with AGW v2026.6.2: the headless portion above
+# passes (no-token -> 401 + protected-resource metadata pointing at the gateway
+# OAuth issuer). The consent + upstream-OAuth completion is browser-interactive and
+# is exercised manually per example/README.md "Completing the flow".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
