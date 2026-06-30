@@ -124,9 +124,8 @@ spec:
   static:
     host: echo-backend.default.svc.cluster.local
     port: 80
-  policies:
-    auth:
-      key: "Bearer mapped-default-token"
+  # No static backend credential — the upstream token is computed per-request
+  # from a JWT claim by the transformation policy below (traffic.transformation).
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -171,6 +170,16 @@ spec:
               namespace: keycloak
               port: 8080
             jwksPath: "realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs"
+    # Claim-based token mapping: jwtAuthentication validates the inbound user JWT
+    # and exposes its claims to CEL as the `jwt` variable. The transformation then
+    # rewrites the upstream Authorization header to a per-identity token selected
+    # from a claim. Here we branch on the email domain; in production you'd map on
+    # a group/role/tier claim (e.g. has(jwt.groups) && "premium" in jwt.groups).
+    transformation:
+      request:
+        set:
+        - name: Authorization
+          value: '"Bearer " + (jwt.email.endsWith("@example.com") ? "premium-tier-token-abc123" : "standard-tier-token-xyz789")'
 EOF
 
 kubectl wait gateway/${FLOW}-gateway --for=condition=Programmed --timeout=120s
@@ -193,16 +202,18 @@ USER_JWT=$(get_user_token "${KEYCLOAK_URL}" "${KEYCLOAK_REALM}" "${KEYCLOAK_CLIE
 echo "JWT claims:"
 decode_jwt "$USER_JWT" | jq '{iss, sub, preferred_username}'
 
-# Test: Valid JWT -> 200, backend sees mapped token
+# Test: valid JWT -> 200, and the CEL transformation must have rewritten the
+# upstream Authorization to the per-claim token. testuser's email is
+# @example.com, so the CEL branch selects the "premium-tier" token.
 RESPONSE=$(curl -s -H "Authorization: Bearer ${USER_JWT}" http://localhost:8888/)
-IS_JWT=$(echo "$RESPONSE" | jq -r '.is_jwt // true')
-if [[ "$IS_JWT" == "false" ]]; then
-  ok "Claim-based mapping works — backend received non-JWT token"
-  echo "$RESPONSE" | jq .
+echo "$RESPONSE" | jq .
+AUTH=$(echo "$RESPONSE" | jq -r '.auth_header // ""')
+if echo "$AUTH" | grep -q "premium-tier-token-abc123"; then
+  ok "Claim-based mapping works — CEL read jwt.email and injected the premium-tier upstream token (not the user's JWT)"
+elif echo "$AUTH" | grep -q "standard-tier-token"; then
+  ok "Claim-based mapping works — CEL selected the standard-tier token from jwt.email"
 else
-  # Even if it's still a JWT, the backend auth key should have been injected
-  ok "Backend received token (check auth_header for mapped value)"
-  echo "$RESPONSE" | jq .
+  fail "Expected a per-claim mapped token from jwt.email; backend instead saw: ${AUTH:-<none>}"
 fi
 
 echo ""
