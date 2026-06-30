@@ -4,6 +4,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Frontend mTLS client-cert validation uses Gateway API spec.tls.frontend +
+# validation.caCertificateRefs, which are EXPERIMENTAL-channel fields. Opt the
+# shared base into the experimental channel BEFORE it installs the CRDs (it can't
+# be patched on later over the standard channel).
+export GATEWAY_API_CHANNEL=experimental
 source "${SCRIPT_DIR}/../../common/setup-env.sh"   # shared cluster + AGW + Keycloak + STS
 
 FLOW="flow-mtls"
@@ -123,6 +128,18 @@ metadata:
   namespace: default
 spec:
   gatewayClassName: enterprise-agentgateway
+  # Frontend mTLS: validate client certs against our CA. spec.tls.frontend +
+  # validation.caCertificateRefs are Gateway API experimental-channel fields the
+  # AGW controller reads (resolveGatewayTLS then buildTLS). The earlier
+  # listener-level options.tls-frontend-validation key was silently ignored.
+  tls:
+    frontend:
+      default:
+        validation:
+          caCertificateRefs:
+          - name: ${FLOW}-ca-cert
+            group: ""
+            kind: ConfigMap
   listeners:
   - name: https
     port: 443
@@ -131,12 +148,6 @@ spec:
       mode: Terminate
       certificateRefs:
       - name: ${FLOW}-server-cert
-      options:
-        gateway.networking.k8s.io/tls-frontend-validation: |
-          caCertificateRefs:
-          - name: ${FLOW}-ca-cert
-            group: ""
-            kind: ConfigMap
     allowedRoutes:
       namespaces:
         from: All
@@ -174,11 +185,11 @@ echo ""
 
 # Test 1: No client cert -> should fail or be rejected
 info "Test 1: No client certificate..."
-HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --cacert "${CERT_DIR}/ca.crt" https://localhost:8443/ 2>/dev/null || echo "000")
+HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --cacert "${CERT_DIR}/ca.crt" https://localhost:8443/ 2>/dev/null || true)
 if [[ "$HTTP_CODE" == "000" || "$HTTP_CODE" == "400" || "$HTTP_CODE" == "403" ]]; then
-  ok "No client cert: connection refused or denied (HTTP ${HTTP_CODE})"
+  ok "No client cert: rejected (HTTP ${HTTP_CODE}) — frontend mTLS is enforced"
 else
-  warn "No client cert: HTTP ${HTTP_CODE} (mTLS may be in AllowInsecureFallback mode)"
+  fail "No client cert returned HTTP ${HTTP_CODE} — expected rejection. Frontend mTLS is NOT enforcing client certs (check spec.tls.frontend.validation)."
 fi
 
 # Test 2: With valid client cert -> 200

@@ -32,9 +32,19 @@ kubectl get nodes
 ok "Cluster ready"
 
 # ── Gateway API CRDs ────────────────────────────────────────────────────────
-info "Installing Gateway API CRDs ${GATEWAY_API_VERSION}..."
-kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
-ok "Gateway API CRDs installed"
+# Channel defaults to "standard"; a flow that needs experimental-only fields
+# (e.g. flow-mtls uses spec.tls.frontend + validation for client-cert mTLS) sets
+# GATEWAY_API_CHANNEL=experimental BEFORE sourcing setup-env, so the experimental
+# CRDs are installed from the start (you can't kubectl-apply experimental over an
+# already-installed standard channel — the patch is rejected).
+GATEWAY_API_CHANNEL="${GATEWAY_API_CHANNEL:-standard}"
+info "Installing Gateway API CRDs ${GATEWAY_API_VERSION} (${GATEWAY_API_CHANNEL} channel)..."
+# Server-side apply: the experimental-channel CRDs (esp. HTTPRoute) exceed the
+# 256KB client-side last-applied-configuration annotation limit, so a plain
+# `kubectl apply` fails with "metadata.annotations: Too long". SSA avoids the
+# annotation entirely and is the recommended way to install Gateway API CRDs.
+kubectl apply --server-side --force-conflicts -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/${GATEWAY_API_CHANNEL}-install.yaml"
+ok "Gateway API CRDs installed (${GATEWAY_API_CHANNEL})"
 
 # ── Agent Gateway Enterprise ────────────────────────────────────────────────
 info "Installing Enterprise Agentgateway CRDs ${AGW_VERSION}..."
