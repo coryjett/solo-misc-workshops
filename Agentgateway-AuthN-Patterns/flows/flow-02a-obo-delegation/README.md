@@ -2,6 +2,8 @@
 
 Agent exchanges the user's JWT for a delegated OBO token via RFC 8693 Token Exchange. The user's JWT must include a `may_act` claim authorizing the agent. The STS validates both the user JWT and the agent's K8s service account token, then issues a new JWT (signed by Agent Gateway) containing both `sub` (user) and `act` (agent). Downstream services trust the Agent Gateway issuer and can enforce policies on both identities.
 
+> **Scope of the working example:** the steps below describe the **agent-initiated** RFC 8693 exchange that yields true dual identity (`sub`+`act`). The runnable `example/` demonstrates the simpler **gateway-mediated** auto-exchange, which performs *impersonation* (`sub` only — no `act`); see [example/README](example/README.md). The gateway does not synthesize an agent `actor_token` on its own — dual-identity delegation requires the agent to supply one.
+
 > **Docs:** [OBO Token Exchange](https://docs.solo.io/agentgateway/latest/security/obo-elicitations/obo/) · [About OBO & Elicitations](https://docs.solo.io/agentgateway/latest/security/obo-elicitations/about/)
 > **API:** [Helm tokenExchange values](https://docs.solo.io/agentgateway/latest/reference/helm/agentgateway/)
 

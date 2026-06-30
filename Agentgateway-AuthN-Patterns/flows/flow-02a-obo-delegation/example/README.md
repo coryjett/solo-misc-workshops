@@ -1,6 +1,8 @@
 # Flow 2a: OBO Delegation — Working Example
 
-Gateway-mediated OBO token exchange. Client sends a Keycloak JWT, AGW automatically exchanges it at the built-in STS, and the MCP server receives an STS-signed JWT with `sub` (user) + `act` (agent).
+Gateway-mediated OBO token exchange. The client sends a Keycloak JWT, AGW's built-in STS automatically exchanges it, and the MCP server receives an STS-signed token (not the original Keycloak JWT).
+
+> **Impersonation, not dual-identity delegation.** The *gateway-mediated* exchange never sends an `actor_token`, so the STS issues a token carrying the user's `sub` only — it does **not** add an `act` (agent) claim. That makes this example functionally the same exchange as [flow-02b (impersonation)](../../flow-02b-obo-impersonation/). **True delegation** — a dual-identity token with both `sub` (user) and `act` (agent) — requires an **agent-initiated** RFC 8693 call that supplies the agent's `actor_token` (and a `may_act` claim on the user JWT). That agent-initiated flow is described in the [Flow 2a overview](../README.md); the gateway does not produce it automatically.
 
 ## Prerequisites
 
@@ -17,7 +19,7 @@ This script:
 1. Creates a k3d cluster, installs Enterprise Agentgateway **with STS enabled**
 2. Deploys Keycloak + a token-logging MCP server
 3. Configures `ExchangeOnly` token exchange mode
-4. Tests that the MCP server receives an STS-signed token (not the original Keycloak JWT)
+4. Tests that the MCP server receives an STS-signed token (not the original Keycloak JWT) — i.e. the exchange occurred. It does **not** assert an `act` claim, because the gateway-mediated path is impersonation (see note above).
 
 ## Key config
 
