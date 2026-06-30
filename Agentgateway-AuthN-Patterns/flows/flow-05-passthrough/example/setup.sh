@@ -211,7 +211,8 @@ RESPONSE=$(curl -s -H "Authorization: Bearer ${USER_JWT}" http://localhost:8888/
 if echo "$RESPONSE" | jq -e '.token_issuer' >/dev/null 2>&1; then
   ISSUER=$(echo "$RESPONSE" | jq -r '.token_issuer')
   ok "Passthrough works — backend received token with issuer: ${ISSUER}"
-  echo "  Full response: ${RESPONSE}" | jq .
+  echo "  Full response:"
+  echo "${RESPONSE}" | jq . || echo "  ${RESPONSE}"
 else
   warn "Unexpected response: ${RESPONSE}"
 fi
