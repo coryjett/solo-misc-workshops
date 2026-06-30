@@ -104,7 +104,7 @@ spec:
 EOF
 wait_for default deployment/mcp-server
 
-# ── ReferenceGrant + Gateway + Policy with ElicitOnly ────────────────────────
+# ── ReferenceGrant + Gateway + Policy with ElicitationOnly ────────────────────────
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant

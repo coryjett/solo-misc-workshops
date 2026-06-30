@@ -1,0 +1,50 @@
+%% Decision Flowchart: How should this request be authenticated?
+%% Editable source for images/decision-flowchart.png — render with:
+%%   mmdc -i decision-flowchart.mmd -o ../images/decision-flowchart.png -s 3 -b transparent
+flowchart TD
+  Q0{{"How should this request<br/>be authenticated?"}}
+  Q0 --> Q1{{"Does the client already<br/>have valid credentials?"}}
+  Q1 -->|"Yes — forward as-is"| F5["Flow 5: Passthrough"]
+  Q1 -->|"No"| Q2{{"What type of<br/>credentials are needed?"}}
+
+  %% --- interactive user login ---
+  Q2 -->|"User login (interactive)"| Q3{{"What auth method?"}}
+  Q3 -->|"OIDC / OAuth"| Q3a{{"Where does token<br/>exchange happen?"}}
+  Q3a -->|"Client handles OIDC,<br/>passes JWT to gateway"| F1["Flow 1: OIDC Auth"]
+  Q3a -->|"Gateway handles OIDC +<br/>exchanges before agent"| F13["Flow 13: Gateway-Mediated<br/>OIDC + Token Exchange"]
+  Q3 -->|"Username / password"| F9["Flow 9: Basic Auth"]
+  Q3 -->|"Pre-shared key"| F8["Flow 8: API Key Auth"]
+  Q3 -->|"Custom / enterprise IdP"| F10["Flow 10: BYO Ext Auth"]
+  Q3 -->|"Certificate-based"| FM["Flow mTLS: Mutual TLS"]
+
+  %% --- agent/service acting for a user (OBO) ---
+  Q2 -->|"Agent/service acting<br/>for a user"| Q4{{"Track agent identity<br/>separately?"}}
+  Q4 -->|"Yes — dual identity,<br/>audit + fine-grained policy"| F2A["Flow 2a: OBO Delegation"]
+  Q4 -->|"No — act as the user,<br/>downstream sees user only"| F2B["Flow 2b: OBO Impersonation"]
+
+  %% --- backend/upstream credential ---
+  Q2 -->|"Backend/upstream<br/>credential needed"| Q5{{"Upstream credential<br/>static or dynamic?"}}
+  Q5 -->|"Static, shared<br/>across all users"| F6["Flow 6: Static Secret"]
+  Q5 -->|"Static, per-user/group<br/>mapped by JWT claim"| F7["Flow 7: Claim-Based Mapping"]
+  Q5 -->|"Dynamic — needs<br/>OAuth exchange"| Q6{{"Consent timing?"}}
+  Q6 -->|"Lazy — prompt on first<br/>access (elicitation)"| F3["Flow 3: Elicitation"]
+  Q6 -->|"Lazy — full second<br/>OAuth leg"| F4["Flow 4: Double OAuth"]
+  Q6 -->|"Eager — consent up<br/>front at login"| F4B["Flow 4b: Double OAuth<br/>(Eager Consent)"]
+
+  %% --- multiple independent tokens ---
+  Q2 -->|"Multiple independent<br/>tokens/headers required"| F12["Flow 12: Multi-Header Auth"]
+
+  %% --- MCP client → MCP server ---
+  Q2 -->|"MCP client → MCP server"| Q7{{"MCP client type?"}}
+  Q7 -->|"Dynamic client<br/>(Claude Code, VS Code)"| F11["Flow 11: MCP OAuth + DCR"]
+  Q7 -->|"Static / pre-registered<br/>client app"| F4
+
+  classDef identity fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;
+  classDef obo fill:#fef9c3,stroke:#ca8a04,color:#713f12;
+  classDef backend fill:#dcfce7,stroke:#16a34a,color:#14532d;
+  classDef mcp fill:#ede9fe,stroke:#7c3aed,color:#4c1d95;
+  classDef edge fill:#ffe4e6,stroke:#e11d48,color:#881337;
+  class F1,F13,F9,F8,F10,FM identity;
+  class F2A,F2B obo;
+  class F5,F6,F7 backend;
+  class F3,F4,F4B,F11,F12 mcp;

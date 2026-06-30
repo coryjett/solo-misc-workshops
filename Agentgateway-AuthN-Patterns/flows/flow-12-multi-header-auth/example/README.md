@@ -7,7 +7,7 @@ Two independent `jwtAuthentication` policies on the same HTTPRoute, each pulling
 - Docker, kubectl, helm, curl, jq, **openssl**, **python3** (with the `cryptography` package — `pip install cryptography` if not already present)
 - `export AGENTGATEWAY_LICENSE_KEY="<your-license-key>"`
 
-> **Version requirement:** AGW Enterprise `v2026.5.0-beta.1` or later. The `traffic.jwtAuthentication.location` field doesn't exist on `v2.x.x` charts (including `v2.3.2`) and the second policy will fail to apply. The example pins `AGW_VERSION=v2026.5.0-beta.3`; override via `export AGW_VERSION=…` to try a newer build.
+> **Version requirement:** AGW Enterprise `v2026.5.0-beta.1` or later (the `traffic.jwtAuthentication.location` field doesn't exist on the older `v2.x.x` charts, so the second policy would fail to apply). This example inherits the shared default `AGW_VERSION=v2026.6.2`, which satisfies the requirement; override via `export AGW_VERSION=…`.
 
 ## Run
 
@@ -17,7 +17,7 @@ Two independent `jwtAuthentication` policies on the same HTTPRoute, each pulling
 
 This script:
 
-1. Creates a k3d cluster and installs Enterprise Agentgateway at `v2026.5.0-beta.3`
+1. Creates a k3d cluster and installs Enterprise Agentgateway at the shared default `v2026.6.2`
 2. Generates two ES256 keypairs (`issuer-a`, `issuer-b`), builds a JWKS for each, and signs a 24-hour demo JWT per issuer (saved under `.workload/`)
 3. Deploys an echo backend that reports whether each header reached it
 4. Creates a Gateway + HTTPRoute, then applies **two** `EnterpriseAgentgatewayPolicy` objects:

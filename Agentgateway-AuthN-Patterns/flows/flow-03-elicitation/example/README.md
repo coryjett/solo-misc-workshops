@@ -19,7 +19,7 @@ Demonstrates the elicitation trigger: when no upstream OAuth token is available,
 
 ```yaml
 tokenExchange:
-  mode: ElicitOnly    # Only elicit, don't try exchange first
+  mode: ElicitationOnly    # Only elicit, don't try exchange first
 ```
 
 ## Testing
@@ -28,7 +28,7 @@ After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak
-USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow03-realm/protocol/openid-connect/token" \
+USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/agw-demo/protocol/openid-connect/token" \
   -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
   | jq -r '.access_token')
 

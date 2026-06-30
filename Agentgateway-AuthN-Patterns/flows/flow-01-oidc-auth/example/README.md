@@ -23,18 +23,21 @@ This script:
 ## Key config
 
 ```yaml
-jwtAuthentication:
-  issuer: "http://keycloak.keycloak.svc.cluster.local:8080/realms/flow01-realm"
-  jwks:
-    backendRef:
-      name: keycloak
-      kind: Service
-      namespace: keycloak
-      port: 8080
-    jwksPath: "realms/flow01-realm/protocol/openid-connect/certs"
-  audiences:
-  - account
-  - agw-client
+traffic:
+  jwtAuthentication:
+    providers:
+    - issuer: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agw-demo"
+      audiences:
+      - account
+      - agw-client
+      jwks:
+        remote:
+          backendRef:
+            name: keycloak
+            kind: Service
+            namespace: keycloak
+            port: 8080
+          jwksPath: "realms/agw-demo/protocol/openid-connect/certs"
 ```
 
 ## Testing
@@ -43,7 +46,7 @@ After running `setup.sh`, the gateway is port-forwarded to `localhost:8888`:
 
 ```bash
 # Get a JWT from Keycloak
-USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow01-realm/protocol/openid-connect/token" \
+USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/agw-demo/protocol/openid-connect/token" \
   -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
   | jq -r '.access_token')
 

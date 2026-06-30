@@ -39,7 +39,7 @@ cd flows/flow-08-api-key-auth/example
 
 ## Deep Dives
 
-- **[OBO Token Exchange](../obo-token-exchange-enablement/OBO-Token-Exchange.md)** — How the built-in STS works, delegation vs impersonation, gateway-mediated vs agent-initiated exchange, `agentsts-adk` SDK integration, audience/scopes/claim generation, and downstream policy enforcement
+- **[OBO Token Exchange](../workshops/obo-token-exchange-enablement/OBO-Token-Exchange.md)** — How the built-in STS works, delegation vs impersonation, gateway-mediated vs agent-initiated exchange, `agentsts-adk` SDK integration, audience/scopes/claim generation, and downstream policy enforcement
 
 ## Reference
 

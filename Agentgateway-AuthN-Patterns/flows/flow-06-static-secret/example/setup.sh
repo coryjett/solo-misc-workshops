@@ -90,7 +90,7 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  Authorization: "Bearer sk-static-opaque-upstream-token-12345"
+  Authorization: "sk-static-opaque-upstream-token-12345"
 EOF
 
 # ── ReferenceGrant ───────────────────────────────────────────────────────────

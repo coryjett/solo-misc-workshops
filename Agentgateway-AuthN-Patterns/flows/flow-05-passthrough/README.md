@@ -8,7 +8,7 @@ Inbound auth policies (JWT, API key) validate and strip the client's original `A
 ### How it works
 
 1. **Client sends request** with `Authorization: Bearer <token>` (obtained from its own OIDC flow or API key) → Agentgateway Proxy
-2. **Proxy passes the token through** without validation or exchange (passthrough mode)
+2. **Proxy passes the token through** after the inbound JWT policy validates & strips it, then re-attaches it unchanged to the upstream (no token exchange — passthrough mode)
 3. **Proxy forwards the request** to the backend (LLM / MCP / API) with the same `Authorization` header intact
 4. **Backend responds** → Agentgateway Proxy
 5. **Proxy returns the response** → Client

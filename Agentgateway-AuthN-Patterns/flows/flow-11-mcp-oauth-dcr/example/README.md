@@ -38,7 +38,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/mcp
 curl -s http://localhost:8888/.well-known/oauth-protected-resource/mcp | jq .
 
 # Get a JWT from Keycloak (simulating completed OAuth flow)
-USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/flow11-realm/protocol/openid-connect/token" \
+USER_JWT=$(curl -s -X POST "http://localhost:8080/realms/agw-demo/protocol/openid-connect/token" \
   -d "grant_type=password&client_id=agw-client&client_secret=agw-client-secret&username=testuser&password=testuser&scope=openid" \
   | jq -r '.access_token')
 
