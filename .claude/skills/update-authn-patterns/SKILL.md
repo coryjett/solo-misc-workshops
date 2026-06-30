@@ -85,6 +85,16 @@ deploys, and validate config field/enum names against the Step-2 CRD/source:
   are generated; keep them gitignored.
 
 ## Step 5 — Validate flows (ONE FRESH CLUSTER PER FLOW)
+**On a version bump, re-run ALL 16 flows on the new version — not just the ones the
+audit (Step 4) flagged.** The release-diff tells you what *should* be affected; it is
+necessary but NOT sufficient. A behavior/CRD/default change can silently break a flow
+whose docs read fine. The only proof a flow works on `vNEW` is running its `setup.sh`
+on `vNEW`. Track the matrix so a partial pass ("I changed 4, so I ran 4") can't slip
+through — every flow gets a fresh-cluster run + a recorded PASS/FAIL/WARN verdict.
+Batch it: loop the full flow list, one fresh cluster each (delete → `setup.sh` →
+record `rc` + OK/WARN/FAIL counts to a results file). Interactive flows (03/04/04b)
+land as PASS-with-WARN (headless part only — see gotcha below).
+
 **Flows collide in the `default` namespace** (`echo-backend`, gateway names, etc.), so
 running several on one cluster contaminates results — and `cleanup.sh` deletes the
 WHOLE cluster (there is no per-flow resource cleanup). So validate each flow on a
