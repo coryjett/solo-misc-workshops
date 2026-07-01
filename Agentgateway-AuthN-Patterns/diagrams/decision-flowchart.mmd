@@ -37,7 +37,7 @@ flowchart TD
   %% --- MCP client → MCP server ---
   Q2 -->|"MCP client → MCP server"| Q7{{"MCP client type?"}}
   Q7 -->|"Dynamic client<br/>(Claude Code, VS Code)"| F11["Flow 11: MCP OAuth + DCR"]
-  Q7 -->|"Static / pre-registered<br/>client app"| F4
+  Q7 -->|"Static / pre-registered<br/>client app"| F4M["Flow 4: Double OAuth"]
 
   classDef identity fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;
   classDef obo fill:#fef9c3,stroke:#ca8a04,color:#713f12;
@@ -47,4 +47,4 @@ flowchart TD
   class F1,F13,F9,F8,F10,FM identity;
   class F2A,F2B obo;
   class F5,F6,F7 backend;
-  class F3,F4,F4B,F11,F12 mcp;
+  class F3,F4,F4B,F4M,F11,F12 mcp;
