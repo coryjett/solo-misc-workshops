@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Flow 10: BYO External Auth (gRPC Ext Auth Service) — working example
-# Delegates auth to a custom gRPC ext_authz service.
+# Flow 10: BYO External Auth (HTTP Ext Auth Service) — working example
+# Delegates auth to a custom HTTP ext_authz service.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
