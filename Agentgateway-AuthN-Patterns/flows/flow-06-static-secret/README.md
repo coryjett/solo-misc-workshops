@@ -17,6 +17,8 @@ Inbound auth (JWT or API key policy) validates the client independently. A separ
 
 ![Diagram](../../images/6-static-secret.png)
 
+> Diagram source: [`../../diagrams/6-static-secret.mmd`](../../diagrams/6-static-secret.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

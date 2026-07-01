@@ -34,6 +34,8 @@ Two sequential user-facing OAuth flows orchestrated by the gateway. First, the u
 
 ![Diagram](../../images/4-double-oauth.png)
 
+> Diagram source: [`../../diagrams/4-double-oauth.mmd`](../../diagrams/4-double-oauth.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

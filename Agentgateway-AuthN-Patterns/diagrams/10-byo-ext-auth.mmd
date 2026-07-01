@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant Client as Client / Agent
+    participant AGW as Agentgateway Proxy
+    participant Auth as External Auth Service (gRPC)
+    participant Backend as Backend (LLM / MCP / Agent)
+
+    Client->>AGW: Request to protected route
+    AGW->>Auth: gRPC Authorization Request<br/>(headers, path, method)
+    Auth->>Auth: Custom authorization logic<br/>(check headers, tokens,<br/>database lookups, etc.)
+
+    alt Authorized
+        Auth-->>AGW: ALLOW (optional: inject headers)
+        AGW->>Backend: Forward request
+        Backend-->>AGW: Response
+        AGW-->>Client: 200 OK
+    else Not Authorized
+        Auth-->>AGW: DENY (status code, message)
+        AGW-->>Client: 403 Forbidden
+    end
+
+    Note over AGW,Auth: Configured via EnterpriseAgentgatewayPolicy:<br/>traffic.extAuth.backendRef + grpc<br/>Can target Gateway or HTTPRoute level

@@ -17,6 +17,8 @@ Validate the inbound OIDC JWT, inspect a claim (sub, team, tier), then use a CEL
 
 ![Diagram](../../images/7-claim-based-mapping.png)
 
+> Diagram source: [`../../diagrams/7-claim-based-mapping.mmd`](../../diagrams/7-claim-based-mapping.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

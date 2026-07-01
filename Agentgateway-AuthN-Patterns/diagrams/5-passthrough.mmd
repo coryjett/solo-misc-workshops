@@ -1,0 +1,11 @@
+sequenceDiagram
+    participant Client as Client
+    participant AGW as Agentgateway Proxy
+    participant Backend as Backend (LLM / MCP / API)
+
+    Note over Client: Client already authenticated<br/>(has token from own OIDC flow or API key)
+    Client->>AGW: Request + Authorization: Bearer token
+    AGW->>AGW: Passthrough (no validation/exchange)
+    AGW->>Backend: Forward request with same token
+    Backend-->>AGW: Response
+    AGW-->>Client: Response

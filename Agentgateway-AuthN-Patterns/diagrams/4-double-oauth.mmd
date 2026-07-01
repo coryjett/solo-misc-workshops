@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant Client as Client
+    participant AGW as Agent Gateway
+    participant IdP as Downstream IdP (OIDC)
+    participant STS as Token Exchange Server (STS)
+    participant UI as Solo Enterprise UI
+    participant OAuth as Upstream OAuth Provider
+    participant API as Upstream API
+
+    Note over Client,API: Phase 1 — Downstream OIDC Authentication
+    Client->>AGW: Request resource
+    AGW-->>Client: 302 Redirect to IdP
+    Client->>IdP: Authorization Code Flow
+    IdP-->>Client: Authorization code
+    Client->>AGW: Callback with code
+    AGW->>IdP: Exchange code for tokens
+    IdP-->>AGW: Bearer JWT + id_token
+    Note over Client: Client authenticated with downstream JWT
+
+    Note over Client,API: Phase 2 — Upstream Credential Gathering (Elicitation)
+    Client->>AGW: Request upstream API<br/>(with downstream JWT)
+    AGW->>STS: Request upstream token
+    STS-->>AGW: Elicitation URL (PENDING)
+    AGW->>Client: Return elicitation URL
+    Client->>UI: Open elicitation URL
+    UI->>OAuth: Redirect to upstream OAuth provider
+    OAuth-->>UI: Authorization code
+    UI->>STS: Complete elicitation with code
+    STS->>STS: Store upstream token<br/>(status: COMPLETED)
+
+    Note over Client,API: Phase 3 — Authenticated Request with Upstream Token
+    Client->>AGW: Retry request<br/>(with downstream JWT)
+    AGW->>STS: Fetch stored upstream token
+    STS-->>AGW: Upstream OAuth token
+    AGW->>API: Forward request +<br/>inject upstream token
+    API-->>AGW: Response
+    AGW-->>Client: Response
+    Note over Client,IdP: Two OAuth flows:<br/>1. OIDC (downstream) — authenticates user<br/>2. Elicitation (upstream) — gathers API credentials

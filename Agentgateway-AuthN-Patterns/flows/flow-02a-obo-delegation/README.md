@@ -22,6 +22,8 @@ Agent exchanges the user's JWT for a delegated OBO token via RFC 8693 Token Exch
 
 ![Diagram](../../images/2a-obo-delegation.png)
 
+> Diagram source: [`../../diagrams/2a-obo-delegation.mmd`](../../diagrams/2a-obo-delegation.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

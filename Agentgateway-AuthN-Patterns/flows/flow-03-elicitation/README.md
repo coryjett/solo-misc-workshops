@@ -18,6 +18,8 @@ When a request needs to call an upstream API on behalf of a user but no upstream
 
 ![Diagram](../../images/3-elicitation.png)
 
+> Diagram source: [`../../diagrams/3-elicitation.mmd`](../../diagrams/3-elicitation.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

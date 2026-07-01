@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant Client as Client
+    participant AGW as Agentgateway Proxy
+    participant Secret as K8s Secrets (API Keys)
+    participant Backend as Backend
+
+    Client->>AGW: Request + Authorization: Bearer API-key
+    AGW->>Secret: Lookup secret (by label selector or name)
+    Secret-->>AGW: Secret found, compare key
+    alt Key valid
+        AGW->>Backend: Forward request
+        Backend-->>AGW: Response
+        AGW-->>Client: 200 OK
+    else Key invalid
+        AGW-->>Client: 401 Unauthorized
+    end

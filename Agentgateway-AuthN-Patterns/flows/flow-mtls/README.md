@@ -30,6 +30,8 @@ Two independent TLS features that can be used separately or combined for end-to-
 
 ![Diagram](../../images/mtls.png)
 
+> Diagram source: [`../../diagrams/mtls.mmd`](../../diagrams/mtls.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant Client as Client
+    participant AGW as Agentgateway Proxy
+    participant API as Upstream API
+
+    Client->>AGW: Request + Authorization: Bearer OIDC-JWT
+    AGW->>AGW: 1. Validate JWT (jwtAuthentication)
+    AGW->>AGW: 2. Extract claim (e.g. jwt.sub, jwt.team)
+    AGW->>AGW: 3. CEL transformation:<br/>jwt.team == engineering<br/>then opaque-token-eng<br/>else opaque-token-default
+    AGW->>API: Request + Authorization: Bearer mapped-opaque-token
+    API-->>AGW: Response
+    AGW-->>Client: Response

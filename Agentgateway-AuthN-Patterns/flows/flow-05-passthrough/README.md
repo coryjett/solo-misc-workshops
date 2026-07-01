@@ -15,6 +15,8 @@ Inbound auth policies (JWT, API key) validate and strip the client's original `A
 
 ![Diagram](../../images/5-passthrough.png)
 
+> Diagram source: [`../../diagrams/5-passthrough.mmd`](../../diagrams/5-passthrough.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

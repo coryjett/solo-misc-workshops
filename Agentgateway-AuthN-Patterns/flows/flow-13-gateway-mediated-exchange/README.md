@@ -36,6 +36,9 @@ Uses AGW's built-in token exchange server (`enterprise-agentgateway:7777`). Conf
 
 ![Built-in STS](../../images/13-gateway-mediated-builtin.png)
 
+> Diagram source: [`../../diagrams/13-gateway-mediated-builtin.mmd`](../../diagrams/13-gateway-mediated-builtin.mmd)
+
+
 ### Variant B: External STS (RFC 8693)
 
 Uses an external RFC 8693-compliant token exchange provider (e.g., Microsoft Entra ID, or any custom STS via `STS_URI`). The gateway exchanges the IdP token via the external STS. The agent never sees the original IdP token.
@@ -64,6 +67,9 @@ Uses an external RFC 8693-compliant token exchange provider (e.g., Microsoft Ent
 12. **Agent responds** → Gateway → User
 
 ![External STS](../../images/13-gateway-mediated-external.png)
+
+> Diagram source: [`../../diagrams/13-gateway-mediated-external.mmd`](../../diagrams/13-gateway-mediated-external.mmd)
+
 
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 

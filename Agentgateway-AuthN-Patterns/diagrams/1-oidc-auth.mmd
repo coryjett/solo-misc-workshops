@@ -1,0 +1,15 @@
+sequenceDiagram
+    participant User as User
+    participant AGW as Agent Gateway
+    participant OIDC as OIDC Provider
+
+    User->>AGW: GET /auth/login
+    AGW-->>User: 302 Redirect to /authorize<br/>(client_id, redirect_uri, scope=openid profile email)
+    User->>OIDC: Login prompt
+    OIDC-->>User: Credentials
+    User->>OIDC: Submit credentials
+    OIDC-->>AGW: 302 Callback with authorization code
+    AGW->>OIDC: POST /token<br/>(code, client_secret)
+    OIDC-->>AGW: Bearer JWT (access_token + id_token)
+    AGW-->>User: Session created
+    Note over AGW: Configured via EnterpriseAgentgatewayPolicy:<br/>traffic.jwtAuthentication<br/>Validates JWT signature via JWKS endpoint

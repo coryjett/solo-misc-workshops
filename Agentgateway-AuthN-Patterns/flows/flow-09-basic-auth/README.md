@@ -17,6 +17,8 @@ Clients authenticate with username and password (Base64-encoded in the `Authoriz
 
 ![Diagram](../../images/9-basic-auth.png)
 
+> Diagram source: [`../../diagrams/9-basic-auth.mmd`](../../diagrams/9-basic-auth.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

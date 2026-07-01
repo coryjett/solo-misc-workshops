@@ -18,6 +18,8 @@ Client obtains a JWT from an external OIDC provider (e.g., via Authorization Cod
 
 ![Diagram](../../images/1-oidc-auth.png)
 
+> Diagram source: [`../../diagrams/1-oidc-auth.mmd`](../../diagrams/1-oidc-auth.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

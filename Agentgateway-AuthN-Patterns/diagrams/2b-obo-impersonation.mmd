@@ -1,0 +1,15 @@
+sequenceDiagram
+    participant User as User
+    participant Agent as Agent
+    participant STS as Agent Gateway STS
+    participant MCP as MCP Tool Server
+
+    User->>Agent: Request with user JWT
+    Agent->>STS: POST /token<br/>(grant_type=token-exchange,<br/>subject_token=user JWT)
+    STS->>STS: Validate user JWT (JWKS)
+    STS-->>Agent: New OBO token (signed by AGW)<br/>(sub=user, same scopes, no act claim)
+    Agent->>MCP: Call with OBO token
+    MCP->>MCP: Policies check user identity<br/>(agent identity not tracked)
+    MCP-->>Agent: Response
+    Agent-->>User: Result
+    Note over STS,MCP: OBO token is a NEW JWT signed by AGW.<br/>Original IdP token is replaced.<br/>Downstream trusts AGW issuer, not original IdP.

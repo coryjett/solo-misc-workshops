@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant User as User
+    participant AGW as Agent Gateway<br/>(Proxy)
+    participant IdP as OIDC Provider
+    participant STS as AGW Built-in STS
+    participant Agent as Agent / MCP Server
+
+    Note over User,Agent: Phase 1: OIDC Authentication (at the Gateway)
+    User->>AGW: Request (no token)
+    AGW-->>User: 302 Redirect to IdP /authorize<br/>(client_id, redirect_uri, scope, state)
+    User->>IdP: Login prompt
+    IdP-->>User: Credentials
+    User->>IdP: Submit credentials
+    IdP-->>AGW: 302 Callback with authorization code
+    AGW->>IdP: POST /token (code, client_secret)
+    IdP-->>AGW: User JWT (access_token + id_token)
+
+    Note over User,Agent: Phase 2: Token Exchange (built-in STS)
+    AGW->>STS: POST /token<br/>(grant_type=token-exchange,<br/>subject_token=user JWT,<br/>actor_token=K8s SA token)
+    STS->>STS: Validate user JWT (JWKS)<br/>Validate actor token (K8s)<br/>Issue exchanged token
+    STS-->>AGW: New token (signed by AGW STS)<br/>(sub=user, act=agent)
+
+    Note over User,Agent: Phase 3: Forward to Agent
+    AGW->>Agent: Request + Authorization: Bearer #lt;exchanged token#gt;<br/>(original IdP token never forwarded)
+    Agent->>Agent: Validate token (trusts AGW STS issuer)
+    Agent-->>AGW: Response
+    AGW-->>User: Result
+    Note over User,AGW: ExchangeOnly mode on EnterpriseAgentgatewayPolicy.<br/>Built-in STS at enterprise-agentgateway:7777.<br/>Client never calls STS directly.

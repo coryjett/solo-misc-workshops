@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant Client as Client
+    participant AGW as Agent Gateway
+    participant Backend as Backend Service (TLS-only)
+
+    Note over Client,Backend: Inbound: mTLS via FrontendTLS (TLSConfig with CA root)
+    Client->>AGW: ClientHello
+    AGW->>Client: ServerHello + Server Certificate<br/>+ CertificateRequest (trusted CA list)
+    Client->>AGW: Client Certificate + CertificateVerify
+    AGW->>AGW: Verify client cert against CA root
+
+    alt Client cert valid
+        Note over Client,AGW: mTLS session established
+        Client->>AGW: Request (over mTLS channel)
+    else Client cert invalid or missing
+        AGW->>Client: TLS handshake failure<br/>(connection refused — no HTTP layer reached)
+    end
+
+    Note over AGW,Backend: Outbound: TLS Origination via BackendTLSPolicy
+    AGW->>Backend: TLS ClientHello
+    Backend->>AGW: Server Certificate
+    AGW->>AGW: Verify backend cert against<br/>caCertificateRefs or wellKnownCACertificates
+    AGW->>Backend: Forward request (new TLS connection)
+    Backend-->>AGW: Response (encrypted)
+    AGW-->>Client: Response
+
+    Note over Client,Backend: FrontendTLS (TLSConfig.root):<br/>Validates inbound client certificates.<br/>BackendTLSPolicy (caCertificateRefs):<br/>Originates outbound TLS to backends.

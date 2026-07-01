@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant Client as Client / Agent
+    participant AGW as Agentgateway Proxy
+    participant Backend as Backend (LLM / MCP / Agent)
+
+    Client->>AGW: Request (no credentials)
+    AGW->>AGW: Basic auth check:<br/>No Authorization header
+    AGW-->>Client: 401 Unauthorized
+    Client->>AGW: Request + Authorization: Basic base64(user:password)
+    AGW->>AGW: Decode base64 credentials
+    AGW->>AGW: Lookup user in policy config<br/>Verify APR1 hash (salt + password)
+
+    alt Credentials valid
+        AGW->>Backend: Forward request
+        Backend-->>AGW: Response
+        AGW-->>Client: 200 OK
+    else Credentials invalid
+        AGW-->>Client: 401 Unauthorized
+    end
+
+    Note over AGW,Backend: Configured via EnterpriseAgentgatewayPolicy:<br/>traffic.basicAuthentication<br/>Mode: Strict (require) or Optional (allow through)

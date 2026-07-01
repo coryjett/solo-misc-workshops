@@ -1,0 +1,48 @@
+sequenceDiagram
+    participant Client as MCP Client<br/>(Claude Code / VS Code)
+    participant AGW as Agentgateway Proxy
+    participant IdP as Identity Provider
+    participant API as MCP Server
+
+    rect rgb(243, 240, 255)
+    Note over Client,API: 1. Initialization
+    Client->>AGW: Connect to MCP server
+    AGW-->>Client: 401 Unauthorized + resource metadata endpoint
+    end
+
+    rect rgb(223, 247, 233)
+    Note over Client,API: 2. Discovery
+    Client->>AGW: GET /.well-known/oauth-protected-resource/mcp
+    AGW-->>Client: Resource metadata (required scopes)
+    Client->>AGW: GET /.well-known/oauth-authorization-server
+    AGW->>IdP: Fetch authorization server metadata
+    IdP-->>AGW: Auth server endpoints
+    AGW-->>Client: Modified metadata (AGW as registration endpoint)
+    end
+
+    rect rgb(254, 246, 224)
+    Note over Client,API: 3. Dynamic Client Registration
+    Client->>AGW: POST /register (redirect_uris)
+    AGW->>IdP: Register MCP client
+    IdP-->>AGW: client_id
+    AGW-->>Client: client_id
+    end
+
+    rect rgb(252, 232, 243)
+    Note over Client,API: 4. Authentication (OAuth Flow)
+    Client->>IdP: Initiate OAuth flow (client_id)
+    IdP->>Client: Login page
+    Client->>IdP: Submit credentials
+    IdP->>Client: Authorization code
+    Client->>IdP: Exchange code for token
+    IdP->>Client: JWT access token
+    end
+
+    rect rgb(224, 236, 255)
+    Note over Client,API: 5. MCP Server Access
+    Client->>AGW: Connect with Bearer JWT
+    AGW->>AGW: Validate JWT (fetch JWKS)
+    AGW->>API: Forward authenticated request
+    API-->>AGW: Tools, prompts, resources
+    AGW-->>Client: MCP response
+    end

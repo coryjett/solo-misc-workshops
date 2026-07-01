@@ -15,6 +15,8 @@ Delegate authentication to your own external authorization service using the Env
 
 ![Diagram](../../images/10-byo-ext-auth.png)
 
+> Diagram source: [`../../diagrams/10-byo-ext-auth.mmd`](../../diagrams/10-byo-ext-auth.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

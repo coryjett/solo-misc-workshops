@@ -28,6 +28,8 @@ Validate two **independent** credentials carried in **different headers** of the
 
 ![Diagram](../../images/12-multi-header-auth.png)
 
+> Diagram source: [`../../diagrams/12-multi-header-auth.mmd`](../../diagrams/12-multi-header-auth.mmd)
+
 ### Notes
 
 - **`targetRefs` constraint.** All `traffic.*` policies — including `jwtAuthentication`, `entExtAuth`, `apiKeyAuthentication`, `basicAuthentication` — must target one of `Gateway` / `ListenerSet` / `GRPCRoute` / `HTTPRoute` / `Service` / `ServiceEntry`. They **cannot** target an `AgentgatewayBackend`. The CRD validator on `v2026.5.0-beta.1+` rejects that shape with: *"the 'traffic' field can only target a Gateway, ListenerSet, GRPCRoute, HTTPRoute, Service, or ServiceEntry"*.

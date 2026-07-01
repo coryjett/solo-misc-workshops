@@ -36,6 +36,8 @@ MCP clients (like Claude Code, VS Code extensions) that don't have pre-registere
 
 ![Diagram](../../images/11-mcp-oauth.png)
 
+> Diagram source: [`../../diagrams/11-mcp-oauth.mmd`](../../diagrams/11-mcp-oauth.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

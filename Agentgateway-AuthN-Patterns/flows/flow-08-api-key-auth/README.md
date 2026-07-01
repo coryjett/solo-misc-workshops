@@ -15,6 +15,8 @@ Clients authenticate with a static API key instead of OIDC. Gateway validates th
 
 ![Diagram](../../images/8-api-key-auth.png)
 
+> Diagram source: [`../../diagrams/8-api-key-auth.mmd`](../../diagrams/8-api-key-auth.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)

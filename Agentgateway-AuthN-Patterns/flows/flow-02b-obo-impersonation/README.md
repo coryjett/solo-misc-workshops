@@ -18,6 +18,8 @@ Agent exchanges the user's JWT for a new OBO token via RFC 8693, but without an 
 
 ![Diagram](../../images/2b-obo-impersonation.png)
 
+> Diagram source: [`../../diagrams/2b-obo-impersonation.mmd`](../../diagrams/2b-obo-impersonation.mmd)
+
 > **Working Example:** [example/](example/) — deploy from scratch with k3d + AGW Enterprise
 
 Back to [Auth Patterns overview](../../README.md)
