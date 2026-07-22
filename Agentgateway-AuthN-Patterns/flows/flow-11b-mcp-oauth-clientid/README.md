@@ -59,32 +59,7 @@ A variant of [Flow 11 (MCP OAuth + DCR)](../flow-11-mcp-oauth-dcr/) for identity
 12. **Proxy forwards the authenticated request** → MCP Server
 13. **MCP server returns tools, prompts, resources** → Proxy → Client
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as MCP Client<br/>(Claude Code / Inspector)
-    participant AGW as Agentgateway Proxy
-    participant IdP as IdP<br/>(authentik / Entra — no DCR)
-    participant MCP as MCP Server
-
-    C->>AGW: connect (no token)
-    AGW-->>C: 401 + resource-metadata URL
-    C->>AGW: GET /.well-known/oauth-protected-resource/mcp
-    AGW-->>C: required scopes
-    C->>AGW: GET /.well-known/oauth-authorization-server
-    AGW->>IdP: OIDC discovery (real endpoints)
-    AGW-->>C: AS metadata + injected registration_endpoint (→ AGW)
-    C->>AGW: POST /register (redirect_uris)
-    Note over AGW: mock DCR — no IdP call<br/>build_mock_dcr_response()
-    AGW-->>C: 201 {client_id: <pre-registered>,<br/>token_endpoint_auth_method: none}
-    C->>IdP: authorize (client_id + PKCE)
-    IdP-->>C: login → authorization code
-    C->>IdP: exchange code → JWT
-    C->>AGW: connect (Bearer JWT)
-    AGW->>IdP: fetch JWKS, validate
-    AGW->>MCP: forward authenticated request
-    MCP-->>C: tools / prompts / resources
-```
+![Diagram](../../images/11b-mcp-oauth-clientid.png)
 
 > Diagram source: [`../../diagrams/11b-mcp-oauth-clientid.mmd`](../../diagrams/11b-mcp-oauth-clientid.mmd)
 
