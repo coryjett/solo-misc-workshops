@@ -1,6 +1,6 @@
 # Flow 11b: MCP OAuth mock DCR / `clientId` short-circuit — Working Example
 
-Setting `mcpAuthentication.clientId` makes agentgateway answer client registration itself — injecting a `registration_endpoint` into the authorization-server metadata and returning the pre-registered **public** client on `POST /register` — instead of proxying DCR to the IdP. This example deploys the full infrastructure with `clientId` set and verifies the mock-DCR response, then confirms authenticated MCP access. The MCP server's `whoami` tool shows the authenticated user identity from the JWT.
+Setting `mcpAuthentication.clientId` makes agentgateway answer client registration itself — injecting a `registration_endpoint` into the authorization-server metadata and returning the pre-registered **public** client on `POST /register` — instead of proxying DCR to the IdP. This example deploys the full infrastructure with `clientId` set, verifies the mock-DCR response, and confirms authenticated MCP access. The gateway **validates the JWT and terminates auth**, then establishes the MCP session; it does not forward the raw bearer token to the backend, so the demo `whoami` tool reports that the backend saw no token — that's expected.
 
 > This example uses the shared **Keycloak** (with `clientId` set) to demonstrate the mechanism on the same infra as every other flow. In production you use the identical config for IdPs that lack DCR entirely (**authentik**) or require a pinned application (**Entra** middle-tier/OBO app).
 
@@ -21,7 +21,7 @@ Setting `mcpAuthentication.clientId` makes agentgateway answer client registrati
 1. **Unauthenticated → 401** with a resource-metadata URL
 2. **AS metadata carries an injected `registration_endpoint`** pointing back at the gateway
 3. **Mock DCR** — `POST` to that endpoint returns the pre-registered `client_id` with `token_endpoint_auth_method: none` (public client + PKCE), **without any call to Keycloak**
-4. **Authenticated MCP access** with a Bearer JWT → `whoami` returns the caller's identity
+4. **Authenticated MCP access** — a valid Bearer JWT is accepted at the gateway and an MCP session is established (the gateway terminates auth; the backend receives the validated session, not the raw token)
 
 ## Full flow with MCP Inspector
 
