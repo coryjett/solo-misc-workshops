@@ -12,6 +12,7 @@ All patterns documented in **[agentgateway-auth-patterns.md](agentgateway-auth-p
 | | **[Basic Auth (RFC 7617)](flows/flow-09-basic-auth/)** | Username/password with APR1-hashed credentials in K8s secrets |
 | | **[BYO External Auth](flows/flow-10-byo-ext-auth/)** | Delegate auth to your own gRPC ext auth service (LDAP, SAML, MFA, etc.) |
 | | **[MCP OAuth + DCR](flows/flow-11-mcp-oauth-dcr/)** | Dynamic Client Registration for MCP clients (Claude Code, VS Code) + OAuth flow |
+| | **[MCP OAuth — Pre-Registered Client (mock DCR)](flows/flow-11b-mcp-oauth-clientid/)** | For IdPs without RFC 7591 DCR (authentik) or a pinned app (Entra): set `clientId` and the gateway injects a `registration_endpoint` + answers registration itself with a pre-registered public client |
 | | **[Multi-Header Auth (Independent Mechanisms)](flows/flow-12-multi-header-auth/)** | Two independent `traffic.*` policies on the same route, each reading from a different header (`location.header.name`) — e.g. user JWT in `Authorization` + workload JWT in `aembitauth`. Requires AGW v2026.5.0-beta.1+ |
 | | **[Mutual TLS (mTLS)](flows/flow-mtls/)** | Client certificate authentication via TLS handshake — validated against trusted CA root |
 | | **[Passthrough Token](flows/flow-05-passthrough/)** | Gateway forwards client's existing token as-is — no validation or exchange |
