@@ -1,0 +1,328 @@
+#!/usr/bin/env bash
+# Flow 11b: MCP OAuth with a pre-registered client (mock DCR / clientId short-circuit) — working example
+# Setting mcpAuthentication.clientId makes the gateway answer /register itself with the
+# pre-registered public client instead of proxying DCR to the IdP. This example uses the
+# shared Keycloak (with clientId set) to demonstrate the mechanism; the same config is what
+# you use for IdPs that lack DCR entirely (authentik) or require a pinned app (Entra).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../../common/setup-env.sh"   # shared cluster + AGW + Keycloak + STS
+
+FLOW="flow-11b"
+
+# ── Deploy MCP server ────────────────────────────────────────────────────────
+info "Deploying MCP server..."
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-server-script
+  namespace: default
+data:
+  server.py: |
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json, base64, sys
+    def decode_jwt(token):
+        try:
+            payload = token.split('.')[1]
+            payload += '=' * (4 - len(payload) % 4)
+            return json.loads(base64.urlsafe_b64decode(payload))
+        except: return None
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            auth = self.headers.get('Authorization', '')
+            body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode()
+            claims = decode_jwt(auth[7:]) if auth.startswith('Bearer ') else None
+            if claims:
+                sys.stderr.write(f"\nMCP SERVER TOKEN: iss={claims.get('iss')} sub={claims.get('sub')}\n")
+                sys.stderr.flush()
+            try: req = json.loads(body)
+            except: req = {}
+            method, req_id = req.get('method',''), req.get('id')
+            if method == 'initialize':
+                resp = {"jsonrpc":"2.0","id":req_id,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"clientid-mcp","version":"1.0"}}}
+            elif method == 'notifications/initialized':
+                self.send_response(200); self.end_headers(); return
+            elif method == 'tools/list':
+                resp = {"jsonrpc":"2.0","id":req_id,"result":{"tools":[{"name":"whoami","description":"Shows the authenticated user identity from the JWT","inputSchema":{"type":"object","properties":{}}}]}}
+            elif method == 'tools/call':
+                result = {"token_issuer": claims.get("iss","none") if claims else "no token received", "token_sub": claims.get("sub","none") if claims else "none", "preferred_username": claims.get("preferred_username") if claims else None, "message": "You authenticated with a pre-registered client (mock DCR)"}
+                resp = {"jsonrpc":"2.0","id":req_id,"result":{"content":[{"type":"text","text":json.dumps(result,indent=2)}]}}
+            else:
+                resp = {"jsonrpc":"2.0","id":req_id,"error":{"code":-32601,"message":f"Unknown: {method}"}}
+            out = json.dumps(resp).encode()
+            self.send_response(200)
+            self.send_header('Content-Type','application/json')
+            self.send_header('Content-Length',str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+    HTTPServer(('',80),H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      containers:
+      - name: mcp
+        image: python:3.12-slim
+        command: ["python", "/app/server.py"]
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: script
+          mountPath: /app
+      volumes:
+      - name: script
+        configMap:
+          name: mcp-server-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+  namespace: default
+spec:
+  selector:
+    app: mcp-server
+  ports:
+  - port: 80
+    targetPort: 80
+    appProtocol: agentgateway.dev/mcp
+EOF
+wait_for default deployment/mcp-server
+
+# ── ReferenceGrant + Gateway + MCP Auth policy with clientId short-circuit ───
+# The only functional difference from Flow 11: `clientId` is set on the MCP
+# authentication block, so the gateway answers client registration itself
+# (mock DCR) instead of proxying DCR to Keycloak.
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-default-to-keycloak
+  namespace: keycloak
+spec:
+  from:
+  - group: enterpriseagentgateway.solo.io
+    kind: EnterpriseAgentgatewayPolicy
+    namespace: default
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: default
+  to:
+  - group: ""
+    kind: Service
+    name: keycloak
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ${FLOW}-gateway
+  namespace: default
+spec:
+  gatewayClassName: enterprise-agentgateway
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: mcp-backend
+  namespace: default
+spec:
+  mcp:
+    targets:
+    - name: clientid-mcp
+      static:
+        host: mcp-server.default.svc.cluster.local
+        port: 80
+        protocol: StreamableHTTP
+        path: /mcp
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ${FLOW}-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: ${FLOW}-gateway
+  rules:
+  - backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: mcp-backend
+    matches:
+    - path:
+        type: PathPrefix
+        value: /mcp
+    - path:
+        type: PathPrefix
+        value: /.well-known/oauth-protected-resource/mcp
+    - path:
+        type: PathPrefix
+        value: /.well-known/oauth-authorization-server/mcp
+    filters:
+    - type: ResponseHeaderModifier
+      responseHeaderModifier:
+        add:
+        - name: Access-Control-Allow-Origin
+          value: "*"
+        - name: Access-Control-Allow-Methods
+          value: "GET, POST, OPTIONS"
+        - name: Access-Control-Allow-Headers
+          value: "Authorization, Content-Type, Accept, Mcp-Protocol-Version"
+  - backendRefs:
+    - name: keycloak
+      namespace: keycloak
+      port: 8080
+    matches:
+    - path:
+        type: PathPrefix
+        value: /realms/${KEYCLOAK_REALM}
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: ${FLOW}-policy
+  namespace: default
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: mcp-backend
+  backend:
+    mcp:
+      authentication:
+        issuer: "${KEYCLOAK_ISSUER}"
+        # clientId short-circuit: the gateway injects a registration_endpoint into
+        # the AS metadata and answers /register itself with this pre-registered
+        # PUBLIC client — no DCR call to Keycloak, no management key needed.
+        clientId: "${KEYCLOAK_CLIENT}"
+        jwks:
+          backendRef:
+            name: keycloak
+            kind: Service
+            namespace: keycloak
+            port: 8080
+          jwksPath: "realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs"
+        audiences:
+        - account
+        - ${KEYCLOAK_CLIENT}
+        - http://localhost:8888/mcp
+        mode: Strict
+        provider: Keycloak
+        resourceMetadata:
+          resource: http://localhost:8888/mcp
+          scopesSupported:
+          - email
+          - openid
+          bearerMethodsSupported:
+          - header
+EOF
+
+kubectl wait gateway/${FLOW}-gateway --for=condition=Programmed --timeout=120s
+ok "Gateway ready"
+
+# ── Test ─────────────────────────────────────────────────────────────────────
+kill_pf "${FLOW}-gateway"
+kubectl rollout status deploy/${FLOW}-gateway --timeout=180s 2>/dev/null || true
+kubectl port-forward svc/${FLOW}-gateway 8888:80 &>/dev/null &
+wait_for_pf http://localhost:8888/
+
+echo ""
+echo "=== Testing Flow 11b: MCP OAuth with a pre-registered client (mock DCR) ==="
+echo ""
+
+# Test 1: Unauthenticated -> 401 with resource metadata endpoint
+info "Step 1: Connect without auth (expect 401 + resource metadata URL)..."
+HTTP_CODE=$(curl -s -o /tmp/mcp-unauth -w "%{http_code}" -X POST "http://localhost:8888/mcp" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+ok "Unauthenticated: HTTP ${HTTP_CODE}"
+
+# Test 2: Authorization-server metadata should advertise a registration_endpoint
+info "Step 2: Fetch authorization-server metadata (expect injected registration_endpoint)..."
+AS_META=$(curl -s "http://localhost:8888/.well-known/oauth-authorization-server/mcp" || true)
+echo "$AS_META" | jq . 2>/dev/null || echo "(no metadata endpoint)"
+REG_EP=$(echo "$AS_META" | jq -r '.registration_endpoint // empty' 2>/dev/null || true)
+[[ -n "$REG_EP" ]] && ok "registration_endpoint: ${REG_EP}" || warn "no registration_endpoint in metadata"
+
+# Test 2b: THE SHORT-CIRCUIT — POST to the registration endpoint and confirm the
+# gateway answers itself with the pre-registered client_id (mock DCR), not Keycloak.
+info "Step 2b: Register via the gateway (expect mock DCR → pre-registered client_id)..."
+REG_URL="${REG_EP:-http://localhost:8888/.well-known/oauth-authorization-server/mcp/client-registration}"
+DCR=$(curl -s -X POST "$REG_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"redirect_uris":["http://localhost:33418/callback"],"client_name":"mcp-inspector"}' || true)
+echo "$DCR" | jq . 2>/dev/null || echo "$DCR"
+DCR_CLIENT=$(echo "$DCR" | jq -r '.client_id // empty' 2>/dev/null || true)
+DCR_AUTH=$(echo "$DCR" | jq -r '.token_endpoint_auth_method // empty' 2>/dev/null || true)
+if [[ "$DCR_CLIENT" == "${KEYCLOAK_CLIENT}" && "$DCR_AUTH" == "none" ]]; then
+  ok "Mock DCR confirmed: returned pre-registered client_id='${DCR_CLIENT}' as a public client (token_endpoint_auth_method=none)"
+else
+  warn "Mock DCR response not as expected (client_id='${DCR_CLIENT}', auth='${DCR_AUTH}')"
+fi
+
+# Test 3: With pre-obtained JWT (simulating post-registration OAuth flow)
+info "Step 3: Authenticate with JWT (simulating completed OAuth flow)..."
+ensure_kc_pf   # refresh the Keycloak port-forward — this flow's registration + STS steps can outlive it
+USER_JWT=$(get_user_token "${KEYCLOAK_URL}" "${KEYCLOAK_REALM}" "${KEYCLOAK_CLIENT}" "${KEYCLOAK_SECRET}" \
+  "testuser" "testuser" "keycloak.keycloak.svc.cluster.local:8080")
+
+INIT=$(curl -s -D /tmp/mcp-headers --max-time 10 -X POST "http://localhost:8888/mcp" \
+  -H "Authorization: Bearer ${USER_JWT}" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' 2>/dev/null || true)
+# `|| true`: grep exits 1 when there's no session header (e.g. the init returned a
+# JSON-RPC error), which would abort the script under set -e/pipefail.
+SID=$(grep -i "mcp-session-id" /tmp/mcp-headers 2>/dev/null | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r\n' || true)
+
+# Parse SSE data if present
+SSE_DATA=$(echo "$INIT" | grep '^data: ' | sed 's/^data: //' | head -1 || true)
+
+if [[ -n "$SID" ]]; then
+  ok "MCP session created: ${SID}"
+  [[ -n "$SSE_DATA" ]] && echo "$SSE_DATA" | jq . 2>/dev/null
+
+  RESULT=$(curl -s --max-time 10 -X POST "http://localhost:8888/mcp" \
+    -H "Authorization: Bearer ${USER_JWT}" \
+    -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+    -H "Mcp-Session-Id: ${SID}" \
+    -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"whoami","arguments":{}},"id":3}' 2>/dev/null || true)
+  RESULT_DATA=$(echo "$RESULT" | grep '^data: ' | sed 's/^data: //' | head -1)
+  [[ -z "$RESULT_DATA" ]] && RESULT_DATA="$RESULT"
+  echo "MCP response: $(echo "$RESULT_DATA" | jq -r '.result.content[0].text' 2>/dev/null)"
+elif [[ -n "$SSE_DATA" ]]; then
+  ok "MCP server responded (no session ID in headers)"
+  echo "$SSE_DATA" | jq . 2>/dev/null || echo "$SSE_DATA"
+else
+  warn "Could not establish MCP session"
+  [[ -n "$INIT" ]] && echo "$INIT"
+fi
+
+echo ""
+info "For the full flow, connect with an MCP client (Claude Code, MCP Inspector):"
+echo "  npx @modelcontextprotocol/inspector@latest"
+echo "  URL: http://localhost:8888/mcp"
+echo "  (the client will 'register' — the gateway answers with the pre-registered client — then log in)"
+echo ""
+ok "Flow 11b: MCP OAuth mock DCR / clientId short-circuit — test complete"
+echo "  Cleanup: source ../../common/cleanup.sh"

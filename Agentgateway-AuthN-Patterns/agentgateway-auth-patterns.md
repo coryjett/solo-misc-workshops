@@ -66,6 +66,16 @@ MCP clients (like Claude Code, VS Code extensions) that don't have pre-registere
 
 ---
 
+## MCP OAuth — Pre-Registered Client (mock DCR)
+
+A variant of MCP OAuth + DCR for IdPs that don't implement RFC 7591 Dynamic Client Registration (authentik) or where you must pin a specific pre-registered application (Entra middle-tier/OBO app). Setting `mcpAuthentication.clientId` makes the gateway inject a `registration_endpoint` into the authorization-server metadata and answer `POST /register` itself with the pre-registered public client (`token_endpoint_auth_method: none`, PKCE) — no DCR call to the IdP and no management key. DCR-only MCP clients (Claude Code, MCP Inspector) work unchanged.
+
+> **Docs:** [About MCP Auth](https://docs.solo.io/agentgateway/latest/mcp/auth/about/) · [Set up MCP Auth](https://docs.solo.io/agentgateway/latest/mcp/auth/setup/)
+
+![MCP OAuth — Pre-Registered Client (mock DCR)](images/11b-mcp-oauth-clientid.png)
+
+---
+
 ## Mutual TLS (mTLS) Authentication
 
 Two independent TLS features that can be used separately or combined for end-to-end TLS:
