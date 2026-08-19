@@ -1015,6 +1015,71 @@ The bug we hit: the local E-W gateway had `network: cluster2` (the remote's name
 `eastwest.network: cluster1` and re-apply — if only the label is patched, the operator
 reverts it; the **values file** is the source of truth.
 
+#### East-west gateway high availability (surviving a node failure)
+
+Two INDEPENDENT layers — you need both. Don't try to solve node-failure with the peer address
+alone, and don't front the peer nodes with a ServiceEntry (the `istio-remote` Gateway has no
+ServiceEntry reference; its input is `address` = IPAddress or Hostname, and registry-based
+hostname resolution for E-W gateways was historically buggy — fixed only in Istio 1.18. Not a
+supported HA path).
+
+**Layer 1 — data-plane HA: run the E-W gateway multi-replica with pod anti-affinity + a PDB.**
+This is the documented mechanism and the one that actually survives a node loss. NodePort is
+**cluster-wide** (every node accepts `:30575`/`:30751` and kube-proxy forwards to a live gateway
+pod), so with replicas spread across nodes, a dead node just means traffic routes to a replica
+elsewhere — regardless of which node IP the peer dialed.
+```yaml
+# east-west gateway values (each cluster's OWN gateway)
+eastwest:
+  create: true
+  cluster: cluster1
+  network: cluster1
+  deployment:
+    replicas: 3                       # ≥3
+    # spread replicas across nodes so no two share a node
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              gateway.networking.k8s.io/gateway-name: istio-eastwest
+          topologyKey: kubernetes.io/hostname
+---
+# protect against draining too many during upgrade/maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: istio-eastwest-pdb
+  namespace: istio-eastwest
+spec:
+  minAvailable: 2                     # keep ≥2 of the 3 Ready
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-eastwest
+```
+
+**Layer 2 — address reachability: the peer must be able to dial a *live* node, not only a dead
+one.** Pick one:
+- **LoadBalancer VIP (best)** — MetalLB (L2/BGP) on bare-metal OpenShift gives one stable VIP over
+  all nodes; ports preserved (no nodePort remap). `preferredDataplaneServiceType: loadbalancer`,
+  peer `address: <VIP>`.
+- **Hostname multi-A (no-LB fallback)** — `addressType: Hostname`, `address:` a DNS name whose
+  A-records list **all** worker node IPs; istiod spreads across the resolved nodes. Same nodePort
+  on every node (NodePort is cluster-wide), so one `nodeport:` value covers all.
+
+**`externalTrafficPolicy` caveat (Hostname route):** if the E-W Service is `Local`, only nodes
+running a gateway pod answer the nodePort — point DNS **only** at those nodes (or the multi-replica
+anti-affinity spread + `Cluster` policy makes all nodes safe to list). Check:
+`oc -n istio-eastwest get svc istio-eastwest -o jsonpath='{.spec.externalTrafficPolicy}'`.
+
+| Concern | Fix |
+|---|---|
+| Gateway pod survives node loss | **Layer 1**: 3 replicas + pod anti-affinity + PDB (minAvailable 2) |
+| Peer can still reach a live node | **Layer 2**: LB VIP (best) or Hostname multi-A DNS |
+| "Reference a ServiceEntry fronting the nodes" | Not supported — no such field; use VIP or Hostname |
+
+Docs: [multicluster peering best practices / recommendations](https://docs.solo.io/istio/1.30.x/ambient/multicluster/best-practices/peering-recs/) (multi-replica + pod anti-affinity + PDB).
+
 ### Expose `testapp` across clusters
 
 ```bash
