@@ -1,4 +1,4 @@
-# Istio ambient traffic management (istio-ns-a)
+# Solo Enterprise for Istio — ambient mesh build & test runbook
 
 Runbook for the ambient mesh in `istio-ns-a`: an ingress gateway (Gateway API, gatewayclass `istio`), a waypoint (`testapp-waypoint`, gatewayclass `istio-waypoint`), and the `testapp` app with `testapp-blue` / `testapp-green` backends.
 
@@ -6,35 +6,62 @@ Everything routes through Gateway API. Use `HTTPRoute`, not `VirtualService`. Ci
 
 ## Contents
 
-1. [Weighted routing (blue/green and canary)](#1-weighted-routing-bluegreen-and-canary)
-2. [Circuit breaking](#2-circuit-breaking)
-3. [Authorization policies (which services can talk to which)](#3-authorization-policies-which-services-can-talk-to-which)
-4. [Egress gateway (force external traffic through an egress gateway)](#4-egress-gateway-force-external-traffic-through-an-egress-gateway)
-5. [Verify policy is applied at the waypoint](#5-verify-policy-is-applied-at-the-waypoint)
-6. [Troubleshooting: waypoint / egress not appearing in the mesh graph](#6-troubleshooting-waypoint--egress-not-appearing-in-the-mesh-graph)
-7. [Multicluster (east-west gateways + global services)](#7-multicluster-ambient-east-west-gateways--global-services)
+- [0. Overview, prerequisites & build order](#0-overview-prerequisites--build-order)
+
+*Part A — single cluster*
+- [1. Single-cluster build: enroll workloads + waypoint](#1-single-cluster-build-enroll-workloads--waypoint)
+- [2. Weighted routing (blue/green and canary)](#2-weighted-routing-bluegreen-and-canary)
+- [3. Circuit breaking](#3-circuit-breaking)
+- [4. Authorization policies (which services can talk to which)](#4-authorization-policies-which-services-can-talk-to-which)
+- [5. Egress gateway (force external traffic through an egress gateway)](#5-egress-gateway-force-external-traffic-through-an-egress-gateway)
+- [6. Verify policy is applied at the waypoint](#6-verify-policy-is-applied-at-the-waypoint)
+
+*Part B — multicluster*
+- [7. Multicluster build: east-west gateways + global services](#7-multicluster-build-east-west-gateways--global-services)
+- [8. Multicluster testing (failover, blue/green, weighted routing)](#8-multicluster-testing-failover-bluegreen-weighted-routing)
     - [What to test (demo scenarios)](#what-to-test-demo-scenarios)
     - [Traffic management: failover, blue/green, weighted routing](#multicluster-traffic-management-failover-bluegreen-weighted-routing)
-    - [`istioctl multicluster check` (split namespaces + NodePort)](#running-istioctl-multicluster-check-here-split-namespaces--nodeport)
-    - [Troubleshooting](#troubleshooting)
-- [Rules of thumb](#rules-of-thumb)
-- [Certificates (cert-manager and Venafi via istio-csr)](#certificates-cert-manager-and-venafi-via-istio-csr)
+
+*Reference & troubleshooting*
+- [9. Reference: rules of thumb + certificates](#9-reference)
+- [10. Troubleshooting (appendix)](#10-troubleshooting-appendix)
+    - [Mesh graph nodes not appearing](#mesh-graph-nodes-not-appearing)
+    - [Egress not routing through the gateway](#egress-not-routing-through-the-gateway)
+    - [Multicluster check (split namespaces and NodePort)](#multicluster-check-split-namespaces-and-nodeport)
+    - [Multicluster troubleshooting table](#multicluster-troubleshooting-table)
+
+## 0. Overview, prerequisites & build order
+
+This runbook builds an ambient mesh in `istio-ns-a` and takes it through testing, then extends it to multicluster. Work top to bottom:
+
+**build single cluster (§1–5) → test single cluster (§6) → build multicluster (§7) → test multicluster (§8)**
+
+Reference material and troubleshooting are at the back (§9–10).
+
+**Prerequisites (assumed in place before §1):**
+- Ambient mesh installed (istiod, istio-cni, ztunnel) — Solo Enterprise for Istio.
+- `istio-ns-a` exists and is ambient-enrolled; Gateway API CRDs installed (use `HTTPRoute`, not `VirtualService`). Circuit breaking and mTLS identity still come from Istio APIs (`DestinationRule`, `AuthorizationPolicy`).
+- A waypoint (`testapp-waypoint`, gatewayClass `istio-waypoint`) and the `testapp` app with `testapp-blue` / `testapp-green` backends.
+- For multicluster (§7+): a second cluster, a shared root CA (both `istio-system/cacerts` chaining to one Venafi root — see §9), and network reachability between the east-west gateways.
 
 ```bash
 NS=istio-ns-a
 ```
 
-## 1. Weighted routing (blue/green and canary)
+### Environment profile (this engagement)
 
-Send a weighted percentage of traffic to two versions of an app, `testapp-blue` and `testapp-green`.
+Characteristics of the target environment that shape the choices in this runbook (kept generic — no customer identifiers):
 
-Each version has its own Service whose selector matches only that version's pods. An `HTTPRoute` parented to the `testapp` Service lists both as `backendRefs` with weights, and the waypoint fronting `testapp` enforces the split. No subsets, no `DestinationRule` needed for the split.
+- **Platform:** OpenShift on bare metal, **OVN-Kubernetes** CNI (enforces `NetworkPolicy`; `EgressFirewall` / `AdminNetworkPolicy` available). No cloud LoadBalancer by default — confirm whether **MetalLB** is available before choosing LoadBalancer vs NodePort.
+- **Ambient install topology: SPLIT** — **istiod in `istio-system`**, **istio-cni + ztunnel in `kube-system`**. This is why `istioctl multicluster check -i <ns>` can't pass every check in one run (see §10, multicluster check).
+- **Certificates:** workload SVIDs issued by **Venafi via cert-manager `istio-csr`**, not istiod's built-in CA. Multicluster requires both clusters to chain to the **same Venafi root** (see §9).
+- **Multicluster peering: NodePort** (not LoadBalancer). E-W gateway ports `15008` (HBONE) / `15012` (xDS) are remapped to nodePorts; nodes carry an **InternalIP only** (no ExternalIP). Consequences captured in §7: set `preferred-data-plane-service-type: NodePort` on each local gateway; `remote.items` uses the peer node IP + the peer's **xDS nodePort**; HA via multi-replica anti-affinity + a VIP or Hostname multi-A record.
+- **Network naming:** one network name per cluster — keep **local** and **peer** names distinct. A local object wearing the peer's name breaks cross-cluster routing (see §7 build + §10 troubleshooting).
+- **UI / graph:** the Solo Enterprise UI graph is **ClickHouse + OpenTelemetry** backed; infrastructure nodes (waypoints, gateways, ztunnel) are hidden until **"Show Infrastructure"** is enabled (see §10).
 
-```
-                    -> testapp-blue  svc (weight 100) -> blue pods
-testapp waypoint -> HTTPRoute (weighted)
-                    -> testapp-green svc (weight 0)   -> green pods
-```
+## 1. Single-cluster build: enroll workloads + waypoint
+
+Get the workloads into the mesh and the waypoint fronting `testapp` before applying any traffic policy. `testapp` is a Service with no pods of its own; the real workloads are the `testapp-blue` / `testapp-green` Deployments.
 
 ### Before you start
 
@@ -72,6 +99,19 @@ End state:
 - Only the `testapp` Service is fronted by the waypoint.
 
 If the waypoint isn't provisioned: `istioctl waypoint apply -n $NS --name testapp-waypoint`, or keep it as a plain Gateway in Git.
+
+## 2. Weighted routing (blue/green and canary)
+
+
+Send a weighted percentage of traffic to two versions of an app, `testapp-blue` and `testapp-green`.
+
+Each version has its own Service whose selector matches only that version's pods. An `HTTPRoute` parented to the `testapp` Service lists both as `backendRefs` with weights, and the waypoint fronting `testapp` enforces the split. No subsets, no `DestinationRule` needed for the split.
+
+```
+                    -> testapp-blue  svc (weight 100) -> blue pods
+testapp waypoint -> HTTPRoute (weighted)
+                    -> testapp-green svc (weight 0)   -> green pods
+```
 
 ### Split at the waypoint
 
@@ -210,7 +250,9 @@ kubectl patch httproute testapp-canary -n $NS --type=json -p='[
 
 From inside the mesh instead of the external host, run the loop from a pod against the Service: `kubectl exec -n $NS deploy/<client> -- sh -c 'for i in $(seq 1 20); do curl -s http://testapp:8080/ | jq -r ".version"; done' | sort | uniq -c` (needs `jq` in the client image).
 
-## 2. Circuit breaking
+**Solo docs:** [request routing overview](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/overview/) · [traffic splitting](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/traffic-splitting/) · [canary with Argo Rollouts](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/argo-rollouts/)
+
+## 3. Circuit breaking
 
 Circuit breaking comes from a `DestinationRule` `trafficPolicy`. In ambient the connection-pool L4 limits are enforced by ztunnel, and the L7 limits plus outlier detection are enforced at the waypoint.
 
@@ -299,7 +341,9 @@ There is no native Envoy or Istio feature that redistributes a weighted backend'
 
 Whichever you pick, the lever is always the weight. Outlier detection cannot do it because it operates below the weight.
 
-## 3. Authorization policies (which services can talk to which)
+**Solo docs:** [resiliency / failover overview](https://docs.solo.io/istio/1.30.x/ambient/resiliency/failover/overview/) · [L7 failover at the waypoint](https://docs.solo.io/istio/1.30.x/ambient/resiliency/failover/l7-waypoint/) · [waypoints (L7)](https://docs.solo.io/istio/1.30.x/ambient/waypoints/overview/)
+
+## 4. Authorization policies (which services can talk to which)
 
 `AuthorizationPolicy` decides who may call whom, keyed on SPIFFE identity. In ambient, L4 rules (source identity, ports) are enforced at ztunnel, and L7 rules (methods, paths, headers) at the waypoint. Default is allow; the first `ALLOW` policy that selects a workload flips it to deny-by-default for that workload.
 
@@ -354,9 +398,11 @@ istioctl x describe pod -n $NS <testapp-blue-pod>            # lists applied Aut
 istioctl proxy-config rbac ${PROXY#pod/} -n $NS         # L7 rules on the waypoint
 ```
 
-Get the exact principal strings from the identities you saw in section 2. A typo'd principal silently denies everything.
+Get the exact principal strings from the identities you saw in §3 (circuit breaking). A typo'd principal silently denies everything.
 
-## 4. Egress gateway (force external traffic through an egress gateway)
+**Solo docs:** [security overview](https://docs.solo.io/istio/1.30.x/ambient/security/overview/) · [waypoints (L7)](https://docs.solo.io/istio/1.30.x/ambient/waypoints/overview/)
+
+## 5. Egress gateway (force external traffic through an egress gateway)
 
 Egress uses the same `istio-waypoint` type as the rest of this runbook. A dedicated egress waypoint is the sanctioned way out: external `ServiceEntry` hosts are pinned to it with `istio.io/use-waypoint`, so their traffic flows through one choke point where you get L7 policy, TLS origination, and logging. An `AuthorizationPolicy` on that waypoint restricts which identities may use it. This runs the egress gateway in `istio-ns-a` alongside the app (not a separate namespace); the one wrinkle that creates is in the NetworkPolicy step below. Built and tested on a k3d ambient cluster.
 
@@ -580,27 +626,6 @@ kubectl exec -n istio-ns-a ${EGW#pod/} -c istio-proxy -- \
 - TLS passthrough (`protocol: TLS`) means the egress access log shows L4 lines (SNI, upstream IP, bytes), not HTTP status codes. That's expected. For HTTP-level logs you'd terminate/re-originate TLS at the waypoint (`protocol: HTTP` + a `DestinationRule` with `tls.mode: SIMPLE`).
 - Solo's egress guide covers the routing + authz but not the NetworkPolicy bypass-lock; that piece is what makes it a true force-through.
 
-### Troubleshooting: egress not routing through the gateway
-
-Both of these are silent — no error, the ServiceEntry just never binds and traffic never reaches the gateway (no logs). Both were hit in a live setup.
-
-- **`metadata.label` vs `metadata.labels`.** The `use-waypoint` binding is a Kubernetes label, so it must live under `metadata.labels` (plural). A manifest with `metadata.label:` (singular) is not a real field — the API server drops it, so the ServiceEntry ends up with no label and never binds. Check it's actually set:
-  ```bash
-  kubectl get serviceentry <name> -n istio-ns-a -o jsonpath='{.metadata.labels}'; echo   # must show istio.io/use-waypoint
-  ```
-- **Gateway `waypoint-for: service` vs `all`.** A ServiceEntry is not a Kubernetes Service, so a waypoint labeled `istio.io/waypoint-for: service` (the default) won't capture it. It must be `all`.
-  ```bash
-  kubectl get gateway <egress-gw> -n istio-ns-a -o jsonpath='{.metadata.labels}'; echo   # must show waypoint-for: all
-  ```
-
-The one command that tells you whether the binding actually took, regardless of the YAML:
-
-```bash
-istioctl ztunnel-config services -n istio-ns-a | grep -i <egress-host-or-se-name>
-# WAYPOINT column must name the egress gateway. If it's None, the binding didn't take —
-# it's one of the two above. Fix, re-check this, then look for logs.
-```
-
 ### Mesh-wide: force all external traffic through the gateway
 
 The single-host setup above scales to "everything in the mesh, all egress through one gateway" — but the routing piece changes and there's a real version caveat.
@@ -671,7 +696,9 @@ The clean division of labor for the POC:
 
 Do not try to make the waypoint the universal choke point — it can only act on traffic that a `ServiceEntry` routes to it.
 
-## 5. Verify policy is applied at the waypoint
+**Solo docs:** [egress overview](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/egress/overview/) · [egress gateway (waypoint)](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/egress/egress/) · [mTLS egress](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/egress/egress-mtls/)
+
+## 6. Verify policy is applied at the waypoint
 
 `Accepted=True` on an HTTPRoute or an applied DestinationRule only means the config was accepted, not that it is running. What actually runs lives in the waypoint's Envoy config. Read it directly and confirm both the weights and the circuit-breaker knobs are programmed.
 
@@ -717,186 +744,11 @@ Output matches the DestinationRule:
  "outlierDetection":{"consecutive5xx":3,"interval":"5s","baseEjectionTime":"30s","maxEjectionPercent":50}}
 ```
 
-`maxConnections` and `maxPendingRequests` reflect your `connectionPool` values; `maxRequests`/`maxRetries` at the uint32 max mean unset. `outlierDetection` mirrors your DestinationRule. If this block is empty or the FQDN returns no cluster, the DestinationRule did not land on the backend cluster, usually because it targets the `testapp` Service instead of `testapp-blue` / `testapp-green` (see section 2).
+`maxConnections` and `maxPendingRequests` reflect your `connectionPool` values; `maxRequests`/`maxRetries` at the uint32 max mean unset. `outlierDetection` mirrors your DestinationRule. If this block is empty or the FQDN returns no cluster, the DestinationRule did not land on the backend cluster, usually because it targets the `testapp` Service instead of `testapp-blue` / `testapp-green` (see §3, circuit breaking).
 
-## 6. Troubleshooting: waypoint / egress not appearing in the mesh graph
+**Solo docs:** [L7 observability](https://docs.solo.io/istio/1.30.x/ambient/observability/layer7/) · [waypoints (L7)](https://docs.solo.io/istio/1.30.x/ambient/waypoints/overview/)
 
-> Working notes for the customer engagement (cluster `cluster1`, ns `istio-ns-a` for the
-> mesh, ns `solo-enterprise` for the UI/telemetry). OpenShift + OVN-Kubernetes.
-
-### ✅ RESOLVED (2026-08-19): the "Show Infrastructure" toggle was off
-
-**Root cause: a UI display toggle, not telemetry.** In the Solo Enterprise for Istio graph,
-waypoints, ingress/egress gateways, and ztunnel are **"infrastructure" nodes**, hidden by
-default. They render only when **"Show Infrastructure"** is enabled in the graph controls.
-
-**Fix: turn on "Show Infrastructure" in the graph UI.** The waypoint, ingress, and egress
-appeared immediately — the metrics were being scraped and stored the whole time.
-
-**Check this FIRST**, before any telemetry digging:
-1. Graph controls → enable **Show Infrastructure** (labels may read "Show Infra" / "Infrastructure nodes").
-2. Confirm the time window covers live traffic and Cluster/Namespace/Workspace filters include `istio-ns-a`.
-3. Drive real HTTP through the ingress→`testapp`→egress path (the `blue/green→backend` demo hop exercises no gateways).
-
-The ClickHouse/collector pipeline below is only relevant if nodes are **still** missing after
-Show Infrastructure is on — kept for reference, but it was NOT the cause here.
-
-<details>
-<summary>Telemetry deep-dive (reference only — was not the root cause)</summary>
-
-### Architecture for THIS deployment (ClickHouse-backed Solo Enterprise UI)
-
-Identify the product by its pods in `solo-enterprise`:
-`solo-enterprise-ui`, `solo-enterprise-telemetry-collector`, `solo-management-clickhouse`.
-That means the graph is **ClickHouse + OpenTelemetry backed** (NOT a standalone Prometheus
-server — that's the older Gloo Mesh Enterprise `gloo-mesh-ui`). Pipeline:
-
-```
-mesh proxies (:15020 Prometheus metrics)
-   → collector PROMETHEUS RECEIVER (scrapes :15020)
-   → collector CLICKHOUSE EXPORTER (writes platformdb.otel_metrics_{sum,gauge,histogram})
-   → solo-enterprise-ui queries ClickHouse
-   → graph
-```
-
-A proxy shows up only if: **traffic traverses it → it's scraped → stored in ClickHouse →
-queried → within the UI's view/filters/window.** Stop at the first broken link.
-
-### Namespaces (this deployment — cluster `cluster1`, OpenShift / OVN-Kubernetes)
-
-| Namespace | What runs there | Relevant to the graph |
-|---|---|---|
-| `solo-enterprise` | `solo-enterprise-ui`, `solo-enterprise-telemetry-collector` (+ `solo-enterprise-telemetry-gateway`), `solo-management-clickhouse` (DB **`platformdb`**) | the UI, the scraping collector, and the ClickHouse store — the whole graph backend |
-| `istio-ns-a` | the mesh app + all gateways: `testapp-blue`, `testapp-green`, `backend`, `backend-waypoint`, `testapp-waypoint`, `testapp-egress-gateway`, `testapp-ingress-istio` | the scrape targets (waypoint/egress/ingress on `:15020`) |
-| `kube-system` | ambient **`ztunnel`** DaemonSet (`ztunnel-*`) | also scraped on `:15020` (job `ztunnel`) |
-
-The collector in `solo-enterprise` scrapes proxies **cross-namespace** into `istio-ns-a` and
-`kube-system`. (Handy: `oc get po -o wide -n istio-ns-a` for current pod IPs — they change on
-restart; the log IPs go stale.)
-
-### Two failure surfaces in the collector — do NOT confuse them
-
-- **Receiver (scrape):** `"Failed to scrape Prometheus endpoint"` (component `prometheus`,
-  kind `receiver`). Reachability/config of the proxy `:15020`.
-- **Exporter (ClickHouse):** `"Exporting failed … clickhouse/metrics … Table
-  platformdb.otel_metrics_* does not exist"` / `"handshake … read: EOF"` (kind `exporter`).
-  Storage.
-
-**A `curl` to `:15020` only tests the receiver's reachability. It says NOTHING about the
-exporter.** If the scrape works but the export fails, metrics are collected and dropped →
-empty graph, and curl-ability is a red herring.
-
-### What we've tried so far (as of 2026-08-18)
-
-| # | What we checked | Result |
-|---|---|---|
-| 1 | Data path — is traffic traversing the waypoint + egress? | ✅ Yes (traffic + egress confirmed) |
-| 2 | UI Workloads filter | ✅ All 7 present + selected (`backend`, `backend-waypoint`, `testapp-blue/green`, `testapp-egress-gateway`, `testapp-ingress-istio`, `testapp-waypoint`) |
-| 3 | What the graph actually draws | ⚠️ Only `testapp-blue/green → backend` (trace-derived); ingress/waypoint/egress absent. Focus `istio-ns-a`, **Depth: 1 Hop**, Traffic mode |
-| 4 | Collector logs | ❌ TWO errors: `Failed to scrape Prometheus endpoint` for ztunnel + waypoint + egress `:15020` (recurring → 08-17), AND `Exporting failed … Table platformdb.otel_metrics_{sum,gauge,histogram} does not exist` + `handshake … read: EOF` (08-11, setup) |
-| 5 | Is there a standalone Prometheus? | ❌ No — only `collector` / `gateway` / `clickhouse` / `ui` services. Graph = ClickHouse-backed |
-| 6 | Connectivity: test pod in `solo-enterprise` → proxy `:15020` | ✅ `curl http://<ip>:15020/stats/prometheus` returns metrics for all proxies → **network is NOT the blocker** |
-| 7 | The `gateway` scrape job config | ✅ 100% annotation-driven (scheme/path/port from the pod `prometheus.io/*`); nothing hard-coded |
-| 8 | Proxy pod annotations | ✅ Correct: `path=/stats/prometheus`, `port="15020"`, `scrape="true"`, **no `scheme` (→ http)** → collector's target == the working curl. NOT a scheme/path problem |
-| 9 | Collector is distroless | ⚠️ No curl/shell in-pod → must test from a separate pod or an `oc debug` clone |
-
-**Where that leaves us:** config is correct and the endpoints are reachable from the
-collector's namespace, yet the collector still errors — so the live problem is one (or both)
-of:
-- **(a) Exporter / ClickHouse side** — *very likely*, the metrics store (`platformdb.otel_metrics_*`)
-  was missing, so scraped metrics have nowhere to land → empty graph. **Not yet re-verified.**
-- **(b) A scrape difference `curl` doesn't reproduce** — `scrape_timeout` vs a large `:15020`
-  payload, or the **collector's own capture identity** differs from the test pod. **Not yet tested.**
-
-### Not yet tried (do these next — see "Start here")
-- [ ] Categorize the **live** collector errors (receiver vs exporter) — `--since=15m`
-- [ ] `SHOW TABLES FROM platformdb` — do `otel_metrics_*` exist now?
-- [ ] If still scrape errors: payload size vs `scrape_timeout`, and an `oc debug` clone of the collector
-- [ ] Once metrics land: query ClickHouse for `reporter="waypoint"` vs TCP (L4/L7)
-- [ ] UI: Depth > 1 Hop, Cluster+NS+Workspace filters, drive HTTP on ingress/egress paths
-
-### Start here (next session, in order)
-
-**A. Which surface is failing NOW?** (receiver vs exporter)
-```bash
-oc -n solo-enterprise logs solo-enterprise-telemetry-collector-0 --since=15m \
-  | grep -oiE "Failed to scrape|Exporting failed|does not exist|handshake|clickhouse" \
-  | sort | uniq -c
-```
-
-**B. Does the ClickHouse store exist?** (the 08-11 export errors)
-```bash
-oc -n solo-enterprise exec solo-management-clickhouse-shard0-0 -- \
-  clickhouse-client -q "SHOW TABLES FROM platformdb"
-# missing otel_metrics_* ⇒ exporter isn't creating schema. Check create_schema / auth /
-# the handshake EOF to :9000. Nothing stores (⇒ empty graph) until this is fixed.
-oc -n solo-enterprise logs solo-management-clickhouse-shard0-0 --tail=100 \
-  | grep -iE "error|reject|auth|exception|space"
-```
-
-**C. If the LIVE errors are scrape (not export) even though curl works:**
-```bash
-# c1) payload size vs scrape_timeout — curl (no timeout, piped to head) hides this
-oc -n solo-enterprise exec <test-pod> -- sh -c \
-  'curl -s http://<waypoint-ip>:15020/stats/prometheus | wc -c'
-grep -nE "scrape_timeout|scrape_interval|body_size_limit|sample_limit" /tmp/collector-cm.yaml
-#   context deadline exceeded ⇒ raise scrape_timeout;  exceeded body/sample limit ⇒ raise limit
-
-# c2) collector's OWN network identity (capture) — a debug clone inherits its labels/SCC
-oc debug -n solo-enterprise pod/solo-enterprise-telemetry-collector-0 --image=nicolaka/netshoot
-#   inside: curl -sS -m5 http://<waypoint-ip>:15020/stats/prometheus | head
-#   clone FAILS but a plain test pod works ⇒ collector labels / ambient capture
-oc get ns solo-enterprise -o jsonpath='{.metadata.labels}' | tr ',' '\n' | grep -i dataplane
-istioctl ztunnel-config workloads 2>/dev/null | grep -i telemetry-collector   # HBONE ⇒ captured
-#   fix if captured: set istio.io/dataplane-mode: none on the collector (via Solo values)
-```
-
-**D. Once metrics land in ClickHouse — confirm the data + L4/L7** (adjust table/cols to the
-schema `SHOW TABLES` reveals):
-```bash
-CH="oc -n solo-enterprise exec solo-management-clickhouse-shard0-0 -- clickhouse-client"
-$CH -q "SELECT count(), max(TimeUnix) FROM platformdb.otel_metrics_sum"
-$CH -q "SELECT DISTINCT MetricName FROM platformdb.otel_metrics_sum WHERE MetricName LIKE 'istio%'"
-# waypoint L7 present? and is the traffic actually TCP (L4)?
-$CH -q "SELECT Attributes['reporter'] r, Attributes['destination_workload'] d, count()
-        FROM platformdb.otel_metrics_sum
-        WHERE MetricName='istio_requests_total' AND TimeUnix > now()-INTERVAL 15 MINUTE
-        GROUP BY r,d ORDER BY count() DESC LIMIT 30"
-$CH -q "SELECT count() FROM platformdb.otel_metrics_sum
-        WHERE MetricName='istio_tcp_connections_opened_total' AND TimeUnix > now()-INTERVAL 15 MINUTE"
-```
-
-**E. UI-side, once data exists:** raise **Depth** past 1 Hop; confirm Cluster + Namespace +
-Workspace selected and the time window covers traffic; and **drive HTTP traffic on the real
-paths** (ingress→`testapp`, and the egress call to the external host) — the
-`blue/green→backend` demo hop exercises none of the gateways.
-
-### What SHOULD appear (and the L4 caveat)
-
-- **Waypoint** → `WAYPOINT_PROXY_WORKLOAD` node / two-hop on the `testapp` path (L7/HTTP only).
-- **Egress external host** → `EXTERNAL_WORKLOAD` node in Traffic mode — needs a
-  **source-reported HTTP series with `destination_service`=host**. TLS-passthrough
-  (`protocol: TLS`, L4) emits only `istio_tcp_*`, so the external node may show as an IP or
-  not at all; use an **L7 egress** (`protocol: HTTP` + `DestinationRule tls.mode: SIMPLE`)
-  for a named node.
-- **L4/TCP traffic** DOES render (dashed edges, from `istio_tcp_*`), just without the L7
-  richness (HTTP rates/codes, waypoint hop, named egress). Dashed `blue→backend` = TCP.
-
-### Quick decision table
-
-| Symptom | Where | Fix |
-|---|---|---|
-| **Waypoint / gateways / ztunnel missing from graph** | **UI** | **← THE ACTUAL FIX HERE: enable "Show Infrastructure" in graph controls. Infra nodes are hidden by default. Check this before anything below.** |
-| Live errors are `Exporting failed` / `platformdb.otel_metrics_* does not exist` | exporter | fix ClickHouse schema/auth/handshake — nothing stores until then |
-| Live errors are `Failed to scrape`, but curl to `:15020` works | receiver | scrape_timeout / body_size_limit (big payload), or collector ambient-capture |
-| `curl` works from test pod but debug-clone of collector fails | receiver | collector's labels / `istio.io/dataplane-mode` (capture) |
-| `platformdb` has istio metrics but no `reporter="waypoint"` / high TCP | data | traffic is L4 — send HTTP through the paths |
-| Data in ClickHouse but graph empty | UI | Depth > 1 Hop, Cluster+NS+Workspace filters, time window, right traffic path |
-
-</details>
-
-
-## 7. Multicluster (ambient: east-west gateways + global services)
+## 7. Multicluster build: east-west gateways + global services
 
 Extends the single-cluster mesh to span two clusters (here: `cluster1` + a second,
 call the kube contexts `$C1` and `$C2`). Cross-cluster traffic stays mTLS end-to-end via
@@ -909,7 +761,7 @@ target ztunnel → pod.
   (xDS TLS). The E-W gateway is itself a ztunnel.
 - **Shared root of trust** — every cluster's `istio-system/cacerts` secret must chain to the
   **same root** (`root-cert.pem` identical). With your cert-manager + Venafi `istio-csr`
-  setup (see Certificates §), point both clusters' istio-csr at the **same Venafi root** or
+  setup (see §9, Certificates), point both clusters' istio-csr at the **same Venafi root** or
   cross-cluster mTLS will fail the TLS handshake.
 - **Cluster + network identity** — each cluster sets `global.multiCluster.clusterName` +
   `global.network` (istiod) and the matching `multiCluster.clusterName` / `network` on
@@ -953,8 +805,7 @@ istioctl --context $C1 proxy-status                          # remote proxies SY
 Each cluster has ONE network name. It must be **identical** across istiod, the injecting
 namespaces, all proxies, and that cluster's **own** E-W gateway — and **distinct** from the peer's.
 The peer's name appears **only** on the `istio-remote` peer Gateway. Mixing them up produces
-`Network Configuration Check: eastwest gateway has network X but cluster network is Y` (see
-Troubleshooting). Example with **local `cluster1`**, **remote `cluster2`**:
+`Network Configuration Check: eastwest gateway has network X but cluster network is Y` (see the §10 troubleshooting table). Example with **local `cluster1`**, **remote `cluster2`**:
 
 **Local cluster `cluster1` — istiod + own E-W gateway (Helm):**
 ```yaml
@@ -1091,7 +942,11 @@ done
 ```
 Route to it (ingress or in-mesh) by referencing the global hostname in an HTTPRoute
 `backendRefs` (`name: testapp.istio-ns-a.mesh.internal`). The waypoint/weighted-routing
-rules from §1 still apply on the local side; the E-W gateway only carries the cross-cluster hop.
+rules from §2 (weighted routing) still apply on the local side; the E-W gateway only carries the cross-cluster hop.
+
+## 8. Multicluster testing (failover, blue/green, weighted routing)
+
+With the mesh spanning both clusters (§7), run these scenarios to prove cross-cluster behavior.
 
 ### What to test (demo scenarios)
 
@@ -1103,7 +958,7 @@ rules from §1 still apply on the local side; the E-W gateway only carries the c
 | **Traffic distribution** | Set `networking.istio.io/traffic-distribution: PreferClose` on the Service | Routing follows the new policy (e.g. spreads/prefers-closest) |
 | **Ingress → remote backend** | Hit the `$C1` ingress host for a global service whose backend lives only in `$C2` | Ingress → local E-W path → `$C2` pod |
 | **Cross-cluster identity (mTLS)** | Apply an `AuthorizationPolicy` (L4 at ztunnel) allowing only a specific SA; call cross-cluster from an allowed vs denied identity | Allowed SPIFFE identity passes; others get denied — identity is preserved across the E-W hop |
-| **Graph** | Generate cross-cluster traffic, open the Solo UI graph | The E-W gateway renders as an explicit cross-cluster intermediate node (see §6 for why it may not show) |
+| **Graph** | Generate cross-cluster traffic, open the Solo UI graph | The E-W gateway renders as an explicit cross-cluster intermediate node (see §10 appendix, mesh graph) |
 
 ### Multicluster traffic management: failover, blue/green, weighted routing
 
@@ -1266,53 +1121,9 @@ istioctl --context $C1 ztunnel-config workloads | grep -E "testapp|eastwest"
 kubectl --context $C1 get gateway -n istio-eastwest      # E-W gateway Programmed
 ```
 
-### Running `istioctl multicluster check` here (split namespaces + NodePort)
+## 9. Reference
 
-This cluster runs a **split install**: **istiod → `istio-system`**, **istio-cni + ztunnel →
-`kube-system`**. `istioctl multicluster check` assumes istiod and the CNI live in the **same**
-`-i`/`--istioNamespace`, so **no single `-i` value passes every check** — it will *always*
-exit non-zero (`Error: multicluster check found issues`) for this topology. **That exit code
-is not a reliable pass/fail here — read the individual check lines.**
-
-Run it twice and merge the results:
-```bash
-istioctl multicluster check --precheck -i istio-system   # ✅ istiod, License, Network, Certs
-istioctl multicluster check --precheck -i kube-system    # ✅ CNI DNS Capture (AMBIENT_DNS_CAPTURE enabled)
-```
-- With `-i istio-system` the **CNI** check false-fails (`istio-cni-config` not found — it's in kube-system).
-- With `-i kube-system` the **istiod / License / Network / Shared-Services** checks false-fail
-  (`no istiod deployment found in namespace "kube-system"`).
-- Both are namespace-lookup **artifacts, not real faults.** Confirmed-healthy real state: DNS
-  capture enabled, root cert matches across clusters, istiod/ztunnel/eastwest pods healthy.
-
-Full cross-cluster pass (runs the Peers / Stale / SA checks precheck skips) — use the istiod ns:
-```bash
-istioctl multicluster check --contexts=$C1,$C2 -i istio-system
-```
-The one **genuine** finding that appears in *both* runs is the NodePort E-W gateway (below).
-
-### Troubleshooting
-
-| Symptom | Likely cause | Check / fix |
-|---|---|---|
-| Cross-cluster calls fail with TLS/handshake errors | **Root CA mismatch** between clusters | Compare `istio-system/cacerts` `root-cert.pem` fingerprints (above) — must be identical. Fix istio-csr/Venafi to issue from the same root. |
-| Global service has **no remote endpoints** | Namespace-sameness or label missing on the other cluster | Same `svc`+`ns` name in both; `solo.io/service-scope=global` applied in **both**; check `ztunnel-config services`/`workloads` shows remote endpoints |
-| No failover to the remote cluster | Default `PreferNetwork` keeps traffic local until local is fully unhealthy | Confirm local endpoints are actually down; or set `traffic-distribution` (e.g. `PreferClose`) |
-| `istioctl multicluster check` shows peers not linked / proxies not SYNCED | Peering not established, or E-W gateway not reachable | Re-run `multicluster link`; confirm the E-W gateway has an address and `:15008`/`:15012` are reachable **between** clusters |
-| Cross-cluster works pod-to-pod but not from ingress | HTTPRoute references the wrong host | `backendRefs.name` must be the global `<svc>.<ns>.mesh.internal`, not the local Service |
-| E-W gateway `:15008/:15012` unreachable across clusters | LoadBalancer/firewall (OpenShift + OVN-K) | Ensure the E-W gateway's LB IP is routable between clusters and no `EgressFirewall`/NetworkPolicy blocks `:15008`/`:15012` (same class as the egress §4 gotchas) |
-| E-W gateway missing from the Solo UI graph | Telemetry, not routing | See §6 — same collector-scrape / ClickHouse pipeline; the E-W gateway is scraped like any other proxy |
-| `multicluster check` exits `found issues` but the mesh is fine | **Split install** — istiod in `istio-system`, cni/ztunnel in `kube-system`; the tool assumes one namespace | Expected for this topology. No single `-i` passes all — run twice (`-i istio-system` and `-i kube-system`) and read the individual lines, not the exit code (see above) |
-| E-W gateway (NodePort) warns *"reporting ClusterIP — node address discovery may have failed"* | istiod couldn't resolve node addresses → advertises the non-routable **ClusterIP** to the peer instead of `NodeIP:nodePort` | For NodePort peering: grant istiod RBAC to `list/get nodes` + ensure nodes have a reachable Internal/External IP, **or** set the E-W gateway address explicitly to `NodeIP:nodePort` in the peer/link config. Verify: `kubectl --context $C2 -n istio-eastwest get gateway -o yaml \| grep -iA6 address` shows a node IP, not the ClusterIP |
-| `Network Configuration Check` ❌ — *"eastwest gateway has network X but cluster network is Y"* / *"istio proxy pod(s) with mismatched ISTIO_META_NETWORK"* | The network name isn't consistent across the cluster — a **local** component is tagged with the **peer's** network name (e.g. the local E-W gateway or a proxy pod wears the remote network). Ambient maps endpoints→gateway by network name, so a mismatch breaks cross-cluster HBONE routing. | Pick ONE canonical network name per cluster (the value on `istio-system`'s `topology.istio.io/network` label — the mesh majority). Fix only the mismatched objects, **not** the correct namespaces: `kubectl -n istio-eastwest label gateway istio-eastwest topology.istio.io/network=<local-net> --overwrite` (and fix the Helm/install `global.network` value if that's the source, else the operator reverts the label), `kubectl label ns istio-eastwest topology.istio.io/network=<local-net> --overwrite`, then `rollout restart` the E-W gateway + the mismatched proxy's owner. Find the bad pod: `kubectl get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,NET:.spec.containers[*].env[?(@.name=="ISTIO_META_NETWORK")].value' \| grep <peer-net>`. The peer's name must appear **only** on the remote network object (`istio-remote` Gateway), never on anything local. Check the peer cluster for the mirror bug. |
-
-Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
-[multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/) ·
-[flat network (advanced)](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/flat-network/) ·
-[expose apps across clusters](https://docs.solo.io/istio/1.30.x/ambient/multicluster/multi-apps/overview/) ·
-[Solo UI — global services view](https://docs.solo.io/istio/1.30.x/setup/explore/)
-
-## Rules of thumb
+### Rules of thumb
 
 1. One routing API per service. HTTPRoute or VirtualService, not both.
 2. Only the fronted Service (`testapp`) is waypoint-fronted, never the per-version targets.
@@ -1321,7 +1132,7 @@ Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
 5. Authorization is allow-by-default until the first ALLOW policy selects a workload, then deny-by-default for it. Get the SPIFFE principals exact.
 6. `Accepted=True` doesn't mean enforced. Confirm in the proxy with `istioctl proxy-config`.
 
-## Certificates (cert-manager and Venafi via istio-csr)
+### Certificates (cert-manager and Venafi via istio-csr)
 
 The mesh's workload certs are issued by Venafi, not istiod's built-in CA. cert-manager's istio-csr agent serves the mesh CA endpoint in place of istiod and forwards signing requests to a Venafi issuer:
 
@@ -1369,3 +1180,250 @@ Docs:
 - Issuer vs ClusterIssuer: https://cert-manager.io/docs/configuration/
 
 Note: cert-manager's newer docs label Venafi as "CyberArk," but the API field is still `spec.venafi`.
+
+## 10. Troubleshooting (appendix)
+
+Troubleshooting collected from the sections above — single-cluster first, then multicluster.
+
+### Mesh graph nodes not appearing
+
+> Working notes for the customer engagement (cluster `cluster1`, ns `istio-ns-a` for the
+> mesh, ns `solo-enterprise` for the UI/telemetry). OpenShift + OVN-Kubernetes.
+
+#### ✅ RESOLVED (2026-08-19): the "Show Infrastructure" toggle was off
+
+**Root cause: a UI display toggle, not telemetry.** In the Solo Enterprise for Istio graph,
+waypoints, ingress/egress gateways, and ztunnel are **"infrastructure" nodes**, hidden by
+default. They render only when **"Show Infrastructure"** is enabled in the graph controls.
+
+**Fix: turn on "Show Infrastructure" in the graph UI.** The waypoint, ingress, and egress
+appeared immediately — the metrics were being scraped and stored the whole time.
+
+**Check this FIRST**, before any telemetry digging:
+1. Graph controls → enable **Show Infrastructure** (labels may read "Show Infra" / "Infrastructure nodes").
+2. Confirm the time window covers live traffic and Cluster/Namespace/Workspace filters include `istio-ns-a`.
+3. Drive real HTTP through the ingress→`testapp`→egress path (the `blue/green→backend` demo hop exercises no gateways).
+
+The ClickHouse/collector pipeline below is only relevant if nodes are **still** missing after
+Show Infrastructure is on — kept for reference, but it was NOT the cause here.
+
+<details>
+<summary>Telemetry deep-dive (reference only — was not the root cause)</summary>
+
+#### Architecture for THIS deployment (ClickHouse-backed Solo Enterprise UI)
+
+Identify the product by its pods in `solo-enterprise`:
+`solo-enterprise-ui`, `solo-enterprise-telemetry-collector`, `solo-management-clickhouse`.
+That means the graph is **ClickHouse + OpenTelemetry backed** (NOT a standalone Prometheus
+server — that's the older Gloo Mesh Enterprise `gloo-mesh-ui`). Pipeline:
+
+```
+mesh proxies (:15020 Prometheus metrics)
+   → collector PROMETHEUS RECEIVER (scrapes :15020)
+   → collector CLICKHOUSE EXPORTER (writes platformdb.otel_metrics_{sum,gauge,histogram})
+   → solo-enterprise-ui queries ClickHouse
+   → graph
+```
+
+A proxy shows up only if: **traffic traverses it → it's scraped → stored in ClickHouse →
+queried → within the UI's view/filters/window.** Stop at the first broken link.
+
+#### Namespaces (this deployment — cluster `cluster1`, OpenShift / OVN-Kubernetes)
+
+| Namespace | What runs there | Relevant to the graph |
+|---|---|---|
+| `solo-enterprise` | `solo-enterprise-ui`, `solo-enterprise-telemetry-collector` (+ `solo-enterprise-telemetry-gateway`), `solo-management-clickhouse` (DB **`platformdb`**) | the UI, the scraping collector, and the ClickHouse store — the whole graph backend |
+| `istio-ns-a` | the mesh app + all gateways: `testapp-blue`, `testapp-green`, `backend`, `backend-waypoint`, `testapp-waypoint`, `testapp-egress-gateway`, `testapp-ingress-istio` | the scrape targets (waypoint/egress/ingress on `:15020`) |
+| `kube-system` | ambient **`ztunnel`** DaemonSet (`ztunnel-*`) | also scraped on `:15020` (job `ztunnel`) |
+
+The collector in `solo-enterprise` scrapes proxies **cross-namespace** into `istio-ns-a` and
+`kube-system`. (Handy: `oc get po -o wide -n istio-ns-a` for current pod IPs — they change on
+restart; the log IPs go stale.)
+
+#### Two failure surfaces in the collector — do NOT confuse them
+
+- **Receiver (scrape):** `"Failed to scrape Prometheus endpoint"` (component `prometheus`,
+  kind `receiver`). Reachability/config of the proxy `:15020`.
+- **Exporter (ClickHouse):** `"Exporting failed … clickhouse/metrics … Table
+  platformdb.otel_metrics_* does not exist"` / `"handshake … read: EOF"` (kind `exporter`).
+  Storage.
+
+**A `curl` to `:15020` only tests the receiver's reachability. It says NOTHING about the
+exporter.** If the scrape works but the export fails, metrics are collected and dropped →
+empty graph, and curl-ability is a red herring.
+
+#### What we've tried so far (as of 2026-08-18)
+
+| # | What we checked | Result |
+|---|---|---|
+| 1 | Data path — is traffic traversing the waypoint + egress? | ✅ Yes (traffic + egress confirmed) |
+| 2 | UI Workloads filter | ✅ All 7 present + selected (`backend`, `backend-waypoint`, `testapp-blue/green`, `testapp-egress-gateway`, `testapp-ingress-istio`, `testapp-waypoint`) |
+| 3 | What the graph actually draws | ⚠️ Only `testapp-blue/green → backend` (trace-derived); ingress/waypoint/egress absent. Focus `istio-ns-a`, **Depth: 1 Hop**, Traffic mode |
+| 4 | Collector logs | ❌ TWO errors: `Failed to scrape Prometheus endpoint` for ztunnel + waypoint + egress `:15020` (recurring → 08-17), AND `Exporting failed … Table platformdb.otel_metrics_{sum,gauge,histogram} does not exist` + `handshake … read: EOF` (08-11, setup) |
+| 5 | Is there a standalone Prometheus? | ❌ No — only `collector` / `gateway` / `clickhouse` / `ui` services. Graph = ClickHouse-backed |
+| 6 | Connectivity: test pod in `solo-enterprise` → proxy `:15020` | ✅ `curl http://<ip>:15020/stats/prometheus` returns metrics for all proxies → **network is NOT the blocker** |
+| 7 | The `gateway` scrape job config | ✅ 100% annotation-driven (scheme/path/port from the pod `prometheus.io/*`); nothing hard-coded |
+| 8 | Proxy pod annotations | ✅ Correct: `path=/stats/prometheus`, `port="15020"`, `scrape="true"`, **no `scheme` (→ http)** → collector's target == the working curl. NOT a scheme/path problem |
+| 9 | Collector is distroless | ⚠️ No curl/shell in-pod → must test from a separate pod or an `oc debug` clone |
+
+**Where that leaves us:** config is correct and the endpoints are reachable from the
+collector's namespace, yet the collector still errors — so the live problem is one (or both)
+of:
+- **(a) Exporter / ClickHouse side** — *very likely*, the metrics store (`platformdb.otel_metrics_*`)
+  was missing, so scraped metrics have nowhere to land → empty graph. **Not yet re-verified.**
+- **(b) A scrape difference `curl` doesn't reproduce** — `scrape_timeout` vs a large `:15020`
+  payload, or the **collector's own capture identity** differs from the test pod. **Not yet tested.**
+
+#### Not yet tried (do these next — see "Start here")
+- [ ] Categorize the **live** collector errors (receiver vs exporter) — `--since=15m`
+- [ ] `SHOW TABLES FROM platformdb` — do `otel_metrics_*` exist now?
+- [ ] If still scrape errors: payload size vs `scrape_timeout`, and an `oc debug` clone of the collector
+- [ ] Once metrics land: query ClickHouse for `reporter="waypoint"` vs TCP (L4/L7)
+- [ ] UI: Depth > 1 Hop, Cluster+NS+Workspace filters, drive HTTP on ingress/egress paths
+
+#### Start here (next session, in order)
+
+**A. Which surface is failing NOW?** (receiver vs exporter)
+```bash
+oc -n solo-enterprise logs solo-enterprise-telemetry-collector-0 --since=15m \
+  | grep -oiE "Failed to scrape|Exporting failed|does not exist|handshake|clickhouse" \
+  | sort | uniq -c
+```
+
+**B. Does the ClickHouse store exist?** (the 08-11 export errors)
+```bash
+oc -n solo-enterprise exec solo-management-clickhouse-shard0-0 -- \
+  clickhouse-client -q "SHOW TABLES FROM platformdb"
+# missing otel_metrics_* ⇒ exporter isn't creating schema. Check create_schema / auth /
+# the handshake EOF to :9000. Nothing stores (⇒ empty graph) until this is fixed.
+oc -n solo-enterprise logs solo-management-clickhouse-shard0-0 --tail=100 \
+  | grep -iE "error|reject|auth|exception|space"
+```
+
+**C. If the LIVE errors are scrape (not export) even though curl works:**
+```bash
+# c1) payload size vs scrape_timeout — curl (no timeout, piped to head) hides this
+oc -n solo-enterprise exec <test-pod> -- sh -c \
+  'curl -s http://<waypoint-ip>:15020/stats/prometheus | wc -c'
+grep -nE "scrape_timeout|scrape_interval|body_size_limit|sample_limit" /tmp/collector-cm.yaml
+#   context deadline exceeded ⇒ raise scrape_timeout;  exceeded body/sample limit ⇒ raise limit
+
+# c2) collector's OWN network identity (capture) — a debug clone inherits its labels/SCC
+oc debug -n solo-enterprise pod/solo-enterprise-telemetry-collector-0 --image=nicolaka/netshoot
+#   inside: curl -sS -m5 http://<waypoint-ip>:15020/stats/prometheus | head
+#   clone FAILS but a plain test pod works ⇒ collector labels / ambient capture
+oc get ns solo-enterprise -o jsonpath='{.metadata.labels}' | tr ',' '\n' | grep -i dataplane
+istioctl ztunnel-config workloads 2>/dev/null | grep -i telemetry-collector   # HBONE ⇒ captured
+#   fix if captured: set istio.io/dataplane-mode: none on the collector (via Solo values)
+```
+
+**D. Once metrics land in ClickHouse — confirm the data + L4/L7** (adjust table/cols to the
+schema `SHOW TABLES` reveals):
+```bash
+CH="oc -n solo-enterprise exec solo-management-clickhouse-shard0-0 -- clickhouse-client"
+$CH -q "SELECT count(), max(TimeUnix) FROM platformdb.otel_metrics_sum"
+$CH -q "SELECT DISTINCT MetricName FROM platformdb.otel_metrics_sum WHERE MetricName LIKE 'istio%'"
+# waypoint L7 present? and is the traffic actually TCP (L4)?
+$CH -q "SELECT Attributes['reporter'] r, Attributes['destination_workload'] d, count()
+        FROM platformdb.otel_metrics_sum
+        WHERE MetricName='istio_requests_total' AND TimeUnix > now()-INTERVAL 15 MINUTE
+        GROUP BY r,d ORDER BY count() DESC LIMIT 30"
+$CH -q "SELECT count() FROM platformdb.otel_metrics_sum
+        WHERE MetricName='istio_tcp_connections_opened_total' AND TimeUnix > now()-INTERVAL 15 MINUTE"
+```
+
+**E. UI-side, once data exists:** raise **Depth** past 1 Hop; confirm Cluster + Namespace +
+Workspace selected and the time window covers traffic; and **drive HTTP traffic on the real
+paths** (ingress→`testapp`, and the egress call to the external host) — the
+`blue/green→backend` demo hop exercises none of the gateways.
+
+#### What SHOULD appear (and the L4 caveat)
+
+- **Waypoint** → `WAYPOINT_PROXY_WORKLOAD` node / two-hop on the `testapp` path (L7/HTTP only).
+- **Egress external host** → `EXTERNAL_WORKLOAD` node in Traffic mode — needs a
+  **source-reported HTTP series with `destination_service`=host**. TLS-passthrough
+  (`protocol: TLS`, L4) emits only `istio_tcp_*`, so the external node may show as an IP or
+  not at all; use an **L7 egress** (`protocol: HTTP` + `DestinationRule tls.mode: SIMPLE`)
+  for a named node.
+- **L4/TCP traffic** DOES render (dashed edges, from `istio_tcp_*`), just without the L7
+  richness (HTTP rates/codes, waypoint hop, named egress). Dashed `blue→backend` = TCP.
+
+#### Quick decision table
+
+| Symptom | Where | Fix |
+|---|---|---|
+| **Waypoint / gateways / ztunnel missing from graph** | **UI** | **← THE ACTUAL FIX HERE: enable "Show Infrastructure" in graph controls. Infra nodes are hidden by default. Check this before anything below.** |
+| Live errors are `Exporting failed` / `platformdb.otel_metrics_* does not exist` | exporter | fix ClickHouse schema/auth/handshake — nothing stores until then |
+| Live errors are `Failed to scrape`, but curl to `:15020` works | receiver | scrape_timeout / body_size_limit (big payload), or collector ambient-capture |
+| `curl` works from test pod but debug-clone of collector fails | receiver | collector's labels / `istio.io/dataplane-mode` (capture) |
+| `platformdb` has istio metrics but no `reporter="waypoint"` / high TCP | data | traffic is L4 — send HTTP through the paths |
+| Data in ClickHouse but graph empty | UI | Depth > 1 Hop, Cluster+NS+Workspace filters, time window, right traffic path |
+
+</details>
+
+### Egress not routing through the gateway
+
+Both of these are silent — no error, the ServiceEntry just never binds and traffic never reaches the gateway (no logs). Both were hit in a live setup.
+
+- **`metadata.label` vs `metadata.labels`.** The `use-waypoint` binding is a Kubernetes label, so it must live under `metadata.labels` (plural). A manifest with `metadata.label:` (singular) is not a real field — the API server drops it, so the ServiceEntry ends up with no label and never binds. Check it's actually set:
+  ```bash
+  kubectl get serviceentry <name> -n istio-ns-a -o jsonpath='{.metadata.labels}'; echo   # must show istio.io/use-waypoint
+  ```
+- **Gateway `waypoint-for: service` vs `all`.** A ServiceEntry is not a Kubernetes Service, so a waypoint labeled `istio.io/waypoint-for: service` (the default) won't capture it. It must be `all`.
+  ```bash
+  kubectl get gateway <egress-gw> -n istio-ns-a -o jsonpath='{.metadata.labels}'; echo   # must show waypoint-for: all
+  ```
+
+The one command that tells you whether the binding actually took, regardless of the YAML:
+
+```bash
+istioctl ztunnel-config services -n istio-ns-a | grep -i <egress-host-or-se-name>
+# WAYPOINT column must name the egress gateway. If it's None, the binding didn't take —
+# it's one of the two above. Fix, re-check this, then look for logs.
+```
+
+### Multicluster check (split namespaces and NodePort)
+
+This cluster runs a **split install**: **istiod → `istio-system`**, **istio-cni + ztunnel →
+`kube-system`**. `istioctl multicluster check` assumes istiod and the CNI live in the **same**
+`-i`/`--istioNamespace`, so **no single `-i` value passes every check** — it will *always*
+exit non-zero (`Error: multicluster check found issues`) for this topology. **That exit code
+is not a reliable pass/fail here — read the individual check lines.**
+
+Run it twice and merge the results:
+```bash
+istioctl multicluster check --precheck -i istio-system   # ✅ istiod, License, Network, Certs
+istioctl multicluster check --precheck -i kube-system    # ✅ CNI DNS Capture (AMBIENT_DNS_CAPTURE enabled)
+```
+- With `-i istio-system` the **CNI** check false-fails (`istio-cni-config` not found — it's in kube-system).
+- With `-i kube-system` the **istiod / License / Network / Shared-Services** checks false-fail
+  (`no istiod deployment found in namespace "kube-system"`).
+- Both are namespace-lookup **artifacts, not real faults.** Confirmed-healthy real state: DNS
+  capture enabled, root cert matches across clusters, istiod/ztunnel/eastwest pods healthy.
+
+Full cross-cluster pass (runs the Peers / Stale / SA checks precheck skips) — use the istiod ns:
+```bash
+istioctl multicluster check --contexts=$C1,$C2 -i istio-system
+```
+The one **genuine** finding that appears in *both* runs is the NodePort E-W gateway (below).
+
+### Multicluster troubleshooting table
+
+| Symptom | Likely cause | Check / fix |
+|---|---|---|
+| Cross-cluster calls fail with TLS/handshake errors | **Root CA mismatch** between clusters | Compare `istio-system/cacerts` `root-cert.pem` fingerprints (above) — must be identical. Fix istio-csr/Venafi to issue from the same root. |
+| Global service has **no remote endpoints** | Namespace-sameness or label missing on the other cluster | Same `svc`+`ns` name in both; `solo.io/service-scope=global` applied in **both**; check `ztunnel-config services`/`workloads` shows remote endpoints |
+| No failover to the remote cluster | Default `PreferNetwork` keeps traffic local until local is fully unhealthy | Confirm local endpoints are actually down; or set `traffic-distribution` (e.g. `PreferClose`) |
+| `istioctl multicluster check` shows peers not linked / proxies not SYNCED | Peering not established, or E-W gateway not reachable | Re-run `multicluster link`; confirm the E-W gateway has an address and `:15008`/`:15012` are reachable **between** clusters |
+| Cross-cluster works pod-to-pod but not from ingress | HTTPRoute references the wrong host | `backendRefs.name` must be the global `<svc>.<ns>.mesh.internal`, not the local Service |
+| E-W gateway `:15008/:15012` unreachable across clusters | LoadBalancer/firewall (OpenShift + OVN-K) | Ensure the E-W gateway's LB IP is routable between clusters and no `EgressFirewall`/NetworkPolicy blocks `:15008`/`:15012` (same class as the egress §5 gotchas) |
+| E-W gateway missing from the Solo UI graph | Telemetry, not routing | See §10 appendix (mesh graph) — same collector-scrape / ClickHouse pipeline; the E-W gateway is scraped like any other proxy |
+| `multicluster check` exits `found issues` but the mesh is fine | **Split install** — istiod in `istio-system`, cni/ztunnel in `kube-system`; the tool assumes one namespace | Expected for this topology. No single `-i` passes all — run twice (`-i istio-system` and `-i kube-system`) and read the individual lines, not the exit code (see above) |
+| E-W gateway (NodePort) warns *"reporting ClusterIP — node address discovery may have failed"* | istiod couldn't resolve node addresses → advertises the non-routable **ClusterIP** to the peer instead of `NodeIP:nodePort` | For NodePort peering: grant istiod RBAC to `list/get nodes` + ensure nodes have a reachable Internal/External IP, **or** set the E-W gateway address explicitly to `NodeIP:nodePort` in the peer/link config. Verify: `kubectl --context $C2 -n istio-eastwest get gateway -o yaml \| grep -iA6 address` shows a node IP, not the ClusterIP |
+| `Network Configuration Check` ❌ — *"eastwest gateway has network X but cluster network is Y"* / *"istio proxy pod(s) with mismatched ISTIO_META_NETWORK"* | The network name isn't consistent across the cluster — a **local** component is tagged with the **peer's** network name (e.g. the local E-W gateway or a proxy pod wears the remote network). Ambient maps endpoints→gateway by network name, so a mismatch breaks cross-cluster HBONE routing. | Pick ONE canonical network name per cluster (the value on `istio-system`'s `topology.istio.io/network` label — the mesh majority). Fix only the mismatched objects, **not** the correct namespaces: `kubectl -n istio-eastwest label gateway istio-eastwest topology.istio.io/network=<local-net> --overwrite` (and fix the Helm/install `global.network` value if that's the source, else the operator reverts the label), `kubectl label ns istio-eastwest topology.istio.io/network=<local-net> --overwrite`, then `rollout restart` the E-W gateway + the mismatched proxy's owner. Find the bad pod: `kubectl get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,NET:.spec.containers[*].env[?(@.name=="ISTIO_META_NETWORK")].value' \| grep <peer-net>`. The peer's name must appear **only** on the remote network object (`istio-remote` Gateway), never on anything local. Check the peer cluster for the mirror bug. |
+
+Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
+[multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/) ·
+[flat network (advanced)](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/flat-network/) ·
+[expose apps across clusters](https://docs.solo.io/istio/1.30.x/ambient/multicluster/multi-apps/overview/) ·
+[Solo UI — global services view](https://docs.solo.io/istio/1.30.x/setup/explore/)
