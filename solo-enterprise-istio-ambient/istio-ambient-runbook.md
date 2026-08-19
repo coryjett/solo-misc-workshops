@@ -838,10 +838,21 @@ remote:
   items:
     - name: istio-remote-peer-cluster2
       cluster: cluster2
-      network: cluster2             # ← the REMOTE network name
-      addressType: IPAddress       # NodePort peering → node IP below
-      address: <cluster2-NODE-IP>:<eastwest-nodePort>
+      network: cluster2                         # ← the REMOTE network name (plain, no .local)
+      address: <cluster2-NODE-IP>               # IP ONLY — no port
+      addressType: IPAddress                    # or Hostname (multi-A DNS) for HA
+      preferredDataplaneServiceType: nodeport   # NodePort peering; resolves HBONE (15008) port automatically
+      nodeport: <cluster2-xds-nodePort>         # the peer's 15012 (xDS) nodePort — HBONE is auto-resolved
+      trustDomain: cluster2.local
 ```
+> **NodePort port handling (verified):** the `address` is an **IP only** — you cannot append a
+> port. `preferredDataplaneServiceType: nodeport` resolves the HBONE (15008) data-plane port
+> automatically; you supply only the **xDS (15012) nodeport** manually (xDS is the bootstrap
+> channel, so its port can't be auto-discovered). To clear the check's *"NodePort service
+> reporting ClusterIP"* warning, also set `peering.solo.io/preferred-data-plane-service-type:
+> NodePort` on each cluster's **own** E-W gateway — that annotation, not `remote.items`, is what
+> makes istiod advertise a NodeIP instead of the ClusterIP. (RBAC to list nodes is necessary but
+> not sufficient — with no ExternalIP, discovery needs the NodePort preference to fall through.)
 Equivalent declarative form:
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -857,7 +868,7 @@ spec:
 
 **Remote cluster `cluster2` — mirror image (swap the names):** istiod `clusterName/network:
 cluster2`; its own `eastwest.network: cluster2`; and its `remote` peer item `cluster/network:
-cluster1` with `address: <cluster1-NODE-IP>:<nodePort>`.
+cluster1`, `address: <cluster1-NODE-IP>` (IP only), `nodeport: <cluster1-xds-nodePort>`.
 
 > Gloo Operator equivalent: set `spec.cluster` + `spec.network` on the `ServiceMeshController`
 > (`operator.gloo.solo.io/v1`) to the **local** name; the `remote.items[].network` to the peer's.
@@ -1110,16 +1121,52 @@ For automated canary, **Argo Rollouts** drives these weights across the `.mesh.i
 | **C** — automated canary driving the weights | [Argo Rollouts canary](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/argo-rollouts/) | Gateway API plugin splits via HTTPRoute `backendRef` weights |
 | Force callers onto global host (`solo.io/service-takeover: true`) | [overview (takeover section)](https://docs.solo.io/istio/1.30.x/ambient/multicluster/multi-apps/overview/) | takeover label |
 
-### Verify
+### Verify peering is working (layered — cheapest to definitive)
 
+Run top-down; the first layer that fails is your break. Don't trust the `check` exit code alone
+(it's unreliable for split-namespace / NodePort — see §10); read the individual signals.
+
+**1. Control plane / link health**
 ```bash
-istioctl multicluster check --contexts=$C1,$C2          # link health
-istioctl --context $C1 proxy-status                     # all proxies SYNCED (incl. remote)
-# does the global service resolve to remote endpoints too?
-istioctl --context $C1 ztunnel-config services -n istio-ns-a | grep testapp
-istioctl --context $C1 ztunnel-config workloads | grep -E "testapp|eastwest"
-kubectl --context $C1 get gateway -n istio-eastwest      # E-W gateway Programmed
+istioctl multicluster check --contexts=$C1,$C2 -i istio-system   # runs Peers/Stale/SA (precheck skips these)
+istioctl --context $C1 proxy-status                              # remote-cluster proxies appear + SYNCED
+kubectl --context $C1 -n istio-eastwest get gateway -o wide      # Programmed=True, address = NodeIP (not ClusterIP)
 ```
+
+**2. Peer reachability (NodePort path actually open)** — both ports, from the peer side:
+```bash
+nc -vz <peer-node-ip> <hbone-nodePort>    # 15008
+nc -vz <peer-node-ip> <xds-nodePort>      # 15012
+```
+
+**3. Remote endpoints aggregated** (ambient — check ztunnel, not Endpoints):
+```bash
+istioctl --context $C1 ztunnel-config services  -n istio-ns-a | grep testapp   # endpoints span BOTH clusters
+istioctl --context $C1 ztunnel-config workloads | grep -Ei "testapp|eastwest|<peer-net>"
+```
+
+**4. Global DNS resolves** (proves DNS capture on the peered name):
+```bash
+kubectl --context $C1 exec deploy/<client> -- getent hosts testapp.istio-ns-a.mesh.internal
+```
+
+**5. THE definitive proof — remote-only cross-cluster call.** Endpoints only in `$C2`, call from `$C1`:
+```bash
+kubectl --context $C1 scale deploy/testapp --replicas=0
+kubectl --context $C1 exec deploy/<client> -- curl -s testapp.istio-ns-a.mesh.internal:8080/hostname
+# response from a $C2 pod = DNS capture + E-W gateway + double-HBONE + endpoint aggregation all working.
+# best if the app echoes cluster/pod so you SEE it came from the remote cluster. Drive HTTP (not raw TCP)
+# so you can confirm the origin and see the hop in the graph.
+```
+
+**6. Cross-cluster identity (mTLS across the E-W hop)** — apply an `AuthorizationPolicy` allowing
+only a specific SA; the allowed SPIFFE identity passes cross-cluster, others are denied.
+
+> **Cert compatibility gotcha:** a single-context `multicluster check` only prints the **local**
+> root SHA — it does **not** compare clusters. Run it with `--contexts=$C1,$C2`, or diff the roots
+> yourself: `for c in $C1 $C2; do kubectl --context $c -n istio-system get secret cacerts -o
+> jsonpath='{.data.root-cert\.pem}' | base64 -d | openssl x509 -noout -fingerprint -sha256; done`
+> — the two SHAs MUST be identical or cross-cluster mTLS fails the handshake.
 
 ## 9. Reference
 
@@ -1419,7 +1466,7 @@ The one **genuine** finding that appears in *both* runs is the NodePort E-W gate
 | E-W gateway `:15008/:15012` unreachable across clusters | LoadBalancer/firewall (OpenShift + OVN-K) | Ensure the E-W gateway's LB IP is routable between clusters and no `EgressFirewall`/NetworkPolicy blocks `:15008`/`:15012` (same class as the egress §5 gotchas) |
 | E-W gateway missing from the Solo UI graph | Telemetry, not routing | See §10 appendix (mesh graph) — same collector-scrape / ClickHouse pipeline; the E-W gateway is scraped like any other proxy |
 | `multicluster check` exits `found issues` but the mesh is fine | **Split install** — istiod in `istio-system`, cni/ztunnel in `kube-system`; the tool assumes one namespace | Expected for this topology. No single `-i` passes all — run twice (`-i istio-system` and `-i kube-system`) and read the individual lines, not the exit code (see above) |
-| E-W gateway (NodePort) warns *"reporting ClusterIP — node address discovery may have failed"* | istiod couldn't resolve node addresses → advertises the non-routable **ClusterIP** to the peer instead of `NodeIP:nodePort` | For NodePort peering: grant istiod RBAC to `list/get nodes` + ensure nodes have a reachable Internal/External IP, **or** set the E-W gateway address explicitly to `NodeIP:nodePort` in the peer/link config. Verify: `kubectl --context $C2 -n istio-eastwest get gateway -o yaml \| grep -iA6 address` shows a node IP, not the ClusterIP |
+| E-W gateway (NodePort) warns *"reporting ClusterIP — node address discovery may have failed"* | istiod is resolving the gateway to its **ClusterIP** instead of `NodeIP:nodePort`. With **no ExternalIP** on the nodes (bare metal), NodePort address discovery doesn't fall through unless it's told to prefer NodePort. RBAC to `list nodes` is necessary but **not sufficient** on its own. | Set **`peering.solo.io/preferred-data-plane-service-type: NodePort`** on each cluster's **own** E-W gateway (annotation, or Helm `dataplaneServiceTypes: nodeport`) — this is what makes istiod advertise a NodeIP. Confirm RBAC: `oc auth can-i list nodes --as=system:serviceaccount:istio-system:istiod` (want `yes`). Then verify: `kubectl -n istio-eastwest get gateway istio-eastwest -o yaml \| grep -iA6 address` shows a node IP, not the ClusterIP. Note: a NodePort Service always has a ClusterIP, so some `check` versions keep warning even when the NodeIP is correctly advertised — validate with `--contexts=$C1,$C2` + a real cross-cluster call, not the exit code. |
 | `Network Configuration Check` ❌ — *"eastwest gateway has network X but cluster network is Y"* / *"istio proxy pod(s) with mismatched ISTIO_META_NETWORK"* | The network name isn't consistent across the cluster — a **local** component is tagged with the **peer's** network name (e.g. the local E-W gateway or a proxy pod wears the remote network). Ambient maps endpoints→gateway by network name, so a mismatch breaks cross-cluster HBONE routing. | Pick ONE canonical network name per cluster (the value on `istio-system`'s `topology.istio.io/network` label — the mesh majority). Fix only the mismatched objects, **not** the correct namespaces: `kubectl -n istio-eastwest label gateway istio-eastwest topology.istio.io/network=<local-net> --overwrite` (and fix the Helm/install `global.network` value if that's the source, else the operator reverts the label), `kubectl label ns istio-eastwest topology.istio.io/network=<local-net> --overwrite`, then `rollout restart` the E-W gateway + the mismatched proxy's owner. Find the bad pod: `kubectl get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,NET:.spec.containers[*].env[?(@.name=="ISTIO_META_NETWORK")].value' \| grep <peer-net>`. The peer's name must appear **only** on the remote network object (`istio-remote` Gateway), never on anything local. Check the peer cluster for the mirror bug. |
 
 Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
