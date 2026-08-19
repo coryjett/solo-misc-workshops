@@ -1025,7 +1025,7 @@ supported HA path).
 
 **Layer 1 — data-plane HA: run the E-W gateway multi-replica with pod anti-affinity + a PDB.**
 This is the documented mechanism and the one that actually survives a node loss. NodePort is
-**cluster-wide** (every node accepts `:30575`/`:30751` and kube-proxy forwards to a live gateway
+**cluster-wide** (every node accepts `:<hbone-nodePort>`/`:<xds-nodePort>` and kube-proxy forwards to a live gateway
 pod), so with replicas spread across nodes, a dead node just means traffic routes to a replica
 elsewhere — regardless of which node IP the peer dialed.
 ```yaml
