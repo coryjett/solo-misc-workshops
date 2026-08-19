@@ -42,7 +42,7 @@ Reference material and troubleshooting are at the back (§9–10).
 - Ambient mesh installed (istiod, istio-cni, ztunnel) — Solo Enterprise for Istio.
 - `istio-ns-a` exists and is ambient-enrolled; Gateway API CRDs installed (use `HTTPRoute`, not `VirtualService`). Circuit breaking and mTLS identity still come from Istio APIs (`DestinationRule`, `AuthorizationPolicy`).
 - A waypoint (`testapp-waypoint`, gatewayClass `istio-waypoint`) and the `testapp` app with `testapp-blue` / `testapp-green` backends.
-- For multicluster (§7+): a second cluster, a shared root CA (both `istio-system/cacerts` chaining to one Venafi root — see §9), and network reachability between the east-west gateways.
+- For multicluster (§7+): a second cluster, a shared root of trust (both clusters' istio-csr issuing from the same Venafi root, so the distributed `istio-ca-root-cert` matches across clusters — see §9), and network reachability between the east-west gateways.
 
 ```bash
 NS=istio-ns-a
@@ -254,7 +254,7 @@ From inside the mesh instead of the external host, run the loop from a pod again
 
 ## 3. Circuit breaking
 
-Circuit breaking comes from a `DestinationRule` `trafficPolicy`. In ambient the connection-pool L4 limits are enforced by ztunnel, and the L7 limits plus outlier detection are enforced at the waypoint.
+Circuit breaking comes from a `DestinationRule` `trafficPolicy`. In ambient, **all of it is enforced at the waypoint** — the connection-pool limits (including tcp `maxConnections`), the http limits, and outlier detection. ztunnel does not read `DestinationRule`, so a Service with no waypoint gets no circuit-breaking enforcement at all.
 
 Target the backend Services (`testapp-blue`, `testapp-green`), not the fronted `testapp` Service. At the waypoint the weighted split resolves to per-version upstream clusters, and the connection-pool and outlier settings attach to those clusters. A DestinationRule on `testapp` alone does not land on the blue/green clusters.
 
@@ -269,7 +269,7 @@ spec:
   trafficPolicy:
     connectionPool:
       tcp:
-        maxConnections: 100          # L4, ztunnel
+        maxConnections: 100          # tcp connection-pool limit — waypoint
       http:
         http1MaxPendingRequests: 50  # L7, waypoint
         http2MaxRequests: 100
@@ -289,7 +289,7 @@ istioctl proxy-config clusters ${PROXY#pod/} -n $NS --fqdn testapp-blue.istio-ns
 # thresholds show maxConnections / maxPendingRequests; outlierDetection shows consecutive5xx etc.
 ```
 
-Note: outlier detection and http limits only apply where a waypoint sees the L7 traffic. A Service with no waypoint gets the tcp connection limit at ztunnel and nothing more.
+Note: circuit breaking is a waypoint feature — connection-pool limits, http limits, and outlier detection all require a waypoint. A Service with no waypoint gets **no** circuit-breaking or connection-pool enforcement at all. (ztunnel still does L4 identity/port authorization, but it doesn't read `DestinationRule`.)
 
 You need one DestinationRule per backend Service here (`testapp-blue`, `testapp-green`), not one. A single DestinationRule on `host: testapp` with `subsets` for blue and green does not work with this setup, and it fails silently. The HTTPRoute routes to the `testapp-blue` / `testapp-green` Services, so the waypoint's upstream clusters are keyed by those service FQDNs with no subset. A subset DestinationRule instead programs `testapp|blue` / `testapp|green` subset clusters, which nothing routes to (Gateway API HTTPRoute cannot target a subset). Verified on a waypoint: with a subset DR applied, the `testapp-blue` and `testapp-green` service clusters showed no `outlierDetection` at all, while the config sat on orphaned subset clusters. A wildcard host (`*.istio-ns-a.svc.cluster.local`) does not work either; it draws an `IST0174` warning and applies inconsistently.
 
@@ -756,13 +756,16 @@ call the kube contexts `$C1` and `$C2`). Cross-cluster traffic stays mTLS end-to
 target ztunnel → pod.
 
 **Model (Solo Enterprise for Istio):**
-- **One E-W gateway per cluster**, GatewayClass **`istio-remote`**, in namespace
+- **One E-W gateway per cluster**, GatewayClass **`istio-eastwest`**, in namespace
   **`istio-eastwest`**, listening on **`:15008`** (HBONE cross-network) and **`:15012`**
-  (xDS TLS). The E-W gateway is itself a ztunnel.
-- **Shared root of trust** — every cluster's `istio-system/cacerts` secret must chain to the
-  **same root** (`root-cert.pem` identical). With your cert-manager + Venafi `istio-csr`
-  setup (see §9, Certificates), point both clusters' istio-csr at the **same Venafi root** or
-  cross-cluster mTLS will fail the TLS handshake.
+  (xDS TLS). The E-W gateway is implemented as a ztunnel. (The **`istio-remote`** class is used
+  only for the *remote-peer* Gateway object that represents the other cluster — see the remote
+  block under Set up.)
+- **Shared root of trust** — both clusters' `istio-csr` must issue from the **same Venafi root**,
+  so the trust bundle every workload receives (the `istio-ca-root-cert` ConfigMap) is identical
+  across clusters. With this cert-manager + Venafi `istio-csr` setup (see §9, Certificates), point
+  both clusters' istio-csr at the same Venafi root or cross-cluster mTLS fails the TLS handshake.
+  (A plain istiod-CA install would instead share the root via the `istio-system/cacerts` secret.)
 - **Cluster + network identity** — each cluster sets `global.multiCluster.clusterName` +
   `global.network` (istiod) and the matching `multiCluster.clusterName` / `network` on
   ztunnel; the `istio-system` ns carries `topology.istio.io/network=<net>`.
@@ -782,12 +785,13 @@ C1=admin@cluster1        # existing cluster
 C2=<second-cluster-context>
 
 # 0) Prereq: both clusters ambient-installed with a clusterName + network, and the SAME
-#    root CA (istio-system/cacerts chaining to one Venafi root). Verify roots match:
-for c in $C1 $C2; do kubectl --context $c -n istio-system get secret cacerts \
-  -o jsonpath='{.data.root-cert\.pem}' | base64 -d | openssl x509 -noout -fingerprint -sha256; done
-# the two fingerprints MUST be identical.
+#    root of trust (both istio-csr agents issuing from one Venafi root). Verify roots match
+#    via the trust bundle every workload gets (istio-ca-root-cert), not cacerts (istio-csr install):
+for c in $C1 $C2; do kubectl --context $c -n istio-ns-a get configmap istio-ca-root-cert \
+  -o jsonpath='{.data.root-cert\.pem}' | openssl x509 -noout -fingerprint -sha256; done
+# the two fingerprints MUST be identical.  (Plain istiod-CA install: compare istio-system/cacerts instead.)
 
-# 1) Create the E-W gateway in each cluster (istio-remote class, istio-eastwest ns)
+# 1) Create the E-W gateway in each cluster (GatewayClass istio-eastwest, ns istio-eastwest)
 istioctl --context=$C1 multicluster expose --namespace istio-eastwest
 istioctl --context=$C2 multicluster expose --namespace istio-eastwest
 
@@ -1164,8 +1168,9 @@ only a specific SA; the allowed SPIFFE identity passes cross-cluster, others are
 
 > **Cert compatibility gotcha:** a single-context `multicluster check` only prints the **local**
 > root SHA — it does **not** compare clusters. Run it with `--contexts=$C1,$C2`, or diff the roots
-> yourself: `for c in $C1 $C2; do kubectl --context $c -n istio-system get secret cacerts -o
-> jsonpath='{.data.root-cert\.pem}' | base64 -d | openssl x509 -noout -fingerprint -sha256; done`
+> yourself: `for c in $C1 $C2; do kubectl --context $c -n istio-ns-a get configmap istio-ca-root-cert -o
+> jsonpath='{.data.root-cert\.pem}' | openssl x509 -noout -fingerprint -sha256; done` (the distributed
+> trust bundle under istio-csr; plain istiod-CA installs compare `istio-system/cacerts`)
 > — the two SHAs MUST be identical or cross-cluster mTLS fails the handshake.
 
 ## 9. Reference
@@ -1175,7 +1180,7 @@ only a specific SA; the allowed SPIFFE identity passes cross-cluster, others are
 1. One routing API per service. HTTPRoute or VirtualService, not both.
 2. Only the fronted Service (`testapp`) is waypoint-fronted, never the per-version targets.
 3. Mesh capture is set on the Deployment or namespace, the waypoint on the Service. Two labels, two places.
-4. L4 (identity, ports, tcp connections) is enforced at ztunnel; L7 (methods, paths, http limits, outlier detection) at the waypoint.
+4. L4 identity/port authorization is enforced at ztunnel; L7 (methods, paths, http limits) plus all circuit-breaking / connection-pool limits and outlier detection are enforced at the waypoint. ztunnel does not read `DestinationRule`.
 5. Authorization is allow-by-default until the first ALLOW policy selects a workload, then deny-by-default for it. Get the SPIFFE principals exact.
 6. `Accepted=True` doesn't mean enforced. Confirm in the proxy with `istioctl proxy-config`.
 
@@ -1212,10 +1217,13 @@ Verify the chain end to end:
 kubectl get clusterissuer venafi-issuer -o wide                       # Ready=True
 kubectl get pods -n cert-manager -l app.kubernetes.io/name=cert-manager-istio-csr
 kubectl get certificaterequest -A --sort-by=.metadata.creationTimestamp | tail   # signed, not Pending
-# confirm a workload cert chains to Venafi, not istiod
-istioctl proxy-config secret -n istio-ns-a deploy/testapp-blue -o json \
-  | jq -r '.dynamicActiveSecrets[]?.secret.tlsCertificate.certificateChain.inlineBytes' \
-  | base64 -d | openssl x509 -noout -issuer -dates
+# ambient: the workload SVID is held by ztunnel (no per-pod Envoy) — use ztunnel-config, NOT proxy-config
+ZT=$(kubectl get pod -n kube-system -l app=ztunnel -o name | head -1)   # ztunnel ns (split install)
+istioctl ztunnel-config certificate ${ZT#pod/} -n kube-system          # workload SPIFFE identities + validity
+# confirm the chain is Venafi's (not istiod self-signed): the signed CertificateRequests above prove issuance;
+# the trust root every workload receives:
+kubectl get configmap istio-ca-root-cert -n istio-ns-a -o jsonpath='{.data.root-cert\.pem}' \
+  | openssl x509 -noout -issuer -dates
 ```
 
 Docs:
@@ -1458,7 +1466,7 @@ The one **genuine** finding that appears in *both* runs is the NodePort E-W gate
 
 | Symptom | Likely cause | Check / fix |
 |---|---|---|
-| Cross-cluster calls fail with TLS/handshake errors | **Root CA mismatch** between clusters | Compare `istio-system/cacerts` `root-cert.pem` fingerprints (above) — must be identical. Fix istio-csr/Venafi to issue from the same root. |
+| Cross-cluster calls fail with TLS/handshake errors | **Root CA mismatch** between clusters | Compare the distributed trust root each cluster gives workloads: `kubectl get configmap istio-ca-root-cert -o jsonpath='{.data.root-cert\.pem}'` — must be identical across clusters. Fix istio-csr/Venafi to issue from the same root. (Plain istiod-CA installs: compare `istio-system/cacerts` instead.) |
 | Global service has **no remote endpoints** | Namespace-sameness or label missing on the other cluster | Same `svc`+`ns` name in both; `solo.io/service-scope=global` applied in **both**; check `ztunnel-config services`/`workloads` shows remote endpoints |
 | No failover to the remote cluster | Default `PreferNetwork` keeps traffic local until local is fully unhealthy | Confirm local endpoints are actually down; or set `traffic-distribution` (e.g. `PreferClose`) |
 | `istioctl multicluster check` shows peers not linked / proxies not SYNCED | Peering not established, or E-W gateway not reachable | Re-run `multicluster link`; confirm the E-W gateway has an address and `:15008`/`:15012` are reachable **between** clusters |
