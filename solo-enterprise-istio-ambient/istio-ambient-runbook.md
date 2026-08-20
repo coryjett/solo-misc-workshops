@@ -1261,6 +1261,7 @@ This is the Istio **plug-in CA** model — the `istio-system/cacerts` secret in 
 ```bash
 # root-cert.pem = the ONE common root; ca-cert.pem/ca-key.pem = THIS cluster's intermediate.
 cat cluster1/ca-cert.pem common/root-cert.pem > cluster1/cert-chain.pem     # chain = intermediate + root
+#   (multi-level PKI: cert-chain.pem = every intermediate in order, then the root)
 
 kubectl --context $C1 create namespace istio-system 2>/dev/null || true
 kubectl --context $C1 -n istio-system create secret generic cacerts \
@@ -1322,6 +1323,11 @@ istioctl multicluster check --contexts=$C1,$C2 -i istio-system   # Intermediate 
 **Also confirm trust domains match** — a shared root is necessary but not sufficient; cross-cluster
 identity also needs the same SPIFFE `trustDomain` (default `cluster.local`) on both clusters, or
 explicit trust-domain federation. Mismatched trust domains fail mTLS even with an identical root.
+
+Docs: [Istio plug-in CA certs](https://istio.io/latest/docs/tasks/security/cert-management/plugin-ca-cert/) ·
+[Solo — Istio certificate management](https://docs.solo.io/istio/1.30.x/sidecar/security/certs-ov/) ·
+[Istio cert rotation (avoid mTLS outage)](https://istio.io/latest/docs/tasks/security/cert-management/plugin-ca-cert/#configure-and-check-the-cluster).
+Verified 2026-08-20 against Istio + Solo docs.
 
 ## 10. Troubleshooting (appendix)
 
