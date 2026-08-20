@@ -24,6 +24,7 @@ Everything routes through Gateway API. Use `HTTPRoute`, not `VirtualService`. Ci
 
 *Reference & troubleshooting*
 - [9. Reference: rules of thumb + certificates](#9-reference)
+    - [Shared root of trust across clusters (one root → per-cluster intermediate)](#shared-root-of-trust-across-clusters-one-root--per-cluster-intermediate)
 - [10. Troubleshooting (appendix)](#10-troubleshooting-appendix)
     - [Mesh graph nodes not appearing](#mesh-graph-nodes-not-appearing)
     - [Egress not routing through the gateway](#egress-not-routing-through-the-gateway)
@@ -1235,6 +1236,92 @@ Docs:
 - Issuer vs ClusterIssuer: https://cert-manager.io/docs/configuration/
 
 Note: cert-manager's newer docs label Venafi as "CyberArk," but the API field is still `spec.venafi`.
+
+### Shared root of trust across clusters (one root → per-cluster intermediate)
+
+Prerequisite for multicluster mTLS (§7): both clusters must chain to the **same root**. Common
+setup — a single offline **root CA**, and a **distinct intermediate CA per cluster** signed by that
+root. Each cluster's istiod signs workload certs from its **own** intermediate; because both
+intermediates chain to the one root, cross-cluster (double-HBONE) mTLS trusts end to end.
+
+This is the Istio **plug-in CA** model — the `istio-system/cacerts` secret in each cluster, four files:
+
+| file | contents | same on both clusters? |
+|---|---|---|
+| `root-cert.pem` | the **common root** cert | **YES — identical** |
+| `ca-cert.pem` | THIS cluster's **intermediate** cert | no — one per cluster |
+| `ca-key.pem` | THIS cluster's intermediate **private key** | no |
+| `cert-chain.pem` | `ca-cert.pem` + `root-cert.pem` (this cluster's chain to root) | no |
+
+> With **istio-csr** (the Venafi setup above) the same idea applies — the per-cluster intermediate
+> becomes the cert-manager **CA/Issuer** in that cluster; both issue from the one root. The
+> `cacerts` layout below is the plug-in-CA form; verification (roots identical) is the same either way.
+
+**Set up (per cluster) — the intermediate must come first, before istiod issues any certs:**
+```bash
+# root-cert.pem = the ONE common root; ca-cert.pem/ca-key.pem = THIS cluster's intermediate.
+cat cluster1/ca-cert.pem common/root-cert.pem > cluster1/cert-chain.pem     # chain = intermediate + root
+
+kubectl --context $C1 create namespace istio-system 2>/dev/null || true
+kubectl --context $C1 -n istio-system create secret generic cacerts \
+  --from-file=root-cert.pem=common/root-cert.pem \
+  --from-file=ca-cert.pem=cluster1/ca-cert.pem \
+  --from-file=ca-key.pem=cluster1/ca-key.pem \
+  --from-file=cert-chain.pem=cluster1/cert-chain.pem
+# repeat on $C2 with cluster2's intermediate + THE SAME common/root-cert.pem
+
+# roll the CA consumers so they pick up cacerts (ambient: istiod + ztunnel + waypoints)
+kubectl --context $C1 -n istio-system rollout restart deploy/istiod
+kubectl --context $C1 -n kube-system  rollout restart daemonset/ztunnel   # ztunnel ns (split install)
+```
+> **Live cluster caveat:** if istiod already issued certs from a *different* root, don't hot-swap —
+> add the new root to the workload **trust bundle first** (both roots trusted), roll workloads, then
+> switch signing. See Istio "plug-in CA / cert rotation" to avoid an mTLS outage.
+
+**Verify the two clusters share a common root — run all four:**
+
+1) **Roots identical across clusters** (the decisive check — all fingerprints must match):
+```bash
+for c in $C1 $C2; do
+  echo -n "$c cacerts root      : "; kubectl --context $c -n istio-system get secret cacerts \
+    -o jsonpath='{.data.root-cert\.pem}' | base64 -d | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//'
+  echo -n "$c distributed root  : "; kubectl --context $c -n istio-ns-a get configmap istio-ca-root-cert \
+    -o jsonpath='{.data.root-cert\.pem}' | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//'
+done
+# all four SHA-256s MUST be equal → that is the common root.
+```
+
+2) **Intermediates differ but each chains to the common root:**
+```bash
+for c in $C1 $C2; do
+  echo "== $c intermediate =="
+  kubectl --context $c -n istio-system get secret cacerts -o jsonpath='{.data.ca-cert\.pem}' \
+    | base64 -d | openssl x509 -noout -subject -issuer
+done
+# subjects differ (per-cluster); ISSUER is the common root on both.
+# prove the chain validates to the root:
+kubectl --context $C1 -n istio-system get secret cacerts -o jsonpath='{.data.root-cert\.pem}'  | base64 -d > /tmp/root.pem
+kubectl --context $C1 -n istio-system get secret cacerts -o jsonpath='{.data.ca-cert\.pem}'    | base64 -d > /tmp/c1-int.pem
+openssl verify -CAfile /tmp/root.pem /tmp/c1-int.pem     # → /tmp/c1-int.pem: OK   (repeat for $C2)
+```
+
+3) **A live workload cert chains to the common root** (ambient → ztunnel holds the SVID):
+```bash
+ZT=$(kubectl --context $C1 get pod -n kube-system -l app=ztunnel -o name | head -1)
+istioctl --context $C1 ztunnel-config certificate ${ZT#pod/} -n kube-system -o json \
+  | jq -r '.certificates[0].certChain[-1]' | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//'
+# last cert in the chain = the root; its fingerprint must equal the common root from step 1.
+```
+
+4) **`multicluster check` agrees + a real cross-cluster call succeeds:**
+```bash
+istioctl multicluster check --contexts=$C1,$C2 -i istio-system   # Intermediate Certs Compatibility Check ✓
+# then the definitive proof — remote-only cross-cluster curl from §8.
+```
+
+**Also confirm trust domains match** — a shared root is necessary but not sufficient; cross-cluster
+identity also needs the same SPIFFE `trustDomain` (default `cluster.local`) on both clusters, or
+explicit trust-domain federation. Mismatched trust domains fail mTLS even with an identical root.
 
 ## 10. Troubleshooting (appendix)
 
