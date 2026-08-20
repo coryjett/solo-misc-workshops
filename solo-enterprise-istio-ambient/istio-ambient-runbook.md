@@ -787,20 +787,47 @@ C1=admin@cluster1        # existing cluster
 C2=<second-cluster-context>
 
 # 0) Prereq: both clusters ambient-installed with a clusterName + network, and the SAME
-#    root of trust (plug-in CA: one OpenSSL root, per-cluster intermediate in cacerts — §9).
-#    Verify BOTH the CA source and the distributed trust bundle match across clusters:
+#    root of trust. GENERATE the root + per-cluster intermediates and load cacerts FIRST —
+#    the OpenSSL commands are in §9 "Shared root of trust across clusters" (root, intermediates,
+#    cert-chain, kubectl create secret cacerts). Then verify BOTH the CA source and the
+#    distributed trust bundle match across clusters:
 for c in $C1 $C2; do kubectl --context $c -n istio-system get secret cacerts \
   -o jsonpath='{.data.root-cert\.pem}' | base64 -d | openssl x509 -noout -fingerprint -sha256; done
 for c in $C1 $C2; do kubectl --context $c -n istio-ns-a get configmap istio-ca-root-cert \
   -o jsonpath='{.data.root-cert\.pem}' | openssl x509 -noout -fingerprint -sha256; done
 # ALL four fingerprints MUST be identical.
 
-# 1) Create the E-W gateway in each cluster (GatewayClass istio-eastwest, ns istio-eastwest)
-istioctl --context=$C1 multicluster expose --namespace istio-eastwest
-istioctl --context=$C2 multicluster expose --namespace istio-eastwest
+# 1) Create the E-W gateway in each cluster (GatewayClass istio-eastwest, ns istio-eastwest).
+#    DECLARATIVE (this engagement applies YAML directly — GitOps), per cluster:
+cat <<'EOF' | kubectl --context=$C1 apply -f -    # repeat on $C2 with network: cluster2
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: istio-eastwest
+  namespace: istio-eastwest
+  labels:
+    topology.istio.io/network: cluster1                              # LOCAL network name
+  annotations:
+    peering.solo.io/preferred-data-plane-service-type: NodePort     # NodePort peering (drop for LB)
+spec:
+  gatewayClassName: istio-eastwest
+  listeners:
+  - name: cross-network
+    port: 15008
+    protocol: HBONE
+  - name: xds-tls
+    port: 15012
+    protocol: TLS
+    tls:
+      mode: Passthrough
+EOF
+#    (istioctl equivalent, useful to GENERATE the YAML once for Git: 
+#     istioctl multicluster expose -n istio-eastwest --generate > eastwest-gateway.yaml)
 
-# 2) Link the control planes (bidirectional peering)
-istioctl multicluster link --contexts=$C1,$C2 -n istio-eastwest
+# 2) Link the clusters — apply the REMOTE-PEER Gateway (GatewayClass istio-remote) on each side.
+#    Full YAML + the remote.items Helm form are in "Network names in the values files" below —
+#    peer's network label, address (IP only), and xDS nodePort.
+#    (istioctl equivalent/generator: istioctl multicluster link --contexts=$C1,$C2 -n istio-eastwest)
 
 # 3) Verify the link
 istioctl multicluster check --contexts=$C1,$C2
