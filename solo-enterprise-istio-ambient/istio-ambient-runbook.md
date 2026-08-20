@@ -30,6 +30,7 @@ Everything routes through Gateway API. Use `HTTPRoute`, not `VirtualService`. Ci
     - [Egress not routing through the gateway](#egress-not-routing-through-the-gateway)
     - [Multicluster check (split namespaces and NodePort)](#multicluster-check-split-namespaces-and-nodeport)
     - [Multicluster troubleshooting table](#multicluster-troubleshooting-table)
+    - [Next session: restore PeerAuthentication + fix ingress path](#next-session-restore-peerauthentication--fix-ingress-path)
 
 ## 0. Overview, prerequisites & build order
 
@@ -54,7 +55,8 @@ NS=istio-ns-a
 Characteristics of the target environment that shape the choices in this runbook (kept generic — no customer identifiers):
 
 - **Platform:** OpenShift on bare metal, **OVN-Kubernetes** CNI (enforces `NetworkPolicy`; `EgressFirewall` / `AdminNetworkPolicy` available). No cloud LoadBalancer by default — confirm whether **MetalLB** is available before choosing LoadBalancer vs NodePort.
-- **Ambient install topology: SPLIT** — **istiod in `istio-system`**, **istio-cni + ztunnel in `kube-system`**. This is why `istioctl multicluster check -i <ns>` can't pass every check in one run (see §10, multicluster check).
+- **Ambient install topology: SPLIT** — **istiod in `istio-system`**, **istio-cni + ztunnel in `kube-system`** (⚠️ the ztunnel namespace **differs per cluster** in this engagement — one cluster runs it in `istio-system`; check with `oc get ds -A | grep ztunnel`). istiod must be told where via **`trustedZtunnelNamespace`** or ztunnel cert requests fail with "impersonation failed" (§10). The split is also why `istioctl multicluster check -i <ns>` can't pass every check in one run (see §10, multicluster check).
+- **Trust domain: COMMON `cluster.local` on both clusters** (decided 2026-08-20; no aliases). Distinct per-cluster domains were tried first and failed peering with `no cert pool found for trust domain <peer>` — see the §7 trust-domain note for the options and trade-offs.
 - **Certificates:** currently the Istio **plug-in CA** — an **OpenSSL-generated root** + a **per-cluster intermediate** loaded via `istio-system/cacerts`; istiod signs workload SVIDs from the intermediate. Multicluster requires both clusters to chain to the **same root** (see §9 "Shared root of trust"). **Venafi via cert-manager `istio-csr` is planned, not yet in use** (§9 keeps that design for later).
 - **Multicluster peering: NodePort** (not LoadBalancer). E-W gateway ports `15008` (HBONE) / `15012` (xDS) are remapped to nodePorts; nodes carry an **InternalIP only** (no ExternalIP). Consequences captured in §7: set `preferred-data-plane-service-type: NodePort` on each local gateway; `remote.items` uses the peer node IP + the peer's **xDS nodePort**; HA via multi-replica anti-affinity + a VIP or Hostname multi-A record.
 - **Network naming:** one network name per cluster — keep **local** and **peer** names distinct. A local object wearing the peer's name breaks cross-cluster routing (see §7 build + §10 troubleshooting).
@@ -849,7 +851,7 @@ global:
   multiCluster:
     clusterName: cluster1
   network: cluster1            # ← THIS cluster's network
-  trustDomain: cluster1.local
+  trustDomain: cluster.local   # ← COMMON across BOTH clusters (see trust-domain note below)
 platforms:
   peering:
     enabled: true
@@ -878,7 +880,7 @@ remote:
       addressType: IPAddress                    # or Hostname (multi-A DNS) for HA
       preferredDataplaneServiceType: nodeport   # NodePort peering; resolves HBONE (15008) port automatically
       nodeport: <cluster2-xds-nodePort>         # the peer's 15012 (xDS) nodePort — HBONE is auto-resolved
-      trustDomain: cluster2.local
+      trustDomain: cluster.local                # must equal the PEER'S ACTUAL meshConfig trustDomain
 ```
 > **NodePort port handling (verified):** the `address` is an **IP only** — you cannot append a
 > port. `preferredDataplaneServiceType: nodeport` resolves the HBONE (15008) data-plane port
@@ -911,6 +913,38 @@ cluster1`, `address: <cluster1-NODE-IP>` (IP only), `nodeport: <cluster1-xds-nod
 The bug we hit: the local E-W gateway had `network: cluster2` (the remote's name). Set
 `eastwest.network: cluster1` and re-apply — if only the label is patched, the operator
 reverts it; the **values file** is the source of truth.
+
+#### Trust domain: decide COMMON vs DISTINCT before peering
+
+istiod only auto-builds trust anchors for its **own** trust domain. With **distinct** per-cluster
+domains (`cluster1.local` / `cluster2.local`), peering fails at the xDS TLS handshake even when
+the root CA matches perfectly — istiod logs `Could not verify certificate: no cert pool found
+for trust domain <peer>` plus `deltaadsc ... remote error: tls: bad certificate` on a 1-minute
+retry loop. Options:
+
+| Option | Config | Trade-off |
+|---|---|---|
+| **COMMON domain (chosen here)** — `trustDomain: cluster.local` on both | Same value in both istiod values + both peer objects' `trustDomain`; then FULL restart (istiod → ztunnel → E-W gw → waypoints/ingress) on both clusters, since every identity is re-issued | Simplest; existing `cluster.local/...` authz principals keep working. Identities no longer encode origin cluster — "allow only from cluster X" can't be expressed by principal |
+| **DISTINCT domains** + `meshConfig.caCertificates` | Keep per-cluster domains; on each cluster add `caCertificates: [{pem: <common root>, trustDomains: [<peer-domain>]}]` + istiod restart only | Keeps per-cluster identity for authz/audit; a little more config; no workload re-issuance |
+| `trustDomainAliases` | Alias the peer's domain | Quick, but merges the domains for validation — POC-only |
+| `PILOT_SKIP_VALIDATE_TRUST_DOMAIN=true` | istiod env | Disables validation entirely — avoid |
+
+**Common-domain cutover (no aliases):** flip `trustDomain` in both istiod values + both peer
+objects → `grep -rn "<old-domain>"` across all values/YAML (authz principals too!) → restart
+istiod, then ztunnel, then E-W gateway, then `oc rollout restart deploy -n <app-ns>` for
+waypoints/ingress/egress — **both clusters in the same window**. Mid-roll, `no cert pool` /
+`bad certificate` errors are expected until everything on both sides is re-issued.
+
+#### `trustedZtunnelNamespace` — required when ztunnel isn't where istiod expects
+
+If ztunnel runs in a nonstandard namespace (split installs; can **differ per cluster**), istiod
+rejects its cert requests: `serverca ... impersonation failed for identity spiffe://... caller
+(Pod{Name: ztunnel-..., ServiceAccount: ztunnel}) is not allowed to impersonate`. Fix — in each
+cluster's **istiod values**, set it to wherever THAT cluster's ztunnel actually runs:
+```yaml
+trustedZtunnelNamespace: "istio-system"    # check first: oc get ds -A | grep ztunnel
+```
+Then restart istiod, then ztunnel.
 
 #### East-west gateway high availability (surviving a node failure)
 
@@ -1179,6 +1213,9 @@ nc -vz <peer-node-ip> <xds-nodePort>      # 15012
 istioctl --context $C1 ztunnel-config services  -n istio-ns-a | grep testapp   # endpoints span BOTH clusters
 istioctl --context $C1 ztunnel-config workloads | grep -Ei "testapp|eastwest|<peer-net>"
 ```
+**Healthy NodePort-peering output looks like** (in `ztunnel-config workloads`):
+- `NetworkGateway/<peer-net>/node.istio-eastwest.<peer>.mesh.internal/15008` — the peer network registered with its node-hostname gateway
+- `autogen.node.<peer>.<node-name>...` rows with **peer node IPs** — node discovery auto-registers ALL the peer's nodes as gateway endpoints (more than the single configured address → built-in node-level HA)
 
 **4. Global DNS resolves** (proves DNS capture on the peered name):
 ```bash
@@ -1632,6 +1669,37 @@ The one **genuine** finding that appears in *both* runs is the NodePort E-W gate
 | `multicluster check` exits `found issues` but the mesh is fine | **Split install** — istiod in `istio-system`, cni/ztunnel in `kube-system`; the tool assumes one namespace | Expected for this topology. No single `-i` passes all — run twice (`-i istio-system` and `-i kube-system`) and read the individual lines, not the exit code (see above) |
 | E-W gateway (NodePort) warns *"reporting ClusterIP — node address discovery may have failed"* | istiod is resolving the gateway to its **ClusterIP** instead of `NodeIP:nodePort`. With **no ExternalIP** on the nodes (bare metal), NodePort address discovery doesn't fall through unless it's told to prefer NodePort. RBAC to `list nodes` is necessary but **not sufficient** on its own. | Set **`peering.solo.io/preferred-data-plane-service-type: NodePort`** on each cluster's **own** E-W gateway (annotation, or Helm `dataplaneServiceTypes: nodeport`) — this is what makes istiod advertise a NodeIP. Confirm RBAC: `oc auth can-i list nodes --as=system:serviceaccount:istio-system:istiod` (want `yes`). Then verify: `kubectl -n istio-eastwest get gateway istio-eastwest -o yaml \| grep -iA6 address` shows a node IP, not the ClusterIP. Note: a NodePort Service always has a ClusterIP, so some `check` versions keep warning even when the NodeIP is correctly advertised — validate with `--contexts=$C1,$C2` + a real cross-cluster call, not the exit code. |
 | `Network Configuration Check` ❌ — *"eastwest gateway has network X but cluster network is Y"* / *"istio proxy pod(s) with mismatched ISTIO_META_NETWORK"* | The network name isn't consistent across the cluster — a **local** component is tagged with the **peer's** network name (e.g. the local E-W gateway or a proxy pod wears the remote network). Ambient maps endpoints→gateway by network name, so a mismatch breaks cross-cluster HBONE routing. | Pick ONE canonical network name per cluster (the value on `istio-system`'s `topology.istio.io/network` label — the mesh majority). Fix only the mismatched objects, **not** the correct namespaces: `kubectl -n istio-eastwest label gateway istio-eastwest topology.istio.io/network=<local-net> --overwrite` (and fix the Helm/install `global.network` value if that's the source, else the operator reverts the label), `kubectl label ns istio-eastwest topology.istio.io/network=<local-net> --overwrite`, then `rollout restart` the E-W gateway + the mismatched proxy's owner. Find the bad pod: `kubectl get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,NET:.spec.containers[*].env[?(@.name=="ISTIO_META_NETWORK")].value' \| grep <peer-net>`. The peer's name must appear **only** on the remote network object (`istio-remote` Gateway), never on anything local. Check the peer cluster for the mirror bug. |
+| Peering stream flaps 60s: `deltaadsc disconnected … remote error: tls: bad certificate` + istiod info `Could not verify certificate: no cert pool found for trust domain <peer>` | **Trust-domain trust anchors missing** — distinct per-cluster trustDomains, and istiod has no cert pool for the peer's domain. Root fingerprints can all match and this still fails. | Either add `meshConfig.caCertificates` with the common root + `trustDomains: [<peer>]` (keeps distinct domains), or move both clusters to a **common trustDomain** — see the §7 trust-domain note. Restart istiod (+ full re-roll for a domain change). |
+| istiod: `serverca … impersonation failed for identity spiffe://… caller (Pod{ztunnel-…, ServiceAccount: ztunnel}) is not allowed to impersonate` | ztunnel runs in a namespace istiod doesn't trust for node-delegated cert requests (split installs; ns can differ per cluster) | Set **`trustedZtunnelNamespace: "<ns where ztunnel runs>"`** in that cluster's istiod values (`oc get ds -A \| grep ztunnel` to confirm), restart istiod then ztunnel — §7 note |
+| istiod controller retry loop: `failed to apply required labels on node WE …; either no SE found or SE missing required labels; ignore if nodeport peering is not enabled` | The peer item lacks the NodePort fields, so the SE representing the peer's E-W gateway in nodeport mode was never generated | Ensure that side's `remote.items` has `preferredDataplaneServiceType: nodeport` **and** `nodeport: <peer's 15012 nodePort>`. Healthy end-state = `NetworkGateway/<peer>` + `autogen.node.<peer>…` rows in `ztunnel-config workloads` (§8) |
+| External curl → `SSL_ERROR_ZERO_RETURN`; ztunnel access log: `connection closed due to policy rejection: explicitly denied by: istio-system/istio_converted_static_strict` | An **unmeshed caller in plaintext** hit a workload under **STRICT `PeerAuthentication`** — e.g. an OpenShift Route pointing **directly at the app Service** (router → pod bypasses the mesh's ingress gateway) | Point the Route at the **meshed ingress gateway** (passthrough) so the caller into the workload is the in-mesh gateway; keep STRICT. Check `oc get pa -A` for the enforcing policies. Deleting/PERMISSIVE-ing the PA "fixes" the curl but drops the zero-trust posture — temporary debugging move only |
+
+### Next session: restore PeerAuthentication + fix ingress path
+
+State as of 2026-08-20 end of day — multicluster peering is UP (common `cluster.local` trust
+domain, `trustedZtunnelNamespace` set, NodePort node-discovery populating `NetworkGateway` +
+`autogen.node` entries). Two workload **STRICT `PeerAuthentication`s (`testapp`, `backend`) were
+DELETED** as a debugging step (backed up to `bup.yaml` on the jump host) because an OpenShift
+Route pointing directly at the `testapp` Service let the unmeshed router hit the pod in
+plaintext → STRICT rejected it → external curl returned `SSL_ERROR_ZERO_RETURN`.
+
+**Start here, in order:**
+1. **Fix the ingress path** so north-south enters through the mesh:
+   - Route must target the **ingress gateway** (passthrough), not the app Service; stop using /
+     delete the direct-to-service Route (`oc -n istio-ns-a get route -o custom-columns='HOST:.spec.host,TO:.spec.to.name,TLS:.spec.tls.termination'`).
+   - Fix the ingress Gateway's HTTPS listener — it currently has **no HTTPRoute attached**
+     (istiod warn: `…with no vhosts; Setting up a default 404 vhost`). Check
+     `attachedRoutes:` in the Gateway status + the HTTPRoute's `Accepted`/`ResolvedRefs` reasons.
+   - Curl through the gateway Route → expect the app response (not 404, not SSL errors).
+2. **Restore STRICT:** `oc apply -f bup.yaml` (the saved PeerAuthentications) → re-curl through
+   the gateway (must still work — the gateway is meshed) → confirm the direct path is now
+   properly refused.
+3. **Finish peering validation:** mirror `ztunnel-config workloads` check on the second cluster
+   (`NetworkGateway`/`autogen.node` rows) → label `testapp` global on BOTH → the remote-only
+   cross-cluster curl (§8 step 5).
+4. **Sweep for leftovers:** `grep -rn "<old-per-cluster-domains>"` across values/YAML + authz
+   principals; confirm zero `bad certificate` / `no cert pool` / `impersonation failed` in
+   istiod logs on both clusters.
 
 Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
 [multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/) ·
