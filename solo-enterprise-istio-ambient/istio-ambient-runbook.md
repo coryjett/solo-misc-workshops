@@ -1252,24 +1252,29 @@ cluster** signed by that root. Each cluster's istiod signs workload certs from i
 intermediate; because both intermediates chain to the one root, cross-cluster (double-HBONE)
 mTLS trusts end to end.
 
-**Generate the certs (OpenSSL — once for the root, once per cluster for intermediates):**
+**Generate the certs (OpenSSL — extensions match Istio's official `tools/certs` recipe):**
 ```bash
-# ONE root (keep the key offline)
+# ONE root (keep the key offline)  — 4096-bit, 10y, CA:true, same keyUsage set as tools/certs
 openssl req -x509 -newkey rsa:4096 -sha256 -nodes -days 3650 \
   -subj "/O=example/CN=Root CA" \
   -keyout common/root-key.pem -out common/root-cert.pem \
-  -addext basicConstraints=critical,CA:true -addext keyUsage=critical,keyCertSign,cRLSign
+  -addext subjectKeyIdentifier=hash \
+  -addext basicConstraints=critical,CA:true \
+  -addext keyUsage=critical,digitalSignature,nonRepudiation,keyEncipherment,keyCertSign
 
-# per-cluster intermediate (repeat with cluster2)
+# per-cluster intermediate (repeat with cluster2). NOTE the SAN — the official recipe includes
+# istiod's in-cluster DNS name on the intermediate (istiod serves :15012 with this chain).
 openssl req -newkey rsa:4096 -sha256 -nodes \
   -subj "/O=example/CN=cluster1 Intermediate CA" \
   -keyout cluster1/ca-key.pem -out cluster1/ca.csr
-openssl x509 -req -in cluster1/ca.csr -sha256 -days 1825 \
+openssl x509 -req -in cluster1/ca.csr -sha256 -days 3650 \
   -CA common/root-cert.pem -CAkey common/root-key.pem -CAcreateserial \
   -out cluster1/ca-cert.pem \
-  -extfile <(printf "basicConstraints=critical,CA:true,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign")
-# CA:true + keyCertSign are REQUIRED on the intermediate or istiod refuses to load cacerts.
-# (istioctl also ships a Makefile that automates this layout: tools/certs in the istio release.)
+  -extfile <(printf "subjectKeyIdentifier=hash\nbasicConstraints=critical,CA:true,pathlen:0\nkeyUsage=critical,digitalSignature,nonRepudiation,keyEncipherment,keyCertSign\nsubjectAltName=DNS:istiod.istio-system.svc")
+# CA:true + keyCertSign are REQUIRED or istiod refuses to load cacerts; keep the SAN matching
+# istiod's namespace (istio-system here). Istio ships a Makefile that automates exactly this
+# layout — tools/certs in the istio release:
+#   make -f Makefile.selfsigned.mk root-ca && make -f Makefile.selfsigned.mk cluster1-cacerts
 ```
 
 This is the Istio **plug-in CA** model — the `istio-system/cacerts` secret in each cluster, four files:
