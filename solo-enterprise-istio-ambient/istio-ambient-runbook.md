@@ -24,7 +24,7 @@ Everything routes through Gateway API. Use `HTTPRoute`, not `VirtualService`. Ci
 
 *Reference & troubleshooting*
 - [9. Reference: rules of thumb + certificates](#9-reference)
-    - [Shared root of trust across clusters (one root → per-cluster intermediate)](#shared-root-of-trust-across-clusters-one-root--per-cluster-intermediate)
+    - [Shared root of trust across clusters — CURRENT setup (one root → per-cluster intermediate)](#shared-root-of-trust-across-clusters-one-root--per-cluster-intermediate--current-setup)
 - [10. Troubleshooting (appendix)](#10-troubleshooting-appendix)
     - [Mesh graph nodes not appearing](#mesh-graph-nodes-not-appearing)
     - [Egress not routing through the gateway](#egress-not-routing-through-the-gateway)
@@ -43,7 +43,7 @@ Reference material and troubleshooting are at the back (§9–10).
 - Ambient mesh installed (istiod, istio-cni, ztunnel) — Solo Enterprise for Istio.
 - `istio-ns-a` exists and is ambient-enrolled; Gateway API CRDs installed (use `HTTPRoute`, not `VirtualService`). Circuit breaking and mTLS identity still come from Istio APIs (`DestinationRule`, `AuthorizationPolicy`).
 - A waypoint (`testapp-waypoint`, gatewayClass `istio-waypoint`) and the `testapp` app with `testapp-blue` / `testapp-green` backends.
-- For multicluster (§7+): a second cluster, a shared root of trust (both clusters' istio-csr issuing from the same Venafi root, so the distributed `istio-ca-root-cert` matches across clusters — see §9), and network reachability between the east-west gateways.
+- For multicluster (§7+): a second cluster, a shared root of trust (one OpenSSL-generated root CA + a per-cluster intermediate in each cluster's `istio-system/cacerts` — see §9 "Shared root of trust"), and network reachability between the east-west gateways.
 
 ```bash
 NS=istio-ns-a
@@ -55,7 +55,7 @@ Characteristics of the target environment that shape the choices in this runbook
 
 - **Platform:** OpenShift on bare metal, **OVN-Kubernetes** CNI (enforces `NetworkPolicy`; `EgressFirewall` / `AdminNetworkPolicy` available). No cloud LoadBalancer by default — confirm whether **MetalLB** is available before choosing LoadBalancer vs NodePort.
 - **Ambient install topology: SPLIT** — **istiod in `istio-system`**, **istio-cni + ztunnel in `kube-system`**. This is why `istioctl multicluster check -i <ns>` can't pass every check in one run (see §10, multicluster check).
-- **Certificates:** workload SVIDs issued by **Venafi via cert-manager `istio-csr`**, not istiod's built-in CA. Multicluster requires both clusters to chain to the **same Venafi root** (see §9).
+- **Certificates:** currently the Istio **plug-in CA** — an **OpenSSL-generated root** + a **per-cluster intermediate** loaded via `istio-system/cacerts`; istiod signs workload SVIDs from the intermediate. Multicluster requires both clusters to chain to the **same root** (see §9 "Shared root of trust"). **Venafi via cert-manager `istio-csr` is planned, not yet in use** (§9 keeps that design for later).
 - **Multicluster peering: NodePort** (not LoadBalancer). E-W gateway ports `15008` (HBONE) / `15012` (xDS) are remapped to nodePorts; nodes carry an **InternalIP only** (no ExternalIP). Consequences captured in §7: set `preferred-data-plane-service-type: NodePort` on each local gateway; `remote.items` uses the peer node IP + the peer's **xDS nodePort**; HA via multi-replica anti-affinity + a VIP or Hostname multi-A record.
 - **Network naming:** one network name per cluster — keep **local** and **peer** names distinct. A local object wearing the peer's name breaks cross-cluster routing (see §7 build + §10 troubleshooting).
 - **UI / graph:** the Solo Enterprise UI graph is **ClickHouse + OpenTelemetry** backed; infrastructure nodes (waypoints, gateways, ztunnel) are hidden until **"Show Infrastructure"** is enabled (see §10).
@@ -762,11 +762,12 @@ target ztunnel → pod.
   (xDS TLS). The E-W gateway is implemented as a ztunnel. (The **`istio-remote`** class is used
   only for the *remote-peer* Gateway object that represents the other cluster — see the remote
   block under Set up.)
-- **Shared root of trust** — both clusters' `istio-csr` must issue from the **same Venafi root**,
-  so the trust bundle every workload receives (the `istio-ca-root-cert` ConfigMap) is identical
-  across clusters. With this cert-manager + Venafi `istio-csr` setup (see §9, Certificates), point
-  both clusters' istio-csr at the same Venafi root or cross-cluster mTLS fails the TLS handshake.
-  (A plain istiod-CA install would instead share the root via the `istio-system/cacerts` secret.)
+- **Shared root of trust** — both clusters must chain to the **same root CA**. Current setup:
+  one OpenSSL-generated root + a per-cluster intermediate, loaded via each cluster's
+  `istio-system/cacerts` secret (the plug-in CA model — full setup + verification in §9
+  "Shared root of trust"). The trust bundle every workload receives (the `istio-ca-root-cert`
+  ConfigMap) must be identical across clusters, or cross-cluster mTLS fails the TLS handshake.
+  (When Venafi/istio-csr lands later, the same rule holds — both issuers chain to one root.)
 - **Cluster + network identity** — each cluster sets `global.multiCluster.clusterName` +
   `global.network` (istiod) and the matching `multiCluster.clusterName` / `network` on
   ztunnel; the `istio-system` ns carries `topology.istio.io/network=<net>`.
@@ -786,11 +787,13 @@ C1=admin@cluster1        # existing cluster
 C2=<second-cluster-context>
 
 # 0) Prereq: both clusters ambient-installed with a clusterName + network, and the SAME
-#    root of trust (both istio-csr agents issuing from one Venafi root). Verify roots match
-#    via the trust bundle every workload gets (istio-ca-root-cert), not cacerts (istio-csr install):
+#    root of trust (plug-in CA: one OpenSSL root, per-cluster intermediate in cacerts — §9).
+#    Verify BOTH the CA source and the distributed trust bundle match across clusters:
+for c in $C1 $C2; do kubectl --context $c -n istio-system get secret cacerts \
+  -o jsonpath='{.data.root-cert\.pem}' | base64 -d | openssl x509 -noout -fingerprint -sha256; done
 for c in $C1 $C2; do kubectl --context $c -n istio-ns-a get configmap istio-ca-root-cert \
   -o jsonpath='{.data.root-cert\.pem}' | openssl x509 -noout -fingerprint -sha256; done
-# the two fingerprints MUST be identical.  (Plain istiod-CA install: compare istio-system/cacerts instead.)
+# ALL four fingerprints MUST be identical.
 
 # 1) Create the E-W gateway in each cluster (GatewayClass istio-eastwest, ns istio-eastwest)
 istioctl --context=$C1 multicluster expose --namespace istio-eastwest
@@ -1169,10 +1172,10 @@ only a specific SA; the allowed SPIFFE identity passes cross-cluster, others are
 
 > **Cert compatibility gotcha:** a single-context `multicluster check` only prints the **local**
 > root SHA — it does **not** compare clusters. Run it with `--contexts=$C1,$C2`, or diff the roots
-> yourself: `for c in $C1 $C2; do kubectl --context $c -n istio-ns-a get configmap istio-ca-root-cert -o
-> jsonpath='{.data.root-cert\.pem}' | openssl x509 -noout -fingerprint -sha256; done` (the distributed
-> trust bundle under istio-csr; plain istiod-CA installs compare `istio-system/cacerts`)
-> — the two SHAs MUST be identical or cross-cluster mTLS fails the handshake.
+> yourself: `for c in $C1 $C2; do kubectl --context $c -n istio-system get secret cacerts -o
+> jsonpath='{.data.root-cert\.pem}' | base64 -d | openssl x509 -noout -fingerprint -sha256; done`
+> (plug-in CA — the current OpenSSL-cert setup; also compare the distributed `istio-ca-root-cert`
+> ConfigMap, §9 step 1) — the SHAs MUST be identical or cross-cluster mTLS fails the handshake.
 
 ## 9. Reference
 
@@ -1185,9 +1188,13 @@ only a specific SA; the allowed SPIFFE identity passes cross-cluster, others are
 5. Authorization is allow-by-default until the first ALLOW policy selects a workload, then deny-by-default for it. Get the SPIFFE principals exact.
 6. `Accepted=True` doesn't mean enforced. Confirm in the proxy with `istioctl proxy-config`.
 
-### Certificates (cert-manager and Venafi via istio-csr)
+### Certificates (cert-manager and Venafi via istio-csr) — PLANNED, not yet in use
 
-The mesh's workload certs are issued by Venafi, not istiod's built-in CA. cert-manager's istio-csr agent serves the mesh CA endpoint in place of istiod and forwards signing requests to a Venafi issuer:
+> **Current state: the clusters use OpenSSL-generated certs via the plug-in CA (`cacerts`) —
+> see "Shared root of trust" below, which is the active setup + verification.** This section
+> documents the intended future state (Venafi issuance through istio-csr) for when it lands.
+
+In that future state, the mesh's workload certs are issued by Venafi, not istiod. cert-manager's istio-csr agent serves the mesh CA endpoint in place of istiod and forwards signing requests to a Venafi issuer:
 
 ```
 Venafi (TPP / Control Plane)
@@ -1237,12 +1244,33 @@ Docs:
 
 Note: cert-manager's newer docs label Venafi as "CyberArk," but the API field is still `spec.venafi`.
 
-### Shared root of trust across clusters (one root → per-cluster intermediate)
+### Shared root of trust across clusters (one root → per-cluster intermediate) — CURRENT setup
 
-Prerequisite for multicluster mTLS (§7): both clusters must chain to the **same root**. Common
-setup — a single offline **root CA**, and a **distinct intermediate CA per cluster** signed by that
-root. Each cluster's istiod signs workload certs from its **own** intermediate; because both
-intermediates chain to the one root, cross-cluster (double-HBONE) mTLS trusts end to end.
+Prerequisite for multicluster mTLS (§7): both clusters must chain to the **same root**. The setup
+in use — a single offline **OpenSSL-generated root CA**, and a **distinct intermediate CA per
+cluster** signed by that root. Each cluster's istiod signs workload certs from its **own**
+intermediate; because both intermediates chain to the one root, cross-cluster (double-HBONE)
+mTLS trusts end to end.
+
+**Generate the certs (OpenSSL — once for the root, once per cluster for intermediates):**
+```bash
+# ONE root (keep the key offline)
+openssl req -x509 -newkey rsa:4096 -sha256 -nodes -days 3650 \
+  -subj "/O=example/CN=Root CA" \
+  -keyout common/root-key.pem -out common/root-cert.pem \
+  -addext basicConstraints=critical,CA:true -addext keyUsage=critical,keyCertSign,cRLSign
+
+# per-cluster intermediate (repeat with cluster2)
+openssl req -newkey rsa:4096 -sha256 -nodes \
+  -subj "/O=example/CN=cluster1 Intermediate CA" \
+  -keyout cluster1/ca-key.pem -out cluster1/ca.csr
+openssl x509 -req -in cluster1/ca.csr -sha256 -days 1825 \
+  -CA common/root-cert.pem -CAkey common/root-key.pem -CAcreateserial \
+  -out cluster1/ca-cert.pem \
+  -extfile <(printf "basicConstraints=critical,CA:true,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign")
+# CA:true + keyCertSign are REQUIRED on the intermediate or istiod refuses to load cacerts.
+# (istioctl also ships a Makefile that automates this layout: tools/certs in the istio release.)
+```
 
 This is the Istio **plug-in CA** model — the `istio-system/cacerts` secret in each cluster, four files:
 
@@ -1253,9 +1281,9 @@ This is the Istio **plug-in CA** model — the `istio-system/cacerts` secret in 
 | `ca-key.pem` | THIS cluster's intermediate **private key** | no |
 | `cert-chain.pem` | `ca-cert.pem` + `root-cert.pem` (this cluster's chain to root) | no |
 
-> With **istio-csr** (the Venafi setup above) the same idea applies — the per-cluster intermediate
-> becomes the cert-manager **CA/Issuer** in that cluster; both issue from the one root. The
-> `cacerts` layout below is the plug-in-CA form; verification (roots identical) is the same either way.
+> Later, with **istio-csr** (the planned Venafi setup above) the same idea applies — the
+> per-cluster intermediate becomes the cert-manager **CA/Issuer** in that cluster; both issue from
+> the one root. Verification (roots identical) is the same either way.
 
 **Set up (per cluster) — the intermediate must come first, before istiod issues any certs:**
 ```bash
@@ -1562,7 +1590,7 @@ The one **genuine** finding that appears in *both* runs is the NodePort E-W gate
 
 | Symptom | Likely cause | Check / fix |
 |---|---|---|
-| Cross-cluster calls fail with TLS/handshake errors | **Root CA mismatch** between clusters | Compare the distributed trust root each cluster gives workloads: `kubectl get configmap istio-ca-root-cert -o jsonpath='{.data.root-cert\.pem}'` — must be identical across clusters. Fix istio-csr/Venafi to issue from the same root. (Plain istiod-CA installs: compare `istio-system/cacerts` instead.) |
+| Cross-cluster calls fail with TLS/handshake errors | **Root CA mismatch** between clusters | Compare `istio-system/cacerts` `root-cert.pem` AND the distributed `istio-ca-root-cert` ConfigMap across clusters — all must be identical (§9 shared root, verification step 1). Fix: re-issue the per-cluster intermediates from the one common root and reload `cacerts`. (Future istio-csr/Venafi: point both issuers at the same root.) |
 | Global service has **no remote endpoints** | Namespace-sameness or label missing on the other cluster | Same `svc`+`ns` name in both; `solo.io/service-scope=global` applied in **both**; check `ztunnel-config services`/`workloads` shows remote endpoints |
 | No failover to the remote cluster | Default `PreferNetwork` keeps traffic local until local is fully unhealthy | Confirm local endpoints are actually down; or set `traffic-distribution` (e.g. `PreferClose`) |
 | `istioctl multicluster check` shows peers not linked / proxies not SYNCED | Peering not established, or E-W gateway not reachable | Re-run `multicluster link`; confirm the E-W gateway has an address and `:15008`/`:15012` are reachable **between** clusters |
