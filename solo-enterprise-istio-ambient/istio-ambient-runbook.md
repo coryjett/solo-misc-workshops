@@ -399,7 +399,7 @@ istioctl x describe pod -n $NS <testapp-blue-pod>            # lists applied Aut
 istioctl proxy-config rbac ${PROXY#pod/} -n $NS         # L7 rules on the waypoint
 ```
 
-Get the exact principal strings from the identities you saw in §3 (circuit breaking). A typo'd principal silently denies everything.
+Get the exact principal strings from the workload identities: `istioctl ztunnel-config workloads -n $NS` (the identity/SA column gives the SPIFFE path). A typo'd principal silently denies everything.
 
 **Solo docs:** [security overview](https://docs.solo.io/istio/1.30.x/ambient/security/overview/) · [waypoints (L7)](https://docs.solo.io/istio/1.30.x/ambient/waypoints/overview/)
 
@@ -581,7 +581,7 @@ CLIENT=$(kubectl get pod -n istio-ns-a -l app=<yourapp> -o name | head -1)
 kubectl exec -n istio-ns-a ${CLIENT#pod/} -- curl -sS -o /dev/null -w '%{http_code}\n' --max-time 8 \
   https://testapp-egress.apps.example.com/
 
-kubectl logs -n istio-ns-a deploy/egress-gw --tail=30 | grep testapp-egress-73249
+kubectl logs -n istio-ns-a deploy/egress-gw --tail=30 | grep testapp-egress
 # A line on the egress-gw naming the host + the real upstream IP means it went through.
 # TLS passthrough logs L4, so expect a form like:
 #   [...] "- - -" ... "<upstream-ip>:443" ...|443|tcp|testapp-egress.apps.example.com ...
@@ -1310,8 +1310,10 @@ openssl verify -CAfile /tmp/root.pem /tmp/c1-int.pem     # → /tmp/c1-int.pem: 
 ```bash
 ZT=$(kubectl --context $C1 get pod -n kube-system -l app=ztunnel -o name | head -1)
 istioctl --context $C1 ztunnel-config certificate ${ZT#pod/} -n kube-system -o json \
-  | jq -r '.certificates[0].certChain[-1]' | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//'
+  | jq -r '.certificates[0].certChain[-1].pem' | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//'
 # last cert in the chain = the root; its fingerprint must equal the common root from step 1.
+# (field shape varies slightly by istioctl version — if .pem is missing, inspect the JSON and
+#  take the PEM of the LAST certChain element.)
 ```
 
 4) **`multicluster check` agrees + a real cross-cluster call succeeds:**
@@ -1547,7 +1549,8 @@ istioctl multicluster check --precheck -i kube-system    # ✅ CNI DNS Capture (
 - With `-i kube-system` the **istiod / License / Network / Shared-Services** checks false-fail
   (`no istiod deployment found in namespace "kube-system"`).
 - Both are namespace-lookup **artifacts, not real faults.** Confirmed-healthy real state: DNS
-  capture enabled, root cert matches across clusters, istiod/ztunnel/eastwest pods healthy.
+  capture enabled, istiod/ztunnel/eastwest pods healthy. (Root-cert match across clusters must
+  be verified separately — the single-context check only prints the local SHA; see §9 shared root.)
 
 Full cross-cluster pass (runs the Peers / Stale / SA checks precheck skips) — use the istiod ns:
 ```bash
