@@ -1213,6 +1213,32 @@ backendRefs:
   HTTPRoute at its waypoint) and make only the **front** Service global — global layer does
   cross-cluster availability, local layer does version weighting.
 
+#### What if the namespaces DIFFER across clusters? (no namespace sameness)
+
+Endpoint **aggregation is namespace-sameness only** — identical service name + identical
+namespace name is the join key, with no override. `solo.io/service-aliases` does NOT change
+this: aliases only add alternate hostnames for an already-aggregated service (doc-verified).
+What you still get with mismatched namespaces:
+
+| Capability | Different namespaces? |
+|---|---|
+| **Cross-cluster reachability** | ✅ each service is global under *its own* `<svc>.<its-ns>.mesh.internal`; callers from any namespace/cluster can reach it — the consumer's namespace never matters |
+| **One aggregated service** (auto `PreferNetwork` failover/fail-back) | ❌ requires sameness |
+| **Aliases** | vanity hostnames only — no cross-name/cross-ns merging |
+
+Options, in order of preference:
+1. **Align the namespace names** — deploy the workload into an identically-named (even
+   dedicated "projection") namespace on the other cluster. Only way to get true aggregation +
+   automatic locality failover. Sameness is the model's design center; renaming is almost
+   always cheaper than fighting it.
+2. **Route-level composition** — an HTTPRoute (waypoint or ingress) with weighted `Hostname`
+   backendRefs to BOTH global hostnames (`app.ns-a.mesh.internal` w100 / `app.ns-b.mesh.internal`
+   w0). Cross-cluster routing + manual/automated cutover — but **weights are static**: outlier
+   detection never shifts weight between backends (see §3), so "failover" means flipping the
+   weights (Argo Rollouts/Flagger or by hand), not automatic locality behavior.
+3. **Nothing** — if the differently-named namespaces are genuinely different apps that just
+   need to call each other, plain global reachability already covers it.
+
 ### Verify peering is working (layered — cheapest to definitive)
 
 Run top-down; the first layer that fails is your break. Don't trust the `check` exit code alone
