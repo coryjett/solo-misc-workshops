@@ -932,7 +932,9 @@ retry loop. Options:
 **Common-domain cutover (no aliases):** flip `trustDomain` in both istiod values + both peer
 objects → `grep -rn "<old-domain>"` across all values/YAML (authz principals too!) → restart
 istiod, then ztunnel, then E-W gateway, then `oc rollout restart deploy -n <app-ns>` for
-waypoints/ingress/egress — **both clusters in the same window**. Mid-roll, `no cert pool` /
+waypoints/ingress/egress — **both clusters in the same window**. Roll **every meshed
+namespace** — including the Solo Enterprise UI/telemetry namespace — or expect transient
+crashloops there until ztunnel re-issues identities. Mid-roll, `no cert pool` /
 `bad certificate` errors are expected until everything on both sides is re-issued.
 
 #### `trustedZtunnelNamespace` — required when ztunnel isn't where istiod expects
@@ -1189,6 +1191,27 @@ For automated canary, **Argo Rollouts** drives these weights across the `.mesh.i
 | **B/C** — weighted / blue-green via per-version global Services + HTTPRoute `backendRefs` weights | [overview #subset-routing](https://docs.solo.io/istio/1.30.x/ambient/multicluster/multi-apps/overview/#subset-routing) | HTTPRoute weights to `.mesh.internal` subset hosts; **DR `subset:` unsupported cross-cluster** |
 | **C** — automated canary driving the weights | [Argo Rollouts canary](https://docs.solo.io/istio/1.30.x/ambient/traffic-management/argo-rollouts/) | Gateway API plugin splits via HTTPRoute `backendRef` weights |
 | Force callers onto global host (`solo.io/service-takeover: true`) | [overview (takeover section)](https://docs.solo.io/istio/1.30.x/ambient/multicluster/multi-apps/overview/) | takeover label |
+
+#### Ingress → global service: the working pattern + gotchas (validated live)
+
+Point the ingress gateway's HTTPRoute at the global hostname:
+```yaml
+backendRefs:
+- group: networking.istio.io    # REQUIRED — empty group ⇒ ResolvedRefs=False, reason
+  kind: Hostname                # InvalidKind: 'unsupported backendRef: group "" kind "Hostname"'
+  name: testapp.istio-ns-a.mesh.internal
+  port: 8080
+```
+- **Endpoint accounting is N+1, not N+M:** on each cluster, `ztunnel-config services` shows the
+  global service (`autogen.<ns>.<svc>`) with **local pods + ONE endpoint per remote network**
+  (the peer's E-W gateway). You never see the peer's individual pods — its ztunnel fans out
+  after the HBONE hop. e.g. 6 local + 1 remote = `7/7` is the fully-aggregated healthy state.
+- **"Only local responses" is NORMAL:** default `PreferNetwork` sends 100% of traffic to local
+  endpoints while any are healthy. Cross-cluster only on local exhaustion (failover) — or set
+  `networking.istio.io/traffic-distribution: Any` on the Service for active-active spread.
+- Layering that works: keep each cluster's **local** blue/green split (Service-parented weighted
+  HTTPRoute at its waypoint) and make only the **front** Service global — global layer does
+  cross-cluster availability, local layer does version weighting.
 
 ### Verify peering is working (layered — cheapest to definitive)
 
@@ -1675,7 +1698,22 @@ The one **genuine** finding that appears in *both* runs is the NodePort E-W gate
 | External curl → `SSL_ERROR_ZERO_RETURN`; ztunnel access log: `connection closed due to policy rejection: explicitly denied by: istio-system/istio_converted_static_strict` | An **unmeshed caller in plaintext** hit a workload under **STRICT `PeerAuthentication`** — e.g. an OpenShift Route pointing **directly at the app Service** (router → pod bypasses the mesh's ingress gateway) | Point the Route at the **meshed ingress gateway** (passthrough) so the caller into the workload is the in-mesh gateway; keep STRICT. Check `oc get pa -A` for the enforcing policies. Deleting/PERMISSIVE-ing the PA "fixes" the curl but drops the zero-trust posture — temporary debugging move only |
 | External curl → `curl: (35) SSL routines::packet length too long` | TLS bytes delivered to a **plaintext responder** — same bypass Route as above (**passthrough** Route pointing at the plain-HTTP **app Service**: with STRICT off, the pod answers HTTP mid-TLS-handshake), or a Route whose `targetPort` hits a non-TLS port on the gateway Service | `oc get route -o custom-columns='NAME:.metadata.name,HOST:.spec.host,SVC:.spec.to.name,PORT:.spec.port.targetPort,TLS:.spec.tls.termination'` — the working Route targets the **gateway Service's TLS listener port** with `passthrough`, and the Route host must EQUAL the Gateway listener `hostname:` (SNI selects the listener). **Verify testers use the gateway Route's hostname** — a stale direct-to-Service Route with a similar name produced two sessions of false "mesh is broken" reports. Delete the bypass Route |
 
-### Next session: restore PeerAuthentication + fix ingress path
+### Session log: multicluster COMPLETE (2026-08-21)
+
+Cross-cluster traffic + failover **verified working end to end**: shared OpenSSL root →
+common `cluster.local` trust domain → NodePort peering → `testapp` global (`7/7` = 6 local +
+1 remote network) → ingress HTTPRoute → `Hostname` backendRef → failover (local scaled to 0 →
+peer answers; restore → returns local, `PreferNetwork`). The "in-mesh apps can't talk" and
+external-URL reports both traced to a **bypass Route** pointing straight at the app Service
+(see the §10 table rows for `SSL_ERROR_ZERO_RETURN` / `packet length too long`). The
+solo-enterprise UI crashloop after the trust cutover self-healed (namespace wasn't in the
+restart sweep — see §7 cutover note).
+
+Remaining cleanup checklist: delete the bypass Route · `oc apply -f bup.yaml` (restore STRICT
+PeerAuthentications) · drop the stray `istio.io/use-waypoint` label from the ingress Service ·
+old-trust-domain grep sweep across values/YAML + authz principals.
+
+<details><summary>Prior session state (2026-08-20 — superseded)</summary>
 
 State as of 2026-08-20 end of day — multicluster peering is UP (common `cluster.local` trust
 domain, `trustedZtunnelNamespace` set, NodePort node-discovery populating `NetworkGateway` +
@@ -1701,6 +1739,8 @@ plaintext → STRICT rejected it → external curl returned `SSL_ERROR_ZERO_RETU
 4. **Sweep for leftovers:** `grep -rn "<old-per-cluster-domains>"` across values/YAML + authz
    principals; confirm zero `bad certificate` / `no cert pool` / `impersonation failed` in
    istiod logs on both clusters.
+
+</details>
 
 Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
 [multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/) ·
