@@ -1735,9 +1735,13 @@ external-URL reports both traced to a **bypass Route** pointing straight at the 
 solo-enterprise UI crashloop after the trust cutover self-healed (namespace wasn't in the
 restart sweep — see §7 cutover note).
 
-Remaining cleanup checklist: delete the bypass Route · `oc apply -f bup.yaml` (restore STRICT
-PeerAuthentications) · drop the stray `istio.io/use-waypoint` label from the ingress Service ·
-old-trust-domain grep sweep across values/YAML + authz principals.
+Remaining cleanup checklist: delete the bypass Route · drop the stray `istio.io/use-waypoint`
+label from the ingress Service · old-trust-domain grep sweep across values/YAML + authz
+principals. Restoring the deleted STRICT `PeerAuthentication`s (`bup.yaml` backup) is
+**optional** — decided not required for this engagement; ambient already mTLS-encrypts
+workload-to-workload traffic by default, STRICT only adds *rejection* of plaintext callers.
+If you do restore them, re-curl through the gateway Route after (must still work — the
+gateway is meshed).
 
 <details><summary>Prior session state (2026-08-20 — superseded)</summary>
 
