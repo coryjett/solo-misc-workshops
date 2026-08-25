@@ -4,6 +4,27 @@ Runbook for the ambient mesh in `istio-ns-a`: an ingress gateway (Gateway API, g
 
 Everything routes through Gateway API. Use `HTTPRoute`, not `VirtualService`. Circuit breaking and mTLS identity still come from Istio APIs (`DestinationRule`, `AuthorizationPolicy`).
 
+> ## ⚠️ Read this before using the runbook as a build guide
+>
+> **This document records ONE engagement's environment, not the canonical install.**
+> It is written around constraints that are specific to that deployment:
+> **NodePort peering** (no LoadBalancer available), a **split istiod/ztunnel
+> namespace layout** requiring `trustedZtunnelNamespace`, OpenShift Routes and
+> OVN-Kubernetes behaviour, and a **common `cluster.local` trust domain** chosen
+> to resolve a specific failure.
+>
+> **For a new build, follow the Solo docs**
+> ([ambient multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/default/manual/),
+> [sidecar multicluster](https://docs.solo.io/istio/1.30.x/sidecar/setup/multicluster/default/manual/))
+> and use this runbook only as a **failure-mode reference** — the §10
+> troubleshooting table and the diagnostic sequences are the durable value here.
+>
+> Building a clean GKE↔AKS mesh from this document produced two defects that the
+> official YAML does not have: the remote Gateway carried the wrong
+> `gateway.istio.io/service-account` (`ztunnel` instead of `istio-eastwest`) and
+> omitted `tls: mode: Passthrough` on the `cross-network` listener. Both failed
+> `istioctl multicluster check`.
+
 ## Contents
 
 - [0. Overview, prerequisites & build order](#0-overview-prerequisites--build-order)
