@@ -22,6 +22,9 @@ Everything routes through Gateway API. Use `HTTPRoute`, not `VirtualService`. Ci
     - [What to test (demo scenarios)](#what-to-test-demo-scenarios)
     - [Traffic management: failover, blue/green, weighted routing](#multicluster-traffic-management-failover-bluegreen-weighted-routing)
 
+*Onboarding*
+- [11. Onboarding an application team onto an existing cluster](#11-onboarding-an-application-team-onto-an-existing-cluster)
+
 *Reference & troubleshooting*
 - [9. Reference: rules of thumb + certificates](#9-reference)
     - [Shared root of trust across clusters — CURRENT setup (one root → per-cluster intermediate)](#shared-root-of-trust-across-clusters-one-root--per-cluster-intermediate--current-setup)
@@ -1771,6 +1774,142 @@ plaintext → STRICT rejected it → external curl returned `SSL_ERROR_ZERO_RETU
    istiod logs on both clusters.
 
 </details>
+
+
+## 11. Onboarding an application team onto an existing cluster
+
+Everything above builds the mesh. This section is for the far more common day-2 task: a new
+application team wants their workloads in an already-running ambient cluster, usually to run
+their own POC on shared infrastructure. It is written to be handed to that team.
+
+**The pitch, and it holds up:** ambient onboarding is a namespace label. No sidecars, no pod
+template changes, no rebuilt images, no restart-the-world. That is the whole point of ambient
+versus sidecar mode, and it is what makes a two-week app-team POC feasible.
+
+### Split of responsibility
+
+| Platform team (owns the mesh) | Application team (owns the app) |
+|---|---|
+| istiod, ztunnel, istio-cni installed and healthy | Label their own namespace |
+| Namespace created, quota, RBAC | Confirm workloads show as `HBONE` |
+| Ingress gateway + route/DNS to it | Point their clients at the gateway host, not the Service |
+| `NetworkPolicy` allows mesh ports | Declare whether they need L7 (waypoint) or L4 only |
+| Waypoint provisioning if L7 is needed | Their own `AuthorizationPolicy` / `HTTPRoute` content |
+| Multicluster peering, global services | Matching namespace + Service name in both clusters (if global) |
+
+Agree the boundary before the team starts. Most onboarding friction is not technical — it is an
+app team waiting on a gateway route nobody owns.
+
+### Platform pre-flight (do this before handing the namespace over)
+
+```bash
+# ztunnel is running on every node, istio-cni is healthy
+kubectl get ds -A | grep -E 'ztunnel|istio-cni'
+# istiod is up and has no cert/trust errors
+kubectl -n istio-system logs deploy/istiod --tail=50 | grep -iE 'error|cert|trust' || echo clean
+# the namespace exists and is NOT yet enrolled
+kubectl get ns $NS --show-labels
+```
+
+⚠️ In a split install (istiod and ztunnel in different namespaces) confirm
+`trustedZtunnelNamespace` is set, or the team's first pod will fail capture with an
+"impersonation failed" error that looks like an app problem and is not (§10).
+
+### App team steps
+
+1. **Enroll the namespace.** One label. Existing pods are captured without a restart.
+   ```bash
+   kubectl label namespace $NS istio.io/dataplane-mode=ambient
+   ```
+   Some clusters enroll with a custom label instead — ask the platform team, and verify the
+   *effect* rather than trusting the label name.
+
+2. **Verify capture.** Every workload pod should report `HBONE`.
+   ```bash
+   istioctl ztunnel-config workloads -n $NS
+   ```
+   Pods showing `TCP` are not in the mesh. If none are captured, the namespace label is wrong
+   or istio-cni did not run for those pods (pods created before istio-cni was installed need a
+   restart — that is the one restart case).
+
+3. **Confirm mTLS is actually happening.** Between two captured workloads it is automatic —
+   no `PeerAuthentication` required, no app change.
+   ```bash
+   istioctl ztunnel-config connections -n $NS | head
+   ```
+
+4. **Only add a waypoint if L7 is needed.** L4 identity, mTLS, and telemetry come free with
+   capture. A waypoint is required for HTTP routing, header/path matching, retries, timeouts,
+   traffic splitting, and L7 `AuthorizationPolicy` — nothing else.
+   ```bash
+   istioctl waypoint apply -n $NS --name $NS-waypoint
+   kubectl label svc <svc> -n $NS istio.io/use-waypoint=$NS-waypoint
+   ```
+   Label the **Service** for the VIP you want fronted, never a Service that selects the
+   waypoint's own pods (that is the self-backend loop in §1).
+
+### What the app team does NOT have to do
+
+Worth stating explicitly, because teams arrive expecting sidecar-era work:
+
+- No image rebuild, no `sidecar.istio.io/inject` annotation, no init containers.
+- No app code or port changes. The app keeps listening exactly where it listens.
+- No readiness/liveness probe changes — kubelet probes bypass capture by design.
+- No `PeerAuthentication` to get encryption. Ambient encrypts captured workload-to-workload
+  traffic by default; STRICT only additionally *rejects* plaintext callers, and is a policy
+  decision, not an onboarding requirement.
+- No restart of running workloads, in the normal case.
+
+### The two mistakes that cost the most time
+
+1. **Testing through a route that bypasses the mesh.** A Route or Ingress pointing straight at
+   the application Service reaches the pod without traversing the gateway, so it exercises none
+   of the mesh path — and under STRICT it fails outright. This produced two separate "the mesh
+   is broken" escalations in this engagement; both times the mesh was fine and the tester was on
+   a bypass route. Standardize the team on the gateway-fronted hostname from day one and delete
+   stale direct-to-Service routes.
+   Failure signatures for both variants are in the §10 table (`SSL_ERROR_ZERO_RETURN`,
+   `curl: (35) packet length too long`).
+
+2. **`NetworkPolicy` that omits the mesh ports.** On a policy-enforcing CNI, cross-node ambient
+   traffic is HBONE on **15008**; ztunnel also uses **15006** (plaintext in), **15001** (egress),
+   and **15020/15021** for health and status. A default-deny namespace without these allowed
+   fails in ways that look like application timeouts.
+
+### Verification checklist to hand back
+
+The team should be able to answer yes to all of these before declaring onboarding done:
+
+```bash
+# 1. all app pods captured
+istioctl ztunnel-config workloads -n $NS            # every pod HBONE
+# 2. the Service is known to the mesh (and waypoint-fronted if you asked for one)
+istioctl ztunnel-config services -n $NS
+# 3. in-mesh call works pod-to-pod
+kubectl exec -n $NS deploy/<client> -- curl -sS http://<svc>.$NS.svc.cluster.local:<port>
+# 4. external call works through the GATEWAY host (not the Service)
+curl -sS https://<gateway-host>/<path>
+# 5. traffic is visible in the UI graph (enable "Show Infrastructure" for waypoints/gateways)
+```
+
+### Rolling back
+
+Onboarding is reversible in one command, which is the argument that usually gets a hesitant team
+over the line:
+
+```bash
+kubectl label namespace $NS istio.io/dataplane-mode-
+```
+
+Traffic returns to plain Kubernetes networking. Nothing about the application changed, so there
+is nothing to undo on their side.
+
+### If the POC spans both clusters
+
+Global services join on **name + namespace** (namespace sameness), so agree the namespace name
+across clusters *before* the team deploys — renaming later is the expensive path. Details and the
+mismatched-namespace workarounds are in §7 and §8.
+
 
 Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
 [multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/) ·
