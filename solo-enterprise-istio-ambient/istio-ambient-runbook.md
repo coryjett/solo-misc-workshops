@@ -1994,10 +1994,12 @@ The relay needs to reach **two different** management-plane endpoints:
 > # the ${env:MY_POD_IP} and 0.0.0.0 lines are local listeners, not egress
 > ```
 
-**This engagement has no cloud LoadBalancer** (§0 environment profile), and both the chart's
-docstrings and the Solo docs describe finding these addresses via
-`.status.loadBalancer.ingress[0]`. That reads as "LoadBalancer required". **It isn't** — the port
-is a value, not a constant:
+**This engagement has no cloud LoadBalancer** (§0 environment profile). The
+[Solo UI setup docs](https://docs.solo.io/istio/1.30.x/setup/setup/#multicluster) describe only the
+LoadBalancer path — "save the external addresses of the tunnel server and the OTel telemetry
+gateway; **these services are exposed as load balancers**" — and the chart docstrings tell you to
+read them from `.status.loadBalancer.ingress[0]`. Neither documents a port. Together that reads as
+"LoadBalancer required". **It isn't** — the port is a value, not a constant:
 
 - **NodePort works directly.** Set `fqdn` to a node IP and `port` to the **nodePort**, exactly the
   approach §7 took for E-W peering. Nothing else changes.
@@ -2062,24 +2064,43 @@ helm upgrade -i solo-relay \
   --set telemetry.fqdn=<reachable-telemetry-address>
 ```
 
-**`cluster` must equal the Istio cluster ID** — the same string as `ServiceMeshController`
-`spec.cluster` / istiod's `CLUSTER_ID`. One reason, and it is enough: the fleet view **merges
-Istio telemetry with the relay registration**. Telemetry arrives tagged with the Istio cluster ID;
-the registration arrives tagged with whatever `cluster=` says. When they disagree the UI has no way
-to know they describe one cluster, so it renders the **same cluster twice**, once per name, each
-copy looking half-broken. Align the registration onto Istio, not the reverse — Istio's ID is load-
-bearing for the mesh, the registration string is not.
+**Make `cluster` equal the Istio cluster ID** — the same string as `ServiceMeshController`
+`spec.cluster` / istiod's `CLUSTER_ID` / `global.multiCluster.clusterName`.
 
-> **The trust domain is NOT involved here.** The relay's namespace is **not mesh-enrolled** (no
-> `istio.io/dataplane-mode`), and the tunnel dials the management plane directly as ordinary
-> TLS/gRPC — it never traverses ztunnel or HBONE and carries no SPIFFE workload identity. So a
-> shared `cluster.local` trust domain (§0) neither helps nor hinders relay connectivity, and
-> **distinct cluster IDs under a common trust domain is the normal arrangement**, not a conflict.
-> Trust domain matters for cross-cluster **mesh mTLS** (§7's `no cert pool found for trust domain`
-> failure) — a data-plane concern, not this one. Keep the two separate when debugging: they are
-> configured independently, and in some installs they merely happen to hold the same string
-> (`trustDomain` left unset defaults to the cluster name, which makes SPIFFE IDs read
-> `<cluster-id>/ns/...` and invites exactly this conflation).
+> **Status of this rule: observed, not documented.** The
+> [Solo UI setup docs](https://docs.solo.io/istio/1.30.x/setup/setup/#multicluster) only say to set
+> `--set cluster=${cluster2}` to the workload cluster's name; they state no equality requirement,
+> and the fleet-view behaviour below is not described anywhere in the docs. It is a firsthand
+> observation from one deployment. Treat it as a strong default, not a quoted requirement.
+
+The reason it matters: the fleet view **merges Istio telemetry with the relay registration**.
+Telemetry arrives tagged with the Istio cluster ID; the registration arrives tagged with whatever
+`cluster=` says. When they disagree the UI has no way to know they describe one cluster, so it
+renders the **same cluster twice**, once per name, each copy looking half-broken.
+
+#### Trust domain: not involved in relay connectivity
+
+The relay's namespace is **not mesh-enrolled** (no `istio.io/dataplane-mode`), and the tunnel dials
+the management plane directly as ordinary TLS/gRPC — it never traverses ztunnel or HBONE and
+carries no SPIFFE workload identity. **Trust domain therefore has no bearing on whether the relay
+connects.** It matters for cross-cluster **mesh mTLS** (§7's `no cert pool found for trust domain`
+failure) — a data-plane concern, not this one.
+
+The two are easy to conflate because in a **docs-standard install they are coupled by convention**:
+the [ambient multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/default/manual/)
+assigns each cluster a **unique trust domain derived from its name** —
+`--set global.trustDomain="${cluster}.local"`, with `PILOT_SKIP_VALIDATE_TRUST_DOMAIN=true` and
+`SKIP_VALIDATE_TRUST_DOMAIN=true` — "to apply policies to specific clusters". Where that pattern is
+followed, renaming a cluster also moves its trust domain, so the two appear to be one setting.
+(Same trap when `trustDomain` is simply left unset and defaults to the cluster name: SPIFFE IDs
+read `<cluster-id>/ns/...`.)
+
+> ⚠️ **This engagement deliberately diverges from that.** §0 records a **common `cluster.local`
+> across both clusters**, chosen to resolve the `no cert pool found for trust domain <peer>` peering
+> failure. So here the coupling is broken on purpose: cluster IDs are distinct, the trust domain is
+> shared, and that is a decision — not drift, and not a conflict with the relay. Don't "fix" it back
+> to `${cluster}.local` while debugging relay connectivity; that would re-open a settled §7 problem
+> for no relay benefit.
 
 ### Verify (layered — cheapest to definitive)
 
