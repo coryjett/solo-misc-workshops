@@ -2063,17 +2063,23 @@ helm upgrade -i solo-relay \
 ```
 
 **`cluster` must equal the Istio cluster ID** — the same string as `ServiceMeshController`
-`spec.cluster` / istiod's `CLUSTER_ID`. This is not cosmetic:
+`spec.cluster` / istiod's `CLUSTER_ID`. One reason, and it is enough: the fleet view **merges
+Istio telemetry with the relay registration**. Telemetry arrives tagged with the Istio cluster ID;
+the registration arrives tagged with whatever `cluster=` says. When they disagree the UI has no way
+to know they describe one cluster, so it renders the **same cluster twice**, once per name, each
+copy looking half-broken. Align the registration onto Istio, not the reverse — Istio's ID is load-
+bearing for the mesh, the registration string is not.
 
-- The fleet view **merges Istio telemetry with the registration**, so a mismatch renders the
-  **same cluster twice**, once per name, each copy looking half-broken.
-- That ID is also the **SPIFFE trust domain** cross-cluster mTLS authenticates against, so it is
-  the name that cannot move. Align the registration onto Istio, **never the reverse**.
-
-> Note for this engagement: §0 records a deliberate **common `cluster.local` trust domain** across
-> both clusters, which is a *trust domain* decision and separate from the per-cluster **cluster ID**.
-> Keep the cluster IDs distinct even though the trust domain is shared, or the two clusters cannot
-> be told apart in the fleet view.
+> **The trust domain is NOT involved here.** The relay's namespace is **not mesh-enrolled** (no
+> `istio.io/dataplane-mode`), and the tunnel dials the management plane directly as ordinary
+> TLS/gRPC — it never traverses ztunnel or HBONE and carries no SPIFFE workload identity. So a
+> shared `cluster.local` trust domain (§0) neither helps nor hinders relay connectivity, and
+> **distinct cluster IDs under a common trust domain is the normal arrangement**, not a conflict.
+> Trust domain matters for cross-cluster **mesh mTLS** (§7's `no cert pool found for trust domain`
+> failure) — a data-plane concern, not this one. Keep the two separate when debugging: they are
+> configured independently, and in some installs they merely happen to hold the same string
+> (`trustDomain` left unset defaults to the cluster name, which makes SPIFFE IDs read
+> `<cluster-id>/ns/...` and invites exactly this conflation).
 
 ### Verify (layered — cheapest to definitive)
 
@@ -2137,7 +2143,7 @@ kubectl --context $WORKLOAD auth can-i list services --all-namespaces \
 | Management endpoints are NodePort and the relay won't start | Assuming the chart needs a LoadBalancer address | It doesn't — `tunnel.port` / `telemetry.port` are values. Point `fqdn` at a node IP and `port` at the nodePort |
 | TCP connects, tunnel still never establishes | **Intercepting proxy** terminates TLS and breaks HTTP/2 — or an OpenShift **Route** in front of `:9000` doing the same | Bypass interception for the tunnel endpoint; a Route must be **passthrough**. Sibling of the `packet length too long` row in the §10 table |
 | Management endpoints are `ClusterIP` only | No LoadBalancer in this environment; chart values assume a reachable address | Decide the exposure deliberately (MetalLB / NodePort / passthrough Route) — see "Exposing the two management endpoints" above. Not a relay misconfiguration |
-| **Same cluster rendered twice** in the fleet view | Registered `cluster=` ≠ Istio cluster ID; the fleet view merges telemetry with registration | Align the registration onto the **Istio** ID, never the reverse — it is also the SPIFFE trust domain. Same string in the relay value, the telemetry collector's cluster name, and the KubernetesCluster object |
+| **Same cluster rendered twice** in the fleet view | Registered `cluster=` ≠ Istio cluster ID; the fleet view merges telemetry (tagged with the Istio ID) against the registration | Align the registration onto the **Istio** ID, never the reverse. Same string in the relay value, the telemetry collector's cluster name, and the KubernetesCluster object. Unrelated to the trust domain — see the note under Install |
 | Cluster connected but **region/zone `-`, health 0, no services** | `k8sobjects-collector` crashlooping, or its ClusterRole/binding was dropped | `logs ... -c k8sobjects-collector`; verify RBAC (step 6). A **hand-pinned older collector image** against a newer chart config crashloops on unknown receiver/config fields — let the chart choose the image |
 | Dashboards read *No Data Available*, cluster otherwise fine | Telemetry arrived and was **dropped** — management analytics volume full (ClickHouse `code: 243 Cannot reserve … not enough space`) | Management side, not the relay. Expand the PVC, restart the store pod so it remounts, then restart the telemetry collector to clear its dead-letter queue. Distinguish from "never arrived" by reading BOTH collectors' logs |
 | Fix applied, UI unchanged | The UI caches its **connection registry in memory** | `kubectl rollout restart deploy/solo-enterprise-ui -n solo-enterprise`, then re-check. Until that restart it keeps logging `internal h2 connection is down` for a cluster you already fixed |
