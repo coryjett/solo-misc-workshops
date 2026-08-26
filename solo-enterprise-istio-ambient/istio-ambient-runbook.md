@@ -2028,7 +2028,6 @@ helm upgrade -i solo-relay \
   oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/relay \
   -n solo-enterprise --create-namespace --version <chart-version> \
   --set cluster=<istio-cluster-id> \
-  --set products.mesh.enabled=true \
   --set tunnel.fqdn=<mgmt-node-ip>     --set tunnel.port=<tunnel-nodePort> \
   --set telemetry.fqdn=<mgmt-node-ip>  --set telemetry.port=<otlp-remote-nodePort>
 ```
@@ -2065,28 +2064,32 @@ kubectl --context $MGMT get deploy solo-enterprise-ui -n solo-enterprise \
 LoadBalancer form (defaults `tunnel.port=9000`, `telemetry.port=4316`). For **NodePort**, add the
 two `port` values — see "Exposing the two management endpoints" above.
 
-> 🔴 **`products.mesh.enabled=true` is required for a service-mesh engagement, and it defaults to
-> `false`.** The relay gates telemetry per product (`products.kagent` / `products.agentgateway` /
-> `products.mesh`), and metric collection belongs to the mesh product alone. From the chart's own
-> values: *"Metric collection happens for this product only, so **a cluster without mesh does no
-> Prometheus scraping at all**."* Confirmed in `_helpers.tpl` — the scrape config renders only under
-> `and .Values.telemetry.metrics.enabled .Values.products.mesh.enabled`.
+> ⚠️ **`products.*` is version-dependent — check your chart before copying advice about it.**
+> On the released charts, mesh metric scraping is **on by default** and there is no mesh product to
+> enable:
 >
-> Two ways this bites:
-> - **No product set at all** → the chart refuses to install: *"At least one product must be
->   enabled."* Loud, and easy to fix.
-> - **The wrong product set** (e.g. only `kagent`) → installs cleanly, tunnel connects, cluster
->   appears, inventory populates — and **the Istio data plane is never scraped**. Silent, and looks
->   exactly like a broken graph rather than a missing flag.
+> | Chart | `products` block | Metric scraping gated on |
+> |---|---|---|
+> | `0.4.5` | none | `telemetry.metrics.enabled` (default `true`) |
+> | `0.5.1` | `agentgateway` only — **no `products.mesh`** | `telemetry.metrics.enabled` (default `true`) |
+> | unreleased `main` | `kagent` / `agentgateway` / `mesh`, at least one **required** | `metrics.enabled` **and** `products.mesh.enabled` (default `false`) |
 >
-> Set the same products on the relay as on the management chart.
+> So on `0.4.5`/`0.5.1` an absent `products` block is correct and is **not** why metrics are
+> missing. On a future chart carrying the three-product form it becomes load-bearing: the values
+> there read *"Metric collection happens for this product only, so a cluster without mesh does no
+> Prometheus scraping at all"*, and an install with no product set fails validation outright. Verify
+> against the chart you actually have:
+>
+> ```bash
+> helm show values oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/relay \
+>   --version <your-version> | sed -n '/^products:/,/^[a-z]/p'
+> ```
 
 ```bash
 helm upgrade -i solo-relay \
   oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/relay \
   -n solo-enterprise --create-namespace --version <chart-version> \
   --set cluster=<istio-cluster-id> \
-  --set products.mesh.enabled=true \
   --set tunnel.fqdn=<reachable-mgmt-address> \
   --set telemetry.fqdn=<reachable-telemetry-address>
 ```
@@ -2144,6 +2147,41 @@ If the mode is **external address**, trust domain has no bearing on relay connec
 `no cert pool found for trust domain` failure is a separate, data-plane concern. If the mode is
 **ambient multicluster**, treat a relay failure as a §7 peering problem first and work that section
 before touching relay config.
+
+##### Prerequisites for the `mesh.internal` transport
+
+A `*.mesh.internal` fqdn is an ordinary global service, so it inherits every §7/§8 requirement.
+All four must hold or the relay cannot dial the management plane at all:
+
+```bash
+# 1) the management Services must be published global -- BOTH of them
+kubectl --context $MGMT get svc solo-enterprise-ui solo-enterprise-telemetry-gateway \
+  -n solo-enterprise -o custom-columns='NAME:.metadata.name,SCOPE:.metadata.labels.solo\.io/service-scope'
+# want SCOPE=global on both. Anything else and the hostname resolves nowhere.
+
+# 2) NAMESPACE SAMENESS -- global services join on name + namespace, so the relay's
+#    namespace must exist and be mesh-enrolled on BOTH sides
+kubectl --context $MGMT      get ns solo-enterprise --show-labels
+kubectl --context $WORKLOAD  get ns solo-enterprise --show-labels
+# want istio.io/dataplane-mode=ambient on both; note each side's topology.istio.io/network --
+# they must be DISTINCT per cluster and must match that cluster's own E-W gateway (§7/§10)
+
+# 3) the workload cluster must actually see remote endpoints for the hostname
+ZT=$(kubectl --context $WORKLOAD get pods -n istio-system -l app=ztunnel -o name | head -1)
+kubectl --context $WORKLOAD exec -n istio-system ${ZT#pod/} -- \
+  ztunnel-config services 2>/dev/null | grep -i solo-enterprise
+# no rows, or rows with no remote endpoints => peering/global-service problem, not a relay problem
+
+# 4) peering itself healthy (§8's layered check is the definitive one)
+istioctl --context $WORKLOAD multicluster check
+```
+
+> **Chicken-and-egg worth naming out loud:** in this mode the relay depends on the mesh it is
+> supposed to give you visibility into. Peering breaks → the relay goes dark → the UI loses the
+> cluster → you lose the graph you would have used to diagnose the peering. Diagnose from
+> `ztunnel-config` and `istioctl multicluster check` at the CLI, not from the UI. If a cluster needs
+> to stay observable across a peering change, the external-address transport is the more robust
+> choice for exactly this reason.
 
 The two are easy to conflate because in a **docs-standard install they are coupled by convention**:
 the [ambient multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/default/manual/)
@@ -2221,8 +2259,8 @@ kubectl --context $WORKLOAD auth can-i list services --all-namespaces \
 | Every pod `Running`, cluster **never appears** | Egress policy permits `443` only; the tunnel needs **`9000`**, telemetry **`4316`** (or their nodePorts) | Test from a pod (verify step 4), not a laptop. On OVN-K check `EgressFirewall` / `NetworkPolicy` — same class as the §5 egress gotchas. This is the **first** thing to check in a locked-down environment |
 | Egress was opened for telemetry and it still doesn't work | Allow-list built on **`4317`** — that is the gateway's *local* receiver and the relay's *own* listener, not what it dials out on | The outbound port is **`4316`** (`otlp-remote`). Read the exporter endpoint out of the collector ConfigMap rather than inferring it (see the port note above) |
 | Management endpoints are NodePort and the relay won't start | Assuming the chart needs a LoadBalancer address | It doesn't — `tunnel.port` / `telemetry.port` are values. Point `fqdn` at a node IP and `port` at the nodePort |
-| Cluster connects and populates, but **no Istio metrics ever arrive** | **`products.mesh.enabled` is `false`** (the default). Metric collection belongs to the mesh product alone, so the collector does no Prometheus scraping at all | `helm get values solo-relay -n solo-enterprise` — if `products.mesh.enabled` isn't `true`, that is the bug. Reinstall with it set; match the products enabled on the management chart |
-| `helm install` fails: *"At least one product must be enabled"* | No `products.*` set | Set `products.mesh.enabled=true` for a service-mesh cluster |
+| Cluster connects and populates, but **no Istio metrics ever arrive** | On `0.4.5`/`0.5.1` this is **not** a products problem — scraping is on by default. Look at the collector's two failure surfaces instead (§10: receiver vs exporter) | `helm get values solo-relay -n solo-enterprise` to confirm `telemetry.metrics.enabled` wasn't turned off, then read the telemetry-collector logs and classify scrape-vs-export exactly as §10 does |
+| `helm install` fails: *"At least one product must be enabled"* | A chart new enough to carry the three-product form (not `0.4.5`/`0.5.1`) | Enable the product matching this cluster's workload — `products.mesh.enabled=true` for a service-mesh cluster. Match the management chart |
 | Relay fails and the pods are ambient-labeled | **Ambient multicluster transport** — the relay is riding the §7 cross-cluster path, so a peering fault presents as a relay fault | Confirm the mode (ambient label + `--server-name` a `*.mesh.internal` host). If so, work §7 first — peering, network naming, shared root of trust — before touching relay config |
 | TCP connects, tunnel still never establishes | **Intercepting proxy** terminates TLS and breaks HTTP/2 — or an OpenShift **Route** in front of `:9000` doing the same | Bypass interception for the tunnel endpoint; a Route must be **passthrough**. Sibling of the `packet length too long` row in the §10 table |
 | Management endpoints are `ClusterIP` only | No LoadBalancer in this environment; chart values assume a reachable address | Decide the exposure deliberately (MetalLB / NodePort / passthrough Route) — see "Exposing the two management endpoints" above. Not a relay misconfiguration |
