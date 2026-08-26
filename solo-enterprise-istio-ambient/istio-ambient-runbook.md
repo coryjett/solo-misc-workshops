@@ -46,6 +46,12 @@ Everything routes through Gateway API. Use `HTTPRoute`, not `VirtualService`. Ci
 *Onboarding*
 - [11. Onboarding an application team onto an existing cluster](#11-onboarding-an-application-team-onto-an-existing-cluster)
 
+*Management plane*
+- [12. Connecting a workload cluster to the management plane (the relay)](#12-connecting-a-workload-cluster-to-the-management-plane-the-relay)
+    - [One chart, two workloads, three jobs](#one-chart-two-workloads-three-jobs)
+    - [Exposing the two management endpoints (the NodePort problem)](#exposing-the-two-management-endpoints-the-nodeport-problem)
+    - [Relay troubleshooting table](#relay-troubleshooting-table)
+
 *Reference & troubleshooting*
 - [9. Reference: rules of thumb + certificates](#9-reference)
     - [Shared root of trust across clusters — CURRENT setup (one root → per-cluster intermediate)](#shared-root-of-trust-across-clusters-one-root--per-cluster-intermediate--current-setup)
@@ -1505,6 +1511,11 @@ Verified 2026-08-20 against Istio + Solo docs.
 
 Troubleshooting collected from the sections above — single-cluster first, then multicluster.
 
+> **If a whole CLUSTER is missing (rather than nodes within one), go to §12 instead.** This
+> section debugs the management plane's own scrape → ClickHouse → UI pipeline. A workload cluster
+> that never appears, or appears with blank region/zone and no services, is a **relay** problem and
+> has a different diagnostic path.
+
 ### Mesh graph nodes not appearing
 
 > Working notes for the customer engagement (cluster `cluster1`, ns `istio-ns-a` for the
@@ -1930,6 +1941,174 @@ is nothing to undo on their side.
 Global services join on **name + namespace** (namespace sameness), so agree the namespace name
 across clusters *before* the team deploys — renaming later is the expensive path. Details and the
 mismatched-namespace workarounds are in §7 and §8.
+
+
+## 12. Connecting a workload cluster to the management plane (the relay)
+
+Getting a workload cluster to appear — and stay useful — in the Solo Enterprise UI is one
+supported chart, `relay`. **Do not hand-build the collectors for this.** Assembling them
+separately is how image skew and missing RBAC get introduced, and it produces a cluster that
+half-works in ways that are hard to read.
+
+> **Verified where:** chart `relay` **0.4.5**, workload cluster → management plane, both sides
+> with **LoadBalancer** endpoints. Container names, arguments, log signatures and failure modes
+> below are observed, not quoted from docs. The **NodePort / Route exposure** discussion is
+> reasoned from this engagement's §7 constraints and is **not yet verified here** — it is
+> flagged inline where that matters.
+
+### One chart, two workloads, three jobs
+
+The single most useful fact when someone reports "the relay won't connect": it is **three
+independent functions**, and each fails on its own while the other two look perfectly healthy.
+Identify which one is down before touching anything.
+
+| Function | Where it runs | What it gives you | How it looks when only THIS is broken |
+|---|---|---|---|
+| `tunnel-client` | container in the **relay Deployment** | Dials **outbound** to the management tunnel-server on **`:9000`** (HTTP/2). The management plane proxies Kubernetes API reads back down it. No inbound rule needed on the workload cluster. | Cluster **missing from the UI entirely**; management logs read `internal h2 connection is down for cluster <name>` |
+| `k8sobjects-collector` | container in the **relay Deployment** | Ships nodes/services/objects — this is what populates **REGION, ZONE, the service inventory and the health score** | Cluster **is listed and connected**, but region/zone show `-`, health reads 0, no services. The tunnel is genuinely fine |
+| `telemetry-collector` | **separate StatefulSet** | Istio metrics → the management telemetry gateway, so the cluster appears in the service graph on **its own** traffic rather than only via edges its peers report | Cluster present and fully populated, but panels read *No Data Available* and it never originates an edge |
+
+**Two workloads, not one.** People go looking for a single pod, find one, and conclude half the
+release is missing. The relay Deployment runs `2/2`; the telemetry collector is its own
+StatefulSet in the same namespace.
+
+### Exposing the two management endpoints (the NodePort problem)
+
+The relay needs to reach **two different** management-plane endpoints:
+
+| Endpoint | Port | Carried protocol |
+|---|---|---|
+| tunnel-server (on the UI Service) | `9000` | HTTP/2 / gRPC, long-lived |
+| telemetry gateway | `4317` | OTLP gRPC |
+
+> ⚠️ **This engagement has no cloud LoadBalancer** (§0 environment profile), and the relay chart's
+> `tunnel.fqdn` / `telemetry.fqdn` values are written for reachable LoadBalancer addresses. That is
+> the same constraint §7 hit for the east-west gateways, and it needs the same decision made
+> deliberately — **before** debugging the relay as if it were misconfigured:
+>
+> - **MetalLB**, if available, is the least surprising option — the chart works as documented.
+> - **NodePort** + node IP, mirroring §7's peering approach. Both endpoints are plain TCP carrying
+>   gRPC, so the §7 NodePort reasoning transfers.
+> - **OpenShift Route** is the trap. A Route terminating TLS in front of `:9000` breaks the tunnel's
+>   HTTP/2 — the same class of failure as the `packet length too long` / `SSL_ERROR_ZERO_RETURN`
+>   rows in the §10 table. If a Route is used at all it must be **passthrough**, and the telemetry
+>   OTLP endpoint is not an HTTP Route in any useful sense.
+>
+> **Not yet verified in this environment.** Confirm which exposure the management plane actually
+> has before assuming a relay fault.
+
+Find whatever the management plane exposes today:
+
+```bash
+# management cluster -- what the relay has to reach
+kubectl --context $MGMT get svc -n solo-enterprise
+# want, for the two endpoints: an address the WORKLOAD cluster can route to,
+# on :9000 (tunnel, on the UI Service) and :4317 (telemetry gateway).
+# TYPE=ClusterIP for both means nothing off-cluster can reach them -- that is the
+# finding, not a relay bug.
+
+# confirm the tunnel-server is actually listening and on which port
+kubectl --context $MGMT get deploy solo-enterprise-ui -n solo-enterprise \
+  -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{": "}{.args}{"\n"}{end}'
+# tunnel-server args carry --port 9000 plus --reserved-cluster-names (see the table below)
+```
+
+### Install
+
+```bash
+helm upgrade -i solo-relay \
+  oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/relay \
+  -n solo-enterprise --create-namespace --version <chart-version> \
+  --set cluster=<istio-cluster-id> \
+  --set tunnel.fqdn=<reachable-mgmt-address> \
+  --set telemetry.fqdn=<reachable-telemetry-address>
+```
+
+**`cluster` must equal the Istio cluster ID** — the same string as `ServiceMeshController`
+`spec.cluster` / istiod's `CLUSTER_ID`. This is not cosmetic:
+
+- The fleet view **merges Istio telemetry with the registration**, so a mismatch renders the
+  **same cluster twice**, once per name, each copy looking half-broken.
+- That ID is also the **SPIFFE trust domain** cross-cluster mTLS authenticates against, so it is
+  the name that cannot move. Align the registration onto Istio, **never the reverse**.
+
+> Note for this engagement: §0 records a deliberate **common `cluster.local` trust domain** across
+> both clusters, which is a *trust domain* decision and separate from the per-cluster **cluster ID**.
+> Keep the cluster IDs distinct even though the trust domain is shared, or the two clusters cannot
+> be told apart in the fleet view.
+
+### Verify (layered — cheapest to definitive)
+
+```bash
+# 1) the release, and BOTH workloads it owns
+helm list -n solo-enterprise --kube-context $WORKLOAD
+kubectl --context $WORKLOAD get pods -n solo-enterprise
+# want: relay Deployment 2/2, telemetry-collector StatefulSet 1/1
+
+# 2) container-level state -- a crashlooping sibling hides behind a running pod
+kubectl --context $WORKLOAD get pod -n solo-enterprise \
+  -l app.kubernetes.io/instance=solo-relay \
+  -o jsonpath='{range .items[0].status.containerStatuses[*]}{.name}{"  ready="}{.ready}{"  restarts="}{.restartCount}{"\n"}{end}'
+
+# 3) what the tunnel was actually told to dial
+kubectl --context $WORKLOAD get pod -n solo-enterprise \
+  -l app.kubernetes.io/instance=solo-relay \
+  -o jsonpath='{.items[0].spec.containers[?(@.name=="tunnel-client")].args}'
+# --server-name / --server-port / --cluster-name -- check all three against intent
+
+# 4) egress, from INSIDE the cluster's network path (a laptop has different rules --
+#    that difference is frequently the whole bug)
+kubectl --context $WORKLOAD run egress-probe --rm -it --restart=Never \
+  --image=nicolaka/netshoot -- /bin/sh -c '
+    nc -vz -w 5 <mgmt-address> 9000
+    nc -vz -w 5 <telemetry-address> 4317'
+# timeout      => firewall / EgressFirewall / NetworkPolicy dropping it
+# refused      => you reached the network; problem is further up
+# open         => NOT proof the tunnel works: an intercepting proxy completes the
+#                 handshake and then breaks HTTP/2 (connected socket, no stream)
+
+# 5) the tunnel's own account of it
+kubectl --context $WORKLOAD logs -n solo-enterprise \
+  deploy/solo-enterprise-relay -c tunnel-client --tail=60
+# HEALTHY IS DULL AND NOISY: continuous http2 frame chatter --
+#   http2: server read frame WINDOW_UPDATE stream=... incr=...
+#   http2: server read frame RST_STREAM stream=... ErrCode=CANCEL
+# That is a live multiplexed connection doing its job, NOT an error. Do not chase it.
+# Hunt instead for: a repeating dial-and-fail cycle, a TLS error, or silence.
+
+# 6) can the collector actually read the cluster? (RBAC ships with the chart and is
+#    the thing most likely dropped by a restricted installer or admission policy)
+kubectl --context $WORKLOAD auth can-i list nodes \
+  --as=system:serviceaccount:solo-enterprise:solo-enterprise-relay
+kubectl --context $WORKLOAD auth can-i list services --all-namespaces \
+  --as=system:serviceaccount:solo-enterprise:solo-enterprise-relay
+# both must be yes -- a no here fully explains a blank cluster card
+
+# 7) definitive: the cluster appears in the UI, populated (region/zone/services), and
+#    originates an edge in the graph once it carries traffic
+```
+
+### Relay troubleshooting table
+
+| Symptom | Likely cause | Check / fix |
+|---|---|---|
+| Every pod `Running`, cluster **never appears** | Egress policy permits `443` only; the tunnel needs **`9000`**, telemetry **`4317`** | Test from a pod (verify step 4), not a laptop. On OVN-K check `EgressFirewall` / `NetworkPolicy` — same class as the §5 egress gotchas. This is the **first** thing to check in a locked-down environment |
+| TCP connects, tunnel still never establishes | **Intercepting proxy** terminates TLS and breaks HTTP/2 — or an OpenShift **Route** in front of `:9000` doing the same | Bypass interception for the tunnel endpoint; a Route must be **passthrough**. Sibling of the `packet length too long` row in the §10 table |
+| Management endpoints are `ClusterIP` only | No LoadBalancer in this environment; chart values assume a reachable address | Decide the exposure deliberately (MetalLB / NodePort / passthrough Route) — see "Exposing the two management endpoints" above. Not a relay misconfiguration |
+| **Same cluster rendered twice** in the fleet view | Registered `cluster=` ≠ Istio cluster ID; the fleet view merges telemetry with registration | Align the registration onto the **Istio** ID, never the reverse — it is also the SPIFFE trust domain. Same string in the relay value, the telemetry collector's cluster name, and the KubernetesCluster object |
+| Cluster connected but **region/zone `-`, health 0, no services** | `k8sobjects-collector` crashlooping, or its ClusterRole/binding was dropped | `logs ... -c k8sobjects-collector`; verify RBAC (step 6). A **hand-pinned older collector image** against a newer chart config crashloops on unknown receiver/config fields — let the chart choose the image |
+| Dashboards read *No Data Available*, cluster otherwise fine | Telemetry arrived and was **dropped** — management analytics volume full (ClickHouse `code: 243 Cannot reserve … not enough space`) | Management side, not the relay. Expand the PVC, restart the store pod so it remounts, then restart the telemetry collector to clear its dead-letter queue. Distinguish from "never arrived" by reading BOTH collectors' logs |
+| Fix applied, UI unchanged | The UI caches its **connection registry in memory** | `kubectl rollout restart deploy/solo-enterprise-ui -n solo-enterprise`, then re-check. Until that restart it keeps logging `internal h2 connection is down` for a cluster you already fixed |
+| A deleted cluster **returns within ~30s** | **Two CRDs** define `KubernetesCluster`: `platform.solo.io` (current) and `kagent-enterprise.solo.io` (deprecated). The management plane mirrors deprecated → current | Check `kubectl get kubernetesclusters.kagent-enterprise.solo.io -A` **first**. Delete the deprecated object, then the current one, then restart the UI. Deleting only the visible object brings it straight back and the entry looks unkillable |
+| Registration rejected outright | Name collides with the tunnel-server's `--reserved-cluster-names` (normally the management cluster's own name) | Read the arg off the UI Deployment (above) and rename the workload cluster, subject to the Istio-cluster-ID constraint |
+| Stale cluster name lingers in graph/panels after a rename | Telemetry rows retain the old name across many columns | Purging by the `cluster` column alone misses most of it — the old name also lives in `route_cluster`, `source_cluster`, `destination_cluster`, `reporter_cluster`. Sweep every column matching `%cluster%` in the telemetry DB, or panels keep rendering a dead cluster |
+
+### Security note worth raising early
+
+In a default install the **telemetry gateway is reached in plaintext over a public
+LoadBalancer**. In a regulated environment that is a design question to settle up front —
+private link, an internal LB, or fronting it with TLS — not something to discover during a
+security review after rollout.
 
 
 Docs (Solo Enterprise for Istio 1.30.x — Enterprise license required):
