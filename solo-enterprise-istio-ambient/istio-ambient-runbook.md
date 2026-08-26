@@ -2148,6 +2148,31 @@ If the mode is **external address**, trust domain has no bearing on relay connec
 **ambient multicluster**, treat a relay failure as a §7 peering problem first and work that section
 before touching relay config.
 
+##### Bisect it first: resolve a hostname you already know works
+
+Before working the ladder below, split the problem in half. If **any** global service already
+resolves in this cluster (§8's `testapp` is the obvious candidate — its DNS capture is proven by
+the §8 verification), try both names from the failing pod:
+
+```bash
+# a debug CLONE, not a fresh test pod -- it inherits the relay's labels and SCC, so it has the
+# SAME ambient capture status. A plain test pod does not, and will give a misleading answer
+# (this is the same trap §10 flags for the telemetry collector).
+oc debug -n solo-enterprise deploy/solo-enterprise-relay -- \
+  getent hosts testapp.istio-ns-a.mesh.internal            # a KNOWN-GOOD global hostname
+oc debug -n solo-enterprise deploy/solo-enterprise-relay -- \
+  getent hosts solo-enterprise-ui.solo-enterprise.mesh.internal
+```
+
+| Result | What it means | Where to go |
+|---|---|---|
+| **Both fail** | This pod's DNS is not being intercepted at all — it is not captured by ztunnel, whatever its labels say | Step 1–2 below: enrollment and capture **on this cluster** |
+| **Known-good resolves, `solo-enterprise` one does not** | Capture is fine. The management hostname itself is not published or not joined | Step 3–4 below: `solo.io/service-scope=global` on the hub Services, and namespace sameness for `solo-enterprise` |
+| **Both resolve** | DNS is not your problem — re-read the tunnel-client log for what comes *after* the lookup | The egress / TLS / port rows in the table above |
+
+The relay containers are distroless (no shell or `getent` in-pod), which is why this goes through
+`oc debug` rather than `exec`.
+
 ##### Prerequisites for the `mesh.internal` transport
 
 A `*.mesh.internal` fqdn is an ordinary global service, so it inherits every §7/§8 requirement.
