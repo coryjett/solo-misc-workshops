@@ -2173,6 +2173,69 @@ oc debug -n solo-enterprise deploy/solo-enterprise-relay -- \
 The relay containers are distroless (no shell or `getent` in-pod), which is why this goes through
 `oc debug` rather than `exec`.
 
+##### Separate "the name isn't published" from "this pod can't ask"
+
+These are two different failures with one symptom, and one command each. A global service appears
+in ztunnel as **`autogen.<ns>.<svc>`** with a VIP from the **`240.240.0.0/16`** auto-allocation
+range — that is the `.mesh.internal` hostname's registration:
+
+```bash
+istioctl zc services | grep -E 'NAMESPACE|<ns-of-the-global-svc>'
+# autogen.<ns>.<svc>  240.240.x.x  ...  1/1   <- published, and it HAS an endpoint
+#                                             (a remote one, reached via the E-W gateway)
+```
+
+**If the `autogen.` row is present with a non-zero endpoint count, publication and peering are
+fine — stop looking there.** `zc services` reports what ztunnel learned from xDS; it says nothing
+about whether any particular pod is captured. So a healthy row here plus NXDOMAIN in the app means
+the workload never reached ztunnel to ask:
+
+```bash
+# is THIS pod captured? a captured workload shows protocol HBONE
+istioctl zc workloads | grep -E 'NAMESPACE|<relay-pod-name>'
+
+# and the labels that decide it -- check the NAMESPACE on this cluster, not the hub's
+oc get project <ns> --show-labels
+oc get pods -n <ns> -o custom-columns=\
+'POD:.metadata.name,DATAPLANE:.metadata.labels.istio\.io/dataplane-mode'
+```
+
+A pod missing from `zc workloads`, or present with a non-HBONE protocol, is not captured: its DNS
+goes straight to CoreDNS, which has no `mesh.internal` zone, and every global hostname NXDOMAINs
+while the mesh around it looks perfectly healthy.
+
+###### Read the NODE column — capture is per-node, and this is a real failure mode
+
+`istioctl zc workloads` prints `PROTOCOL` and `NODE` side by side, which makes the diagnosis one
+glance. **Captured = `HBONE`. `TCP` on an application pod means not captured.** Cross-reference the
+node against where `ztunnel` and `istio-cni-node` are actually running:
+
+```bash
+istioctl zc workloads          # PROTOCOL + NODE for every workload
+oc get pods -n <ztunnel-ns> -o wide | grep -E 'ztunnel|istio-cni'
+oc get ds -n <ztunnel-ns>      # DESIRED vs READY -- a gap here is the whole bug
+```
+
+Observed in the field: every `HBONE` pod sat on two of three workers, and both relay pods had been
+scheduled to the third — **a node running neither `ztunnel` nor `istio-cni-node`**. Capture is
+applied by the CNI at pod start and carried by a node-local ztunnel, so on such a node no pod can
+ever be captured, whatever labels it or its namespace carry. `istiod` itself ran there, so the node
+was Ready and schedulable and nothing looked wrong at the cluster level.
+
+Why a DaemonSet misses a node — check in this order: a **node taint** the DaemonSet doesn't
+tolerate (the usual cause on OpenShift, e.g. infra/workload-specific taints), a `nodeSelector` or
+affinity that excludes it, or the pod stuck `Pending` there on resources or SCC.
+
+```bash
+oc get node <node> -o jsonpath='{.spec.taints}{"\n"}'
+oc get ds ztunnel -n <ztunnel-ns> -o jsonpath='{.spec.template.spec.tolerations}{"\n"}'
+```
+
+Fix the DaemonSet coverage — that is the actual repair. Rescheduling the affected pod onto a healthy
+node (cordon the bad node, delete the pod) restores service immediately, but it is a workaround: any
+future pod landing there fails identically, which makes this look intermittent and node-dependent
+rather than reproducible.
+
 ##### Prerequisites for the `mesh.internal` transport
 
 A `*.mesh.internal` fqdn is an ordinary global service, so it inherits every §7/§8 requirement.
