@@ -1952,9 +1952,18 @@ half-works in ways that are hard to read.
 
 > **Verified where:** chart `relay` **0.4.5**, workload cluster → management plane, both sides
 > with **LoadBalancer** endpoints. Container names, arguments, log signatures and failure modes
-> below are observed, not quoted from docs. The **NodePort / Route exposure** discussion is
-> reasoned from this engagement's §7 constraints and is **not yet verified here** — it is
-> flagged inline where that matters.
+> below are observed against a running deployment or read from the chart source, not quoted from
+> docs — the Solo docs are cited inline where they do (and do not) back a claim. The **NodePort /
+> Route exposure** discussion is reasoned from this engagement's §7 constraints and is **not yet
+> verified here**, flagged inline where that matters.
+>
+> **Which relay this is.** The Solo Enterprise relay: a `tunnel-client` plus OpenTelemetry
+> collectors, talking to a `solo-enterprise-ui` / `solo-enterprise-telemetry-gateway` /
+> ClickHouse management plane — the stack §10 identifies in this deployment. It serves the mesh,
+> agentgateway and kagent products alike, selected by `products.*`. **Not** to be confused with
+> the older **Gloo Mesh Enterprise** relay (`relay-server` / `relay-agent`, its own mTLS and
+> `relay-root-tls-secret`), which is a different architecture with a different debugging path —
+> §10 already notes the corresponding UI difference (`gloo-mesh-ui` vs the ClickHouse-backed UI).
 
 ### One chart, two workloads, three jobs
 
@@ -2019,6 +2028,7 @@ helm upgrade -i solo-relay \
   oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/relay \
   -n solo-enterprise --create-namespace --version <chart-version> \
   --set cluster=<istio-cluster-id> \
+  --set products.mesh.enabled=true \
   --set tunnel.fqdn=<mgmt-node-ip>     --set tunnel.port=<tunnel-nodePort> \
   --set telemetry.fqdn=<mgmt-node-ip>  --set telemetry.port=<otlp-remote-nodePort>
 ```
@@ -2055,11 +2065,28 @@ kubectl --context $MGMT get deploy solo-enterprise-ui -n solo-enterprise \
 LoadBalancer form (defaults `tunnel.port=9000`, `telemetry.port=4316`). For **NodePort**, add the
 two `port` values — see "Exposing the two management endpoints" above.
 
+> 🔴 **`products.mesh.enabled=true` is required for a service-mesh engagement, and it defaults to
+> `false`.** The relay gates telemetry per product (`products.kagent` / `products.agentgateway` /
+> `products.mesh`), and metric collection belongs to the mesh product alone. From the chart's own
+> values: *"Metric collection happens for this product only, so **a cluster without mesh does no
+> Prometheus scraping at all**."* Confirmed in `_helpers.tpl` — the scrape config renders only under
+> `and .Values.telemetry.metrics.enabled .Values.products.mesh.enabled`.
+>
+> Two ways this bites:
+> - **No product set at all** → the chart refuses to install: *"At least one product must be
+>   enabled."* Loud, and easy to fix.
+> - **The wrong product set** (e.g. only `kagent`) → installs cleanly, tunnel connects, cluster
+>   appears, inventory populates — and **the Istio data plane is never scraped**. Silent, and looks
+>   exactly like a broken graph rather than a missing flag.
+>
+> Set the same products on the relay as on the management chart.
+
 ```bash
 helm upgrade -i solo-relay \
   oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/relay \
   -n solo-enterprise --create-namespace --version <chart-version> \
   --set cluster=<istio-cluster-id> \
+  --set products.mesh.enabled=true \
   --set tunnel.fqdn=<reachable-mgmt-address> \
   --set telemetry.fqdn=<reachable-telemetry-address>
 ```
@@ -2078,13 +2105,45 @@ Telemetry arrives tagged with the Istio cluster ID; the registration arrives tag
 `cluster=` says. When they disagree the UI has no way to know they describe one cluster, so it
 renders the **same cluster twice**, once per name, each copy looking half-broken.
 
-#### Trust domain: not involved in relay connectivity
+#### Trust domain: depends on which transport the relay uses — establish that first
 
-The relay's namespace is **not mesh-enrolled** (no `istio.io/dataplane-mode`), and the tunnel dials
-the management plane directly as ordinary TLS/gRPC — it never traverses ztunnel or HBONE and
-carries no SPIFFE workload identity. **Trust domain therefore has no bearing on whether the relay
-connects.** It matters for cross-cluster **mesh mTLS** (§7's `no cert pool found for trust domain`
-failure) — a data-plane concern, not this one.
+There are **two transport modes**, and which one is in play decides whether §7's peering and trust
+domain are in the debugging path at all. Establish the mode before anything else, or you will debug
+the wrong layer.
+
+| Mode | How it reaches the management plane | Is mesh peering / trust domain involved? |
+|---|---|---|
+| **External address** | `tunnel.fqdn` / `telemetry.fqdn` set to a LoadBalancer or NodePort address. Traffic egresses to an off-mesh IP. | **No.** Ordinary TLS/gRPC to an endpoint. No HBONE, no SPIFFE identity on that connection. §7 is irrelevant |
+| **Ambient multicluster** | Relay pods carry `istio.io/dataplane-mode=ambient` and reach the management plane's **global Services** over the ambient mesh | **Yes.** This rides the same cross-cluster path §7 built, so peering, network naming and the shared root of trust all gate it |
+
+> ⚠️ **The chart defaults toward the ambient path.** `istio.ambient.enabled` is **`true`** by
+> default, and the values file states the intent plainly: relay pods are labeled
+> `istio.io/dataplane-mode=ambient` *"so the workload cluster's collectors can reach the management
+> cluster's global Services (tunnel server, telemetry gateway) over ambient multi-cluster mesh
+> without any post-install labeling."* Disable it (`--set istio.ambient.enabled=false`) only when
+> installing into a cluster not running ambient.
+
+Check which mode you are actually in — the label and the dial target are set independently, and a
+pod can carry the ambient label while still dialing a raw external IP:
+
+```bash
+# 1) are the relay pods ambient-labeled? NOTE: the chart labels the POD, not the namespace --
+#    checking namespace labels here produces a false "not in the mesh" answer
+kubectl --context $WORKLOAD get pods -n solo-enterprise \
+  -o custom-columns='POD:.metadata.name,DATAPLANE:.metadata.labels.istio\.io/dataplane-mode'
+
+# 2) what does the tunnel actually dial? a mesh.internal global hostname, or a raw address?
+kubectl --context $WORKLOAD get pod -n solo-enterprise \
+  -l app.kubernetes.io/instance=solo-relay \
+  -o jsonpath='{.items[0].spec.containers[?(@.name=="tunnel-client")].args}'
+# --server-name <ip-or-host>. A raw IP => external-address mode regardless of the ambient label.
+# A *.mesh.internal global hostname => ambient multicluster mode, and §7 is now in scope.
+```
+
+If the mode is **external address**, trust domain has no bearing on relay connectivity; §7's
+`no cert pool found for trust domain` failure is a separate, data-plane concern. If the mode is
+**ambient multicluster**, treat a relay failure as a §7 peering problem first and work that section
+before touching relay config.
 
 The two are easy to conflate because in a **docs-standard install they are coupled by convention**:
 the [ambient multicluster install](https://docs.solo.io/istio/1.30.x/ambient/multicluster/install/default/manual/)
@@ -2098,9 +2157,9 @@ read `<cluster-id>/ns/...`.)
 > ⚠️ **This engagement deliberately diverges from that.** §0 records a **common `cluster.local`
 > across both clusters**, chosen to resolve the `no cert pool found for trust domain <peer>` peering
 > failure. So here the coupling is broken on purpose: cluster IDs are distinct, the trust domain is
-> shared, and that is a decision — not drift, and not a conflict with the relay. Don't "fix" it back
-> to `${cluster}.local` while debugging relay connectivity; that would re-open a settled §7 problem
-> for no relay benefit.
+> shared, and that is a decision — not drift. Don't "fix" it back to `${cluster}.local` while
+> debugging the relay: in **external-address** mode it buys nothing, and in **ambient multicluster**
+> mode it re-opens the exact §7 failure that choice was made to settle.
 
 ### Verify (layered — cheapest to definitive)
 
@@ -2162,6 +2221,9 @@ kubectl --context $WORKLOAD auth can-i list services --all-namespaces \
 | Every pod `Running`, cluster **never appears** | Egress policy permits `443` only; the tunnel needs **`9000`**, telemetry **`4316`** (or their nodePorts) | Test from a pod (verify step 4), not a laptop. On OVN-K check `EgressFirewall` / `NetworkPolicy` — same class as the §5 egress gotchas. This is the **first** thing to check in a locked-down environment |
 | Egress was opened for telemetry and it still doesn't work | Allow-list built on **`4317`** — that is the gateway's *local* receiver and the relay's *own* listener, not what it dials out on | The outbound port is **`4316`** (`otlp-remote`). Read the exporter endpoint out of the collector ConfigMap rather than inferring it (see the port note above) |
 | Management endpoints are NodePort and the relay won't start | Assuming the chart needs a LoadBalancer address | It doesn't — `tunnel.port` / `telemetry.port` are values. Point `fqdn` at a node IP and `port` at the nodePort |
+| Cluster connects and populates, but **no Istio metrics ever arrive** | **`products.mesh.enabled` is `false`** (the default). Metric collection belongs to the mesh product alone, so the collector does no Prometheus scraping at all | `helm get values solo-relay -n solo-enterprise` — if `products.mesh.enabled` isn't `true`, that is the bug. Reinstall with it set; match the products enabled on the management chart |
+| `helm install` fails: *"At least one product must be enabled"* | No `products.*` set | Set `products.mesh.enabled=true` for a service-mesh cluster |
+| Relay fails and the pods are ambient-labeled | **Ambient multicluster transport** — the relay is riding the §7 cross-cluster path, so a peering fault presents as a relay fault | Confirm the mode (ambient label + `--server-name` a `*.mesh.internal` host). If so, work §7 first — peering, network naming, shared root of trust — before touching relay config |
 | TCP connects, tunnel still never establishes | **Intercepting proxy** terminates TLS and breaks HTTP/2 — or an OpenShift **Route** in front of `:9000` doing the same | Bypass interception for the tunnel endpoint; a Route must be **passthrough**. Sibling of the `packet length too long` row in the §10 table |
 | Management endpoints are `ClusterIP` only | No LoadBalancer in this environment; chart values assume a reachable address | Decide the exposure deliberately (MetalLB / NodePort / passthrough Route) — see "Exposing the two management endpoints" above. Not a relay misconfiguration |
 | **Same cluster rendered twice** in the fleet view | Registered `cluster=` ≠ Istio cluster ID; the fleet view merges telemetry (tagged with the Istio ID) against the registration | Align the registration onto the **Istio** ID, never the reverse. Same string in the relay value, the telemetry collector's cluster name, and the KubernetesCluster object. Unrelated to the trust domain — see the note under Install |
