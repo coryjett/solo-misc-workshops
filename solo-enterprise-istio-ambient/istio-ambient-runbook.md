@@ -1752,12 +1752,87 @@ The one **genuine** finding that appears in *both* runs is the NodePort E-W gate
 | E-W gateway missing from the Solo UI graph | Telemetry, not routing | See §10 appendix (mesh graph) — same collector-scrape / ClickHouse pipeline; the E-W gateway is scraped like any other proxy |
 | `multicluster check` exits `found issues` but the mesh is fine | **Split install** — istiod in `istio-system`, cni/ztunnel in `kube-system`; the tool assumes one namespace | Expected for this topology. No single `-i` passes all — run twice (`-i istio-system` and `-i kube-system`) and read the individual lines, not the exit code (see above) |
 | E-W gateway (NodePort) warns *"reporting ClusterIP — node address discovery may have failed"* | istiod is resolving the gateway to its **ClusterIP** instead of `NodeIP:nodePort`. With **no ExternalIP** on the nodes (bare metal), NodePort address discovery doesn't fall through unless it's told to prefer NodePort. RBAC to `list nodes` is necessary but **not sufficient** on its own. | Set **`peering.solo.io/preferred-data-plane-service-type: NodePort`** on each cluster's **own** E-W gateway (annotation, or Helm `dataplaneServiceTypes: nodeport`) — this is what makes istiod advertise a NodeIP. Confirm RBAC: `oc auth can-i list nodes --as=system:serviceaccount:istio-system:istiod` (want `yes`). Then verify: `kubectl -n istio-eastwest get gateway istio-eastwest -o yaml \| grep -iA6 address` shows a node IP, not the ClusterIP. Note: a NodePort Service always has a ClusterIP, so some `check` versions keep warning even when the NodeIP is correctly advertised — validate with `--contexts=$C1,$C2` + a real cross-cluster call, not the exit code. |
+| Cross-cluster calls to a **remote-only** service reset (`Recv failure: Connection reset by peer`), while services with LOCAL endpoints work fine | **Node address discovery half-worked: the peer gateway is advertised as `NodeIP:containerPort` instead of `NodeIP:nodePort`.** Under NodePort peering the E-W gateway is reachable from outside only on its nodePort, so HBONE to `<node-ip>:15008` hits a closed port. Nothing listens, ztunnel resets the caller. Services that have local endpoints never traverse, so the mesh looks healthy and only remote-only destinations fail — which is why this can sit undetected until the first workload genuinely needs the far cluster | Compare the two directly: `istioctl zc workloads \| grep NetworkGateway` on the caller (what it dials) against `kubectl get svc -n istio-eastwest` on the peer (`15008:<nodePort>`). A `NetworkGateway/<peer>/<node-ip>/15008` entry against a peer whose 15008 maps to a nodePort is the bug. Fix on the PEER's own E-W gateway — `peering.solo.io/preferred-data-plane-service-type: NodePort` (annotation, or Helm `dataplaneServiceTypes: nodeport`) so istiod advertises the nodePort — and ensure the caller's `remote.items` carries `preferredDataplaneServiceType: nodeport` + `nodeport: <peer 15012 nodePort>`. Healthy end-state adds `autogen.node.<peer>.<node>` rows (§8); their **absence** is the tell |
 | `Network Configuration Check` ❌ — *"eastwest gateway has network X but cluster network is Y"* / *"istio proxy pod(s) with mismatched ISTIO_META_NETWORK"* | The network name isn't consistent across the cluster — a **local** component is tagged with the **peer's** network name (e.g. the local E-W gateway or a proxy pod wears the remote network). Ambient maps endpoints→gateway by network name, so a mismatch breaks cross-cluster HBONE routing. | Pick ONE canonical network name per cluster (the value on `istio-system`'s `topology.istio.io/network` label — the mesh majority). Fix only the mismatched objects, **not** the correct namespaces: `kubectl -n istio-eastwest label gateway istio-eastwest topology.istio.io/network=<local-net> --overwrite` (and fix the Helm/install `global.network` value if that's the source, else the operator reverts the label), `kubectl label ns istio-eastwest topology.istio.io/network=<local-net> --overwrite`, then `rollout restart` the E-W gateway + the mismatched proxy's owner. Find the bad pod: `kubectl get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,NET:.spec.containers[*].env[?(@.name=="ISTIO_META_NETWORK")].value' \| grep <peer-net>`. The peer's name must appear **only** on the remote network object (`istio-remote` Gateway), never on anything local. Check the peer cluster for the mirror bug. |
 | Peering stream flaps 60s: `deltaadsc disconnected … remote error: tls: bad certificate` + istiod info `Could not verify certificate: no cert pool found for trust domain <peer>` | **Trust-domain trust anchors missing** — distinct per-cluster trustDomains, and istiod has no cert pool for the peer's domain. Root fingerprints can all match and this still fails. | Either add `meshConfig.caCertificates` with the common root + `trustDomains: [<peer>]` (keeps distinct domains), or move both clusters to a **common trustDomain** — see the §7 trust-domain note. Restart istiod (+ full re-roll for a domain change). |
 | istiod: `serverca … impersonation failed for identity spiffe://… caller (Pod{ztunnel-…, ServiceAccount: ztunnel}) is not allowed to impersonate` | ztunnel runs in a namespace istiod doesn't trust for node-delegated cert requests (split installs; ns can differ per cluster) | Set **`trustedZtunnelNamespace: "<ns where ztunnel runs>"`** in that cluster's istiod values (`oc get ds -A \| grep ztunnel` to confirm), restart istiod then ztunnel — §7 note |
 | istiod controller retry loop: `failed to apply required labels on node WE …; either no SE found or SE missing required labels; ignore if nodeport peering is not enabled` | The peer item lacks the NodePort fields, so the SE representing the peer's E-W gateway in nodeport mode was never generated | Ensure that side's `remote.items` has `preferredDataplaneServiceType: nodeport` **and** `nodeport: <peer's 15012 nodePort>`. Healthy end-state = `NetworkGateway/<peer>` + `autogen.node.<peer>…` rows in `ztunnel-config workloads` (§8) |
 | External curl → `SSL_ERROR_ZERO_RETURN`; ztunnel access log: `connection closed due to policy rejection: explicitly denied by: istio-system/istio_converted_static_strict` | An **unmeshed caller in plaintext** hit a workload under **STRICT `PeerAuthentication`** — e.g. an OpenShift Route pointing **directly at the app Service** (router → pod bypasses the mesh's ingress gateway) | Point the Route at the **meshed ingress gateway** (passthrough) so the caller into the workload is the in-mesh gateway; keep STRICT. Check `oc get pa -A` for the enforcing policies. Deleting/PERMISSIVE-ing the PA "fixes" the curl but drops the zero-trust posture — temporary debugging move only |
 | External curl → `curl: (35) SSL routines::packet length too long` | TLS bytes delivered to a **plaintext responder** — same bypass Route as above (**passthrough** Route pointing at the plain-HTTP **app Service**: with STRICT off, the pod answers HTTP mid-TLS-handshake), or a Route whose `targetPort` hits a non-TLS port on the gateway Service | `oc get route -o custom-columns='NAME:.metadata.name,HOST:.spec.host,SVC:.spec.to.name,PORT:.spec.port.targetPort,TLS:.spec.tls.termination'` — the working Route targets the **gateway Service's TLS listener port** with `passthrough`, and the Route host must EQUAL the Gateway listener `hostname:` (SNI selects the listener). **Verify testers use the gateway Route's hostname** — a stale direct-to-Service Route with a similar name produced two sessions of false "mesh is broken" reports. Delete the bypass Route |
+
+### Session log: relay to management plane — root cause found, fix not yet applied (2026-08-26)
+
+**Symptom as reported:** the relay on the spoke would not connect to the management plane; no
+cluster in the Solo UI.
+
+**Root cause (confirmed, not yet fixed): the peer E-W gateway is advertised as
+`NodeIP:15008` — the container port — under NodePort peering, where 15008 is reachable
+externally only on its nodePort.** Nothing listens on `<node-ip>:15008`, so ztunnel resets every
+caller. See the new §10 row.
+
+**Two separate faults were found; the first masked the second.**
+
+1. **Relay pods were not captured.** `istioctl zc workloads` showed them as `PROTOCOL: TCP` while
+   every working pod read `HBONE`. They had been scheduled onto a node running neither `ztunnel`
+   nor `istio-cni` — the DaemonSets are deliberately restricted to a subset of nodes here.
+   Uncaptured means no ztunnel DNS interception, so `*.mesh.internal` fell through to CoreDNS,
+   which has no such zone: `no such host`. Rescheduling onto a ztunnel-bearing node fixed DNS and
+   moved the failure down a layer. See §12 for the capture/NODE-column diagnostic and the
+   podAffinity fix that makes placement deterministic.
+
+2. **Then the real one surfaced.** With DNS working, both the tunnel (`:9000`) and the telemetry
+   exporter (`:4316`) connected and were immediately reset. Two different services, two ports, one
+   failure — so not the applications.
+
+**What the elimination proved, in order:** DNS resolving ✓ · relay values correct (`X-Cluster-ID`
+set correctly) ✓ · global services published with endpoints (`autogen.<ns>.<svc>`, `240.240.0.0/16`
+VIPs, non-zero endpoints) ✓ · **no AuthorizationPolicies on either cluster** ✓ · management Service
+ports correct (tunnel port present) ✓ · **management pods captured on the hub** (`HBONE`) ✓.
+
+**The decisive test** was to reproduce from a known-good pod: a captured `testapp` pod in the
+proven-working namespace got the same reset against the management hostname. That removed the relay
+from the picture entirely and pointed at the destination. The distinguishing property is that the
+management services are **remote-only** — they have no local endpoints on the spoke, so unlike
+`testapp` they must actually traverse the E-W path. That direction had never been exercised.
+
+**Corroborating detail:** the spoke's `istioctl zc workloads` had **no `autogen.node.<peer>.<node>`
+rows** — the node-level gateway endpoints healthy NodePort peering produces (§8). Their absence was
+the tell, alongside the `NetworkGateway/<peer>/<node-ip>/15008` entry.
+
+#### Next steps (start here)
+
+1. **Confirm the port mismatch.** On the peer: `oc get svc -n istio-eastwest` — note what `15008`
+   and `15012` map to. On the caller: `istioctl zc workloads | grep NetworkGateway` — if it names
+   `:15008` against a peer whose 15008 is a nodePort, that is the bug.
+2. **Check whether the annotation is actually set** on the peer's OWN E-W gateway:
+   `oc get gateway istio-eastwest -n istio-eastwest -o yaml | grep -A10 annotations` — want
+   `peering.solo.io/preferred-data-plane-service-type: NodePort`. It advertised a NodeIP but the
+   wrong port, so discovery is partially applied — establish which half is missing before changing
+   anything.
+3. **Check the caller's remote peer entry**: `oc get gateway -n istio-eastwest -o yaml` (the
+   `istio-remote` one) for `preferredDataplaneServiceType: nodeport` and `nodeport: <peer 15012
+   nodePort>` (§7).
+4. **Apply the fix, then verify in this order** — each step gates the next:
+   - `istioctl zc workloads | grep NetworkGateway` now names the **nodePort**, not 15008
+   - `istioctl zc workloads | grep autogen.node` returns rows (previously empty)
+   - the repro stops resetting:
+     `oc -n <app-ns> rsh <captured-pod> -- curl -s -o /dev/null -w '%{http_code}\n' <mgmt-ui>.<ns>.mesh.internal:9000`
+   - the relay recovers **on its own** — it retries every ~2s, no restart needed. Confirm with
+     `oc logs deploy/solo-enterprise-relay -c tunnel-client` (quiet, or HTTP/2 frame chatter, which
+     is healthy) and the telemetry collector no longer reporting `sending queue is full`
+   - the cluster appears in the UI **with region/zone and services populated** — that last part
+     comes from the k8sobjects collector, so it confirms both relay workloads, not just the tunnel
+   - if the UI still shows it stale, restart the management UI to flush its in-memory connection
+     registry (§12)
+5. **Then re-run §8's verification in BOTH directions.** The gap here was that remote-only
+   traversal had only ever been proven one way. Scale the local side to zero and call from each
+   cluster in turn — that is what would have caught this before a real workload did.
+
+**Loose end:** the global service VIPs are dual-stack (`240.240.0.x` + `2001:2::x`) while the
+management Services are `ipFamilyPolicy: SingleStack` IPv4. The exporter burns every other retry on
+`[2001:2::x]:<port>` → `network is unreachable`. Harmless but it halves the effective retry rate and
+adds noise to exactly the logs you are reading during an incident. Worth deciding whether to
+suppress once the peering fix lands.
 
 ### Session log: multicluster COMPLETE (2026-08-21)
 
