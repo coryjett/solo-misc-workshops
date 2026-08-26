@@ -1976,34 +1976,69 @@ StatefulSet in the same namespace.
 
 The relay needs to reach **two different** management-plane endpoints:
 
-| Endpoint | Port | Carried protocol |
-|---|---|---|
-| tunnel-server (on the UI Service) | `9000` | HTTP/2 / gRPC, long-lived |
-| telemetry gateway | `4317` | OTLP gRPC |
+| Endpoint | Chart value | Default port | Carried protocol |
+|---|---|---|---|
+| tunnel-server (on the UI Service) | `tunnel.fqdn` / `tunnel.port` | `9000` | HTTP/2 / gRPC, long-lived |
+| telemetry gateway | `telemetry.fqdn` / `telemetry.port` | **`4316`** | OTLP gRPC |
 
-> ⚠️ **This engagement has no cloud LoadBalancer** (§0 environment profile), and the relay chart's
-> `tunnel.fqdn` / `telemetry.fqdn` values are written for reachable LoadBalancer addresses. That is
-> the same constraint §7 hit for the east-west gateways, and it needs the same decision made
-> deliberately — **before** debugging the relay as if it were misconfigured:
+> ⚠️ **The outbound telemetry port is `4316`, not `4317`.** The management telemetry gateway
+> exposes both: `4316` (`otlp-remote`) is what workload clusters dial **out** to; `4317` (`otlp`)
+> is the gateway's local receiver. The relay's own collector *also* listens on `0.0.0.0:4317`
+> in-cluster for traces, which makes `4317` look like the relevant number when you read its config.
+> **An egress allow-list built on `4317` will not fix the relay** — verify against the real config:
 >
-> - **MetalLB**, if available, is the least surprising option — the chart works as documented.
-> - **NodePort** + node IP, mirroring §7's peering approach. Both endpoints are plain TCP carrying
->   gRPC, so the §7 NodePort reasoning transfers.
-> - **OpenShift Route** is the trap. A Route terminating TLS in front of `:9000` breaks the tunnel's
->   HTTP/2 — the same class of failure as the `packet length too long` / `SSL_ERROR_ZERO_RETURN`
->   rows in the §10 table. If a Route is used at all it must be **passthrough**, and the telemetry
->   OTLP endpoint is not an HTTP Route in any useful sense.
+> ```bash
+> kubectl --context $WORKLOAD get cm solo-enterprise-telemetry-collector-config \
+>   -n solo-enterprise -o yaml | grep -iE 'endpoint'
+> # the exporter's endpoint (a <mgmt-address>:<port> line) is the one egress must permit;
+> # the ${env:MY_POD_IP} and 0.0.0.0 lines are local listeners, not egress
+> ```
+
+**This engagement has no cloud LoadBalancer** (§0 environment profile), and both the chart's
+docstrings and the Solo docs describe finding these addresses via
+`.status.loadBalancer.ingress[0]`. That reads as "LoadBalancer required". **It isn't** — the port
+is a value, not a constant:
+
+- **NodePort works directly.** Set `fqdn` to a node IP and `port` to the **nodePort**, exactly the
+  approach §7 took for E-W peering. Nothing else changes.
+- **MetalLB**, if available, keeps the documented values as-is.
+- **OpenShift Route is the trap.** A Route terminating TLS in front of `:9000` breaks the tunnel's
+  HTTP/2 — same class as the `packet length too long` / `SSL_ERROR_ZERO_RETURN` rows in the §10
+  table. If a Route is used at all it must be **passthrough**, and the OTLP telemetry endpoint is
+  not a useful HTTP Route in any case.
+
+```bash
+# NodePort form -- read the nodePorts off the management Services, don't assume them
+kubectl --context $MGMT get svc solo-enterprise-ui solo-enterprise-telemetry-gateway \
+  -n $MGMT_NS -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{range .spec.ports[*]}  {.name} port={.port} nodePort={.nodePort}{"\n"}{end}{end}'
+# e.g. tunnel port=9000 nodePort=3xxxx ; otlp-remote port=4316 nodePort=3xxxx
+
+helm upgrade -i solo-relay \
+  oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/relay \
+  -n solo-enterprise --create-namespace --version <chart-version> \
+  --set cluster=<istio-cluster-id> \
+  --set tunnel.fqdn=<mgmt-node-ip>     --set tunnel.port=<tunnel-nodePort> \
+  --set telemetry.fqdn=<mgmt-node-ip>  --set telemetry.port=<otlp-remote-nodePort>
+```
+
+> **§7's NodePort caveats apply to reachability, not to the chart.** Nodes here carry an
+> **InternalIP only** (no ExternalIP), so the workload cluster must be able to route to the
+> management cluster's node IPs — confirm that before blaming the relay. Unlike §7's E-W gateway,
+> there is **no `preferred-data-plane-service-type` equivalent** here: the relay dials an address
+> you hand it, so nothing has to discover a node address on your behalf.
 >
-> **Not yet verified in this environment.** Confirm which exposure the management plane actually
-> has before assuming a relay fault.
+> **NodePort exposure of the relay endpoints is not yet verified in this environment** — the
+> observed material is a LoadBalancer install. The chart values above are read from `relay` 0.4.5.
 
 Find whatever the management plane exposes today:
 
 ```bash
-# management cluster -- what the relay has to reach
-kubectl --context $MGMT get svc -n solo-enterprise
+# management cluster -- what the relay has to reach.
+# NOTE the namespace varies by install: the chart's own docstrings say `kagent`,
+# this runbook's deployment uses `solo-enterprise`. Confirm before copying.
+kubectl --context $MGMT get svc -n $MGMT_NS
 # want, for the two endpoints: an address the WORKLOAD cluster can route to,
-# on :9000 (tunnel, on the UI Service) and :4317 (telemetry gateway).
+# on :9000 (tunnel, on the UI Service) and :4316 (otlp-remote, telemetry gateway).
 # TYPE=ClusterIP for both means nothing off-cluster can reach them -- that is the
 # finding, not a relay bug.
 
@@ -2014,6 +2049,9 @@ kubectl --context $MGMT get deploy solo-enterprise-ui -n solo-enterprise \
 ```
 
 ### Install
+
+LoadBalancer form (defaults `tunnel.port=9000`, `telemetry.port=4316`). For **NodePort**, add the
+two `port` values — see "Exposing the two management endpoints" above.
 
 ```bash
 helm upgrade -i solo-relay \
@@ -2060,8 +2098,10 @@ kubectl --context $WORKLOAD get pod -n solo-enterprise \
 #    that difference is frequently the whole bug)
 kubectl --context $WORKLOAD run egress-probe --rm -it --restart=Never \
   --image=nicolaka/netshoot -- /bin/sh -c '
-    nc -vz -w 5 <mgmt-address> 9000
-    nc -vz -w 5 <telemetry-address> 4317'
+    nc -vz -w 5 <mgmt-address> <tunnel-port>
+    nc -vz -w 5 <telemetry-address> <telemetry-port>'
+# use the ports the relay is ACTUALLY configured with (9000 / 4316 by default,
+# or the nodePorts if NodePort-exposed) -- not the defaults if you overrode them
 # timeout      => firewall / EgressFirewall / NetworkPolicy dropping it
 # refused      => you reached the network; problem is further up
 # open         => NOT proof the tunnel works: an intercepting proxy completes the
@@ -2092,7 +2132,9 @@ kubectl --context $WORKLOAD auth can-i list services --all-namespaces \
 
 | Symptom | Likely cause | Check / fix |
 |---|---|---|
-| Every pod `Running`, cluster **never appears** | Egress policy permits `443` only; the tunnel needs **`9000`**, telemetry **`4317`** | Test from a pod (verify step 4), not a laptop. On OVN-K check `EgressFirewall` / `NetworkPolicy` — same class as the §5 egress gotchas. This is the **first** thing to check in a locked-down environment |
+| Every pod `Running`, cluster **never appears** | Egress policy permits `443` only; the tunnel needs **`9000`**, telemetry **`4316`** (or their nodePorts) | Test from a pod (verify step 4), not a laptop. On OVN-K check `EgressFirewall` / `NetworkPolicy` — same class as the §5 egress gotchas. This is the **first** thing to check in a locked-down environment |
+| Egress was opened for telemetry and it still doesn't work | Allow-list built on **`4317`** — that is the gateway's *local* receiver and the relay's *own* listener, not what it dials out on | The outbound port is **`4316`** (`otlp-remote`). Read the exporter endpoint out of the collector ConfigMap rather than inferring it (see the port note above) |
+| Management endpoints are NodePort and the relay won't start | Assuming the chart needs a LoadBalancer address | It doesn't — `tunnel.port` / `telemetry.port` are values. Point `fqdn` at a node IP and `port` at the nodePort |
 | TCP connects, tunnel still never establishes | **Intercepting proxy** terminates TLS and breaks HTTP/2 — or an OpenShift **Route** in front of `:9000` doing the same | Bypass interception for the tunnel endpoint; a Route must be **passthrough**. Sibling of the `packet length too long` row in the §10 table |
 | Management endpoints are `ClusterIP` only | No LoadBalancer in this environment; chart values assume a reachable address | Decide the exposure deliberately (MetalLB / NodePort / passthrough Route) — see "Exposing the two management endpoints" above. Not a relay misconfiguration |
 | **Same cluster rendered twice** in the fleet view | Registered `cluster=` ≠ Istio cluster ID; the fleet view merges telemetry with registration | Align the registration onto the **Istio** ID, never the reverse — it is also the SPIFFE trust domain. Same string in the relay value, the telemetry collector's cluster name, and the KubernetesCluster object |
