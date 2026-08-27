@@ -1829,8 +1829,29 @@ with retry counts, `PeerDataPlaneProgrammed: Pending` on both remote-peer gatewa
 `Workload size=0` log captures from both peering clients, the EOF/reconnect cycle, and
 the helm values diff.
 
+**Late finding (pre-demo): the extra listener is chart-rendered from the same missing value.**
+The spoke's remote-peer gateway carried a `cross-network: 15008` HBONE listener the hub's
+working twin does not have. That listener is not hand-added: the peering chart renders it
+when `remote.items[].preferredDataplaneServiceType` is ABSENT, and renders the xds-only
+shape when it is set. One missing helm value therefore produced BOTH defects on the spoke
+(capitalized/inert annotation and the extra data-plane listener). The durable fix is the
+helm one — add to the spoke's `remote.items[0]`, mirroring the hub:
+
+```yaml
+addressType: IPAddress
+preferredDataplaneServiceType: nodeport
+```
+
+then `helm upgrade peering-eastwest … --version 1.30.2-solo -f <values>`, which re-renders
+the remote-peer gateway to the working shape at the source of truth. Applied at the end of
+this session — outcome to be recorded.
+
 #### Next steps (2026-08-27 evening or next session)
 
+0. **Record the outcome of the spoke `helm upgrade`** (values fix above): did the
+   `autogen.peering..usclt09` error stop, did `autogen.node.*` rows appear, did the relay
+   heal? If yes, steps 1–2 become a docs/chart bug report rather than a blocking defect
+   ticket.
 1. **File the Solo support ticket** (defect: peering controller publishes empty gateway
    namespace → invalid `autogen.peering..<cluster>` ServiceEntry → node workload
    publication suppressed both directions under NodePort peering; blocks Solo Enterprise
