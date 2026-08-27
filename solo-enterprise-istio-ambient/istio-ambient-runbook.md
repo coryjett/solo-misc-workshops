@@ -1760,6 +1760,96 @@ The one **genuine** finding that appears in *both* runs is the NodePort E-W gate
 | External curl → `SSL_ERROR_ZERO_RETURN`; ztunnel access log: `connection closed due to policy rejection: explicitly denied by: istio-system/istio_converted_static_strict` | An **unmeshed caller in plaintext** hit a workload under **STRICT `PeerAuthentication`** — e.g. an OpenShift Route pointing **directly at the app Service** (router → pod bypasses the mesh's ingress gateway) | Point the Route at the **meshed ingress gateway** (passthrough) so the caller into the workload is the in-mesh gateway; keep STRICT. Check `oc get pa -A` for the enforcing policies. Deleting/PERMISSIVE-ing the PA "fixes" the curl but drops the zero-trust posture — temporary debugging move only |
 | External curl → `curl: (35) SSL routines::packet length too long` | TLS bytes delivered to a **plaintext responder** — same bypass Route as above (**passthrough** Route pointing at the plain-HTTP **app Service**: with STRICT off, the pod answers HTTP mid-TLS-handshake), or a Route whose `targetPort` hits a non-TLS port on the gateway Service | `oc get route -o custom-columns='NAME:.metadata.name,HOST:.spec.host,SVC:.spec.to.name,PORT:.spec.port.targetPort,TLS:.spec.tls.termination'` — the working Route targets the **gateway Service's TLS listener port** with `passthrough`, and the Route host must EQUAL the Gateway listener `hostname:` (SNI selects the listener). **Verify testers use the gateway Route's hostname** — a stale direct-to-Service Route with a similar name produced two sessions of false "mesh is broken" reports. Delete the bypass Route |
 
+### Session log: relay — deeper root cause found, NOT yet fixed (2026-08-27)
+
+Worked the 2026-08-26 next steps. The `NodeIP:15008` port-mismatch diagnosis was a
+**symptom, not the root**. Peeling it back exposed three layers; the last one is an
+apparent product defect, unresolved at session end. **The relay is still down.**
+
+**Layer 1 — the remote-peer annotation value is case-sensitive (fixed).**
+The spoke's `istio-remote-peer-uscentral413` Gateway carried
+`peering.solo.io/preferred-data-plane-service-type: NodePort` (capital, generation 1 —
+Helm-rendered); the hub's working twin carried lowercase `nodeport` (generation 2 —
+someone had hand-fixed the hub and never mirrored it). `--overwrite` to lowercase
+`nodeport` flipped the spoke's ledger within seconds: `NetworkGateway/uscentral413`
+changed from raw `30.25.2.10:15008` to the healthy hostname form
+(`node.istio-eastwest.uscentral413.mesh.internal`), and the peering ServiceEntry
+`autogen.peering.istio-eastwest.uscentral413` appeared. **Capital `NodePort` is silently
+ignored** — and the Solo docs' own gateway-annotation example uses the capital form
+(docs bug), while the chart renders capital from valid lowercase values (chart bug).
+Helm-values origin: the hub's values carry `remote.items[].preferredDataplaneServiceType:
+nodeport`; the spoke's never did — add it (plus `addressType: IPAddress`) to the spoke's
+values or the next `helm upgrade` reverts the hand-fix.
+
+**Layer 2 — sorting the condition types (diagnostic map).**
+`gloo.solo.io/NodePortConfigured: True` on the *own* gateway only means the Service is
+NodePort — it has been True since install on both sides and is NOT evidence peering data
+works. The conditions that matter live on the *remote-peer* gateways:
+`PeerConnected` (xDS stream up), `PeeringSucceeded`, and **`PeerDataPlaneProgrammed`** —
+which stayed `False, Pending: "peering data plane not programmed for cross-network
+traffic, no node workload entries generated yet for NodePort peering"` on BOTH clusters.
+The hub's remote-peer gateway has NO cross-network listener at all (xds-tls only, at the
+peer's xDS nodePort) — that is the working shape; the HBONE side is meant to come
+entirely from node workload entries. Transient `PeerConnected: False ("not connected to
+peer")` blips lasting ~30–60s accompany reconcile churn and self-heal; the peering stream
+also EOFs and reconnects on a ~1m cycle (see layer 3).
+
+**Layer 3 — the actual blocker (OPEN): the spoke advertises its gateway with an empty
+namespace, poisoning node-workload publication in both directions.**
+Both istiods' peering clients receive `type…istio.workload.Workload size=0` from their
+peer — node workload entries are never published, so `autogen.node.*` rows exist on
+NEITHER cluster and every cross-cluster HBONE dies (the relay was just the first victim;
+`testapp` failover would fail the same way today). The spoke's istiod loops on:
+
+```
+error controllers error handling istio-eastwest/istio-eastwest, retrying (retry count: 21):
+ServiceEntry.networking.istio.io "autogen.peering..usclt09" is invalid: metadata.name:
+Invalid value: "autogen.peering..usclt09": a lowercase RFC 1123 subdomain must ...
+controller=peering
+```
+
+Note the **double dot**: the name is `autogen.peering.<gateway-namespace>.<cluster>` and
+the spoke's own advertisement carries an **empty gateway namespace**. The hub side
+correspondingly logs `peering service entry will be deleted (no longer needed for any
+segment) serviceentry=autogen.peering.istio-eastwest.usclt09 segment=` — it received the
+spoke's broken advertisement and tore down the previously well-formed entry. The peering
+Workload stream EOFs (`rpc error: Unavailable: error reading from server: EOF`) on the
+same cycle — consistent with the server aborting when it hits the invalid object.
+
+**Ruled out:** version skew (both clusters `peering-1.30.2-solo`, same istio build);
+Segment CRs (`segments.admin.solo.io` exists on both, zero objects — both clusters run
+the implicit default segment, so the empty token is the gateway namespace, not a segment
+name); ServiceMeshController config (not used — helm-only install); all four
+`preferred-data-plane-service-type` annotation sites now lowercase; remote-peer
+`spec.addresses` + service-account + trust-domain annotations correct on both.
+
+**Where this stands: support ticket territory.** Same chart, same version, one cluster
+publishes a nameless gateway. The evidence bundle for the ticket: the istiod error above
+with retry counts, `PeerDataPlaneProgrammed: Pending` on both remote-peer gateways,
+`Workload size=0` log captures from both peering clients, the EOF/reconnect cycle, and
+the helm values diff.
+
+#### Next steps (2026-08-27 evening or next session)
+
+1. **File the Solo support ticket** (defect: peering controller publishes empty gateway
+   namespace → invalid `autogen.peering..<cluster>` ServiceEntry → node workload
+   publication suppressed both directions under NodePort peering; blocks Solo Enterprise
+   UI relay and all cross-cluster HBONE).
+2. **Try the cheap state-reset first** (plausible that the empty namespace is stale
+   in-memory/streamed state): `oc rollout restart deploy/istiod -n istio-system` on the
+   **spoke**, watch the hub's istiod for the invalid-name error clearing and
+   `Workload size=` going nonzero; then the same restart on the hub if needed. Nothing
+   about today's config work is lost by restarting istiod.
+3. **Make the layer-1 fix durable**: add `preferredDataplaneServiceType: nodeport` +
+   `addressType: IPAddress` to the spoke's `remote.items` helm values (match the hub's),
+   so `helm upgrade` cannot revert the gateway hand-edit.
+4. On success, resume the 2026-08-26 verification ladder unchanged: `autogen.node.*`
+   rows → captured-pod curl to `<mgmt-ui>…mesh.internal:9000` → relay self-heals →
+   cluster in the UI with region/zone/services → §8 verification in BOTH directions.
+5. Docs/chart bugs to report alongside: docs show capital `NodePort` for the annotation
+   (silently ignored); the peering chart renders capital `NodePort` into the own-gateway
+   annotation from valid lowercase `dataplaneServiceTypes: [nodeport]` values.
+
 ### Session log: relay to management plane — root cause found, fix not yet applied (2026-08-26)
 
 **Symptom as reported:** the relay on the spoke would not connect to the management plane; no
