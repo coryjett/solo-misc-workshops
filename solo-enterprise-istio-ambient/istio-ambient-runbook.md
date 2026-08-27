@@ -1843,8 +1843,25 @@ preferredDataplaneServiceType: nodeport
 ```
 
 then `helm upgrade peering-eastwest … --version 1.30.2-solo -f <values>`, which re-renders
-the remote-peer gateway to the working shape at the source of truth. Applied at the end of
-this session — outcome to be recorded.
+the remote-peer gateway to the working shape at the source of truth.
+
+**Outcome of the helm fix (applied ~17:05Z):** the remote-peer gateway re-rendered
+correctly (xds-tls-only listener, chart now renders the lowercase annotation when the
+value is present), and the relay + telemetry-collector pods finally appear in the ledger
+as HBONE-captured. **But the spoke istiod's `autogen.peering..usclt09` invalid-name loop
+CONTINUED** (fresh retry series climbing 11→16+ through 17:14Z), and
+`pilot_eds_no_instances` still reports zero endpoints behind
+`node.istio-eastwest.uscentral413.mesh.internal`. Since the error fires while reconciling
+the spoke's OWN GatewayServiceEntry — whose `metadata.namespace` is plainly
+`istio-eastwest` — the empty token is derived from an internal field, not from any
+config surface we can see. Gateways (4, expected set) and GatewayClasses (standard Solo
+five) are clean. A spoke istiod rollout restart was queued as the final state-flush test;
+if the error returns after it, this is a product defect — full ticket draft prepared
+(empty gateway token in `autogen.peering.<token>.<cluster>` self-advertisement on one of
+two identically-versioned installs; suppresses node-workload publication bidirectionally;
+plus the two secondary bugs: docs show capital `NodePort` which is ignored, chart renders
+the inert capital annotation + extra cross-network listener when
+`preferredDataplaneServiceType` is absent).
 
 #### Next steps (2026-08-27 evening or next session)
 
