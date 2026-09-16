@@ -1,0 +1,13 @@
+# helm upgrade enterprise-agentgateway ... --reuse-values -f sts-values.yaml
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+  subjectValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo/protocol/openid-connect/certs"
+  actorValidator:
+    validatorType: k8s
+  apiValidator:
+    validatorType: k8s
