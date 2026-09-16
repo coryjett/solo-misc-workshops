@@ -35,6 +35,12 @@ Step-by-step guides for setting up On-Behalf-Of token exchange with Keycloak and
 - **[OIDC MCP Server](oidc-integration/Agentgateway-OIDC-MCP.md)** — OIDC auth for MCP tool access
 - **[OIDC MCP + OBO](obo-token-exchange/Agentgateway-OIDC-MCP-OBO.md)** — OIDC auth with OBO token exchange for MCP
 
+### Agent Gateway — End-to-End Agent Identity, Authorization, and Delegation
+
+Runnable end-to-end workshop securing every hop of an agentic call chain — user → agent → MCP server → API — on a KinD cluster from zero: Keycloak as IdP, JWT + CEL authorization per hop (`EnterpriseAgentgatewayPolicy`), MCP routing via `EnterpriseAgentgatewayBackend`, and the built-in STS (RFC 8693) issuing delegated tokens (`sub` = user, `act` = agent) that are the only credentials the API route accepts. Validated clean-room against v2026.9.0; every step has observed expected output, plus a troubleshooting table.
+
+- **[End-to-End Agent Identity & Delegation](e2e-agent-identity-delegation/)**
+
 ### Agent Gateway — Gateway-Mediated Token Exchange
 
 - **[Flow 13: Gateway-Mediated OIDC + Token Exchange with MCP](flow13-token-exchange/flow13-gateway-mediated-token-exchange/)** — End-to-end workshop: Keycloak OIDC auth with `ExchangeOnly` mode on `EnterpriseAgentgatewayPolicy`, AGW built-in STS (RFC 8693) automatically exchanges client JWT before forwarding to MCP backend — the client never calls the STS directly. Token-logging MCP server proves the STS-exchanged token (with `sub` + `act`) is what reaches the backend via `kubectl logs` and an `echo_token` tool. Covers `EnterpriseAgentgatewayParameters` (STS_URI/STS_AUTH_TOKEN), all three STS validators (subject/actor/api), and StreamableHTTP backend protocol.

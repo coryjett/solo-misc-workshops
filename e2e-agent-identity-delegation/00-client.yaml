@@ -1,0 +1,20 @@
+# Test client + stand-in "agent identity". The pod's ServiceAccount token
+# (system:serviceaccount:wp-a:default) is the ACTOR token in the STS exchange (Module 3)
+# and the identity 03-api-authz.yaml authorizes on jwt.act.sub.
+apiVersion: v1
+kind: Namespace
+metadata: { name: wp-a }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: sleep, namespace: wp-a }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: sleep } }
+  template:
+    metadata: { labels: { app: sleep } }
+    spec:
+      containers:
+        - name: sleep
+          image: curlimages/curl:8.9.1
+          command: ["sleep", "infinity"]
