@@ -243,9 +243,11 @@ mcp-b: 403
 Upgrade the controller with the `tokenExchange` block (`sts-values.yaml` — subject validator points at the Keycloak JWKS, actor validator is `k8s`):
 
 ```bash
+export ENTERPRISE_AGW_VERSION=$(helm get metadata enterprise-agentgateway -n agentgateway-system | awk '/^VERSION:/ {print $2}')
+
 helm upgrade enterprise-agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
-  --version v2026.9.0 -n agentgateway-system --reuse-values -f sts-values.yaml
+  --version $ENTERPRISE_AGW_VERSION -n agentgateway-system --reuse-values -f sts-values.yaml
 kubectl -n agentgateway-system rollout status deploy/enterprise-agentgateway --timeout=180s
 ```
 
@@ -345,6 +347,20 @@ The raw user token is a valid Keycloak JWT with the right user — but it is sig
 - **API leg:** Step 7's policy shape applies unchanged on a Solo Enterprise kgateway route in front of a real API.
 - **Identity provider:** Keycloak is the stand-in — the same shape carries over to Okta, Entra ID, Auth0, etc.; only the issuer/JWKS provider config changes. Multiple identity domains means one JWT provider entry per issuer.
 
+## Bring Your Own Components
+
+Each piece is optional if you already run it. Everything the lab creates is confined to its own namespaces (`e2e-demo`, `keycloak`, `wp-a`) and its own Gateway `e2e-gw` — existing gateways, routes, and policies are never touched.
+
+| You already have | Skip | Adjust |
+|---|---|---|
+| **Enterprise Agentgateway** | Step 1 (still `kubectl apply -f 00-client.yaml` — the client's SA is the actor identity) | If your controller release/namespace differs from `enterprise-agentgateway`/`agentgateway-system`, update the STS address in three places: `sts-values.yaml` (`issuer`), `03-api-authz.yaml` (provider `issuer` + `sts-jwks` backend host), and Step 6's exchange URL. Step 6's `helm upgrade` must target **your** release name and namespace. |
+| **Keycloak** | `00-keycloak.yaml` | Run `00-setup-realm.sh` against your instance (it only needs kcadm admin credentials; the realm it creates is additive). Then update the Keycloak host/realm in two places: `01-agent-authz.yaml` (provider `issuer` + JWKS backend) and `sts-values.yaml` (`subjectValidator.remoteConfig.url`). Reusing an existing realm instead also works — it needs a groups claim matching the CEL expression and a `may_act` mapper naming the actor SA. |
+| **agentregistry** | Nothing — the lab never touches it | Deploy your real agent through the registry, point the `/agent-x` HTTPRoute's backendRef at its Service, and use its ServiceAccount as `AGENT_SA` (Step 2) and in Step 7's `jwt.act.sub` expression. |
+| **A real agent workload** | The httpbin stand-in in `01-agent-authz.yaml` | Same as above: route to it, and swap `AGENT_SA` to its ServiceAccount everywhere. |
+| **Istio / ambient mesh** | Nothing | Coexists — the lab's namespaces aren't mesh-enrolled and don't need to be. |
+
+> **Note:** the STS `tokenExchange` values ride on the controller's helm release — enabling it on an existing install is Step 6's `--reuse-values` upgrade, and Cleanup's final helm command removes it again.
+
 ## Cleanup
 
 ```bash
@@ -356,7 +372,7 @@ kubectl delete -f 01-agent-authz.yaml --ignore-not-found
 # 2. Restore the controller to its pre-STS configuration
 helm upgrade enterprise-agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
-  --version v2026.9.0 -n agentgateway-system \
+  --version $ENTERPRISE_AGW_VERSION -n agentgateway-system \
   --set licensing.licenseKey="$LICENSE_KEY"
 
 # 3. Remove Keycloak and the test client
