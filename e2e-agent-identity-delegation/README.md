@@ -264,6 +264,8 @@ mcp-a via registry: 200
 
 Registry UI: Runtimes shows `mcp-gateway` (Virtual) next to `virtual-default`; Instances shows the three deployments.
 
+Using an existing Gateway instead: label it `agentregistry.solo.io/runtime=mcp-gateway`, drop the Gateway document from `04-registry-gateway.yaml`, and point the HTTPRoute's `parentRefs` at your Gateway's name. If the deployments were created before the label landed they stay `pending` with reason `NoGatewayBound`; `arctl delete -f 04-expose.yaml && arctl apply -f 04-expose.yaml` binds them.
+
 Docs: [Virtual runtime](https://docs.solo.io/agentregistry/latest/setup/runtime/virtual/), [Expose MCP servers with agentgateway](https://docs.solo.io/agentregistry/latest/quickstart/mcp-gateway/)
 
 ---
