@@ -1,5 +1,4 @@
-# Optional kagent runtime path. Re-points the e2e-gw routes at the workloads the registry deployed into namespace kagent.
-# Route names and policies are unchanged; only the backends move. The Step 4 workloads stay in place.
+# Re-points the e2e-gw routes at the kagent-deployed workloads. Policies are unchanged.
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata: { name: e2e-gw-to-kagent, namespace: kagent }

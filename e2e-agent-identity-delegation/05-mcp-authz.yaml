@@ -1,4 +1,4 @@
-# Agent to MCP. Both MCP servers behind EnterpriseAgentgatewayBackend MCP targets with opposing authorization policies.
+# Routes /mcp-a and /mcp-b with opposing authorization policies.
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayBackend
 metadata: { name: mcp-a, namespace: e2e-demo }

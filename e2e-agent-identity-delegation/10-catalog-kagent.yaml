@@ -1,4 +1,4 @@
-# Optional kagent runtime path. Catalog entries with container images; 10-deploy-kagent.yaml deploys them into the cluster.
+# Catalog entries with container images for the kagent runtime.
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:

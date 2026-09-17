@@ -1,8 +1,8 @@
 # End-to-End Agent Identity, Authorization, and Delegation
 
-One workshop, in the order the products are used: deploy an agent and its MCP servers, register and govern them in Agentregistry Enterprise, then secure every hop (user, agent, MCP server, API) with Enterprise Agentgateway. Each hop gets JWT authentication and CEL-based authorization, and RFC 8693 token exchange carries the user's identity through the chain with the agent's identity attached. Solo Enterprise for kagent is an optional last step for teams that want the registry to deploy workloads into the cluster.
+Deploy an agent and its MCP servers, register and govern them in Agentregistry Enterprise, then secure every hop (user, agent, MCP server, API) with Enterprise Agentgateway: JWT authentication, CEL authorization, and RFC 8693 token exchange that carries the user's identity through the chain with the agent's identity attached. Solo Enterprise for kagent is an optional last step for teams that want the registry to deploy workloads into the cluster.
 
-Validated end to end on a local KinD cluster with Enterprise Agentgateway v2026.9.0, Agentregistry Enterprise 2026.9.0, and Keycloak 26, including a clean-room run from an empty cluster using only the files in this folder. Every `Expected output` block is an observed result.
+Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Agentregistry Enterprise 2026.9.0, and Keycloak 26. Every `Expected output` block is an observed result.
 
 ## Files in this folder
 
@@ -12,7 +12,7 @@ Validated end to end on a local KinD cluster with Enterprise Agentgateway v2026.
 | `00-platform.sh` | Gateway API CRDs, Enterprise Agentgateway charts, test client, into the current kubeconfig context |
 | `00-client.yaml` | `sleep` test client in ns `wp-a`. Its ServiceAccount is the agent's workload identity |
 | `00-keycloak.yaml` | Keycloak 26.1.3 in ns `keycloak` with the `agentregistry` realm imported at boot. Issuer pinned to the in-cluster Service name so browser and pod tokens match |
-| `realm/` | The realm JSON, the workshop-only additions for an existing Keycloak, and the import helper |
+| `realm/` | The realm JSON and the workshop-only additions for an existing Keycloak |
 | `01-ui.sh` | Solo UI (management chart, agentgateway product) |
 | `02-workloads.yaml` | The agent stand-in, two MCP servers, and the API. Plain Deployments and Services |
 | `02-mcp-api.yaml`, `mcp-api/` | MCP server whose tool calls the API and forwards the caller's token |
@@ -50,16 +50,9 @@ Bringing your own cluster: skip `00-kind.sh`. `00-platform.sh` installs into wha
 
 ## Background
 
-At every hop the question is the same: who is calling, and are they allowed to call this? The identity answering it changes at each hop.
+At every hop the question is the same: who is calling, and are they allowed to call this? alice reaches agent-x with her JWT and bob gets 403 (Step 10). The agent reaches mcp-a and is refused by mcp-b (Step 11). The agent exchanges the user JWT plus its own ServiceAccount token at the built-in STS on port 7777 for a delegated token with `sub: alice` and `act: agent` (Step 12). The API accepts that delegated token and refuses a raw user token (Steps 13 and 14).
 
-1. alice calls the gateway with her user JWT and reaches agent-x. bob is denied with 403. (Step 10)
-2. The agent calls the gateway with a JWT and reaches mcp-a. mcp-b is denied with 403. (Step 11)
-3. The agent sends the user JWT plus its own SA token to the STS on port 7777 and receives a delegated token with `sub: alice` and `act: agent`. (Step 12)
-4. An MCP tool calls the gateway with the delegated token and reaches the API. A raw user token is denied with 401. (Steps 13 and 14)
-
-Enterprise Agentgateway includes a built-in STS on port 7777 (RFC 8693 token exchange). The delegated token it issues preserves the user's `sub` and embeds the agent's identity in `act`, so downstream services see who asked and through which agent.
-
-Why not forward the user's token: a raw user token says nothing about which agent is acting, can be replayed against any route the user could reach, and grants the agent everything the user has. The delegated token is signed by the STS, carries both identities, and is only accepted where STS-issued tokens are trusted.
+Why not forward the user's token: it says nothing about which agent is acting, can be replayed against any route the user could reach, and grants the agent everything the user has. The delegated token is signed by the STS, carries both identities, and is only accepted where STS-issued tokens are trusted.
 
 ---
 
@@ -78,8 +71,6 @@ export LICENSE_KEY=<solo-enterprise-license-key>
 ./00-platform.sh
 ```
 
-The controller upgrade uses `--reuse-values`, so re-running this script after Step 12 does not wipe the STS configuration.
-
 Docs: [Install with Helm](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/helm/)
 
 Expected output (truncated):
@@ -92,7 +83,7 @@ deployment "sleep" successfully rolled out
 PLATFORM-READY
 ```
 
-The `sleep` pod's ServiceAccount (`system:serviceaccount:wp-a:default`) stands in for the agent's workload identity. Its mounted SA token is the actor token in Step 12, and Step 13's policy authorizes on this identity via `jwt.act.sub`.
+The `sleep` pod's ServiceAccount (`system:serviceaccount:wp-a:default`) is the agent's workload identity: the actor token in Step 12 and the `jwt.act.sub` Step 13 authorizes on.
 
 ---
 
@@ -103,7 +94,7 @@ kubectl apply -f 00-keycloak.yaml
 kubectl -n keycloak rollout status deploy/keycloak --timeout=300s
 ```
 
-The realm is imported from a ConfigMap at boot (`start-dev --import-realm`), so there is nothing to run inside the pod and a restart re-imports it. It is the `agentregistry` realm from the Agentregistry Enterprise docs (clients `ar-backend`, `ar-cli-interactive`, `ar-cli-password`, `ar-ui`, `ar-mcp-client`; `Groups` claim; `ar-backend` audience; group `admins`; user `admin-user` with password `password`) plus what this lab adds:
+The realm is imported from a ConfigMap at boot, so a restart re-imports it. It is the `agentregistry` realm from the Agentregistry Enterprise docs (clients `ar-backend`, `ar-cli-interactive`, `ar-cli-password`, `ar-ui`, `ar-mcp-client`; `Groups` claim; `ar-backend` audience; group `admins`; user `admin-user` with password `password`) plus what this lab adds:
 
 - Client `agw-client` (confidential, secret `agw-client-secret`) with the `Groups` mapper and a `may_act` mapper naming the agent's ServiceAccount
 - Users `alice` and `bob` (password `pw`); alice is in group `agent-x-users`
@@ -127,7 +118,7 @@ kubectl exec -i -n keycloak deploy/keycloak -- bash -c 'cat > /tmp/add.json && /
 
 Then set the issuer in `01-ui.sh`, `03-registry-values.yaml`, `05-agent-authz.yaml`, `05-mcp-authz.yaml`, `05-mcp-api-authz.yaml`, and `05-sts-values.yaml` to your Keycloak URL. Two things the import does not change: your realm keeps its own access token lifespan (Keycloak's default is 5 minutes), so re-run the Step 9 exports if a request returns 401 unexpectedly; and the `agentregistry` client arrives with the lab's fixed secret, so set your own and export it as `AGENTREGISTRY_CLIENT_SECRET` before Step 16.
 
-Confirm the import with the Step 9 decode: mint a token for `alice` through `agw-client` and check the payload shows both `Groups` and `may_act`. If both are present, everything downstream works against your realm.
+Confirm the import with the Step 9 decode: alice's token must show both `Groups` and `may_act`.
 
 ---
 
@@ -180,7 +171,7 @@ kubectl apply -f 02-mcp-api.yaml
 kubectl -n e2e-demo rollout status deploy/mcp-api --timeout=120s
 ```
 
-The MCP `Service` ports carry `appProtocol: agentgateway.dev/mcp`. Without it the gateway backends in Step 11 never pick the servers up.
+The MCP `Service` ports carry `appProtocol: agentgateway.dev/mcp`, which the gateway backends in Step 11 require.
 
 ---
 
@@ -196,7 +187,7 @@ arctl version --json
 
 The script installs the registry (ClusterIP, bundled PostgreSQL and ClickHouse, OIDC against the realm with `Groups` as the role claim, `admins` as the superuser group, and `ar-ui` as the browser client). Expected output ends with `REGISTRY-READY`.
 
-Load the `arctl` environment in every shell you use for the registry. It port-forwards the API to `localhost:12121`, mints an `admin-user` token in-cluster so the issuer matches, and defines `ar_token`:
+Load the `arctl` environment in every shell you use for the registry. It port-forwards the API to `localhost:12121`, mints an `admin-user` token, and defines `ar_token`:
 
 ```bash
 . ./03-registry-env.sh
@@ -216,7 +207,7 @@ Docs: [Agentregistry Enterprise setup](https://docs.solo.io/agentregistry/latest
 
 ## Step 6: Register the workloads in the catalog
 
-The registry records what runs and where. `04-catalog.yaml` holds the agent (`agent-x`, by image) and the three MCP servers as remote entries pointing at their in-cluster Service URLs. Nothing is redeployed.
+`04-catalog.yaml` holds the agent (`agent-x`, by image) and the three MCP servers as remote entries pointing at their in-cluster Service URLs. Nothing is redeployed.
 
 ```bash
 arctl apply -f 04-catalog.yaml
@@ -243,7 +234,7 @@ Docs: [Register remote MCP servers](https://docs.solo.io/agentregistry/latest/mc
 
 ## Step 7: Publish the MCP servers through the registry gateway
 
-The registry can expose registered MCP servers through agentgateway itself. `04-registry-gateway.yaml` creates a Gateway (`agentregistry-gateway`, port 80) and a parent HTTPRoute that delegates `/registry` to child routes the registry creates. Both carry the label `agentregistry.solo.io/runtime: mcp-gateway`, and `04-runtime-virtual.yaml` creates the Virtual runtime of that name. `04-expose.yaml` then publishes each MCP server at `/registry<pathSuffix>`.
+`04-registry-gateway.yaml` creates a Gateway (`agentregistry-gateway`, port 80) and a parent HTTPRoute that delegates `/registry` to child routes the registry creates. Both carry the label `agentregistry.solo.io/runtime: mcp-gateway`, and `04-runtime-virtual.yaml` creates the Virtual runtime of that name. `04-expose.yaml` then publishes each MCP server at `/registry<pathSuffix>`.
 
 ```bash
 kubectl apply -f 04-registry-gateway.yaml
@@ -306,7 +297,7 @@ Docs: [Access control](https://docs.solo.io/agentregistry/latest/security/access
 
 ## Step 9: Mint user tokens and inspect claims
 
-All gateway requests in this lab are sent from the in-cluster `sleep` pod, so the gateway is reached by its Service DNS name and no LoadBalancer is needed. Define a token helper and mint both users:
+Gateway requests are sent from the in-cluster `sleep` pod, so no LoadBalancer is needed. Define a token helper and mint both users:
 
 ```bash
 TOK() { kubectl exec -n wp-a deploy/sleep -- curl -s -X POST \
@@ -337,7 +328,7 @@ Expected output:
     }
 ```
 
-Decode bob's token the same way (`$BOB_JWT`): `may_act` is present and there is no `Groups` block, because bob is in no group. That missing group is what Step 10 checks. Tokens last one hour; re-run the two exports if a request later returns 401 unexpectedly.
+bob's token (`$BOB_JWT`) has `may_act` and no `Groups`, because bob is in no group. That missing group is what Step 10 checks. Tokens last one hour; re-run the two exports if a request later returns 401 unexpectedly.
 
 ---
 
@@ -426,7 +417,7 @@ data: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabili
 mcp-b: 403
 ```
 
-In the full production flow this policy's CEL matches the delegated token's `jwt.act.sub` (the agent identity) instead of the user's group. Same policy shape, one expression change.
+In production this policy's CEL matches the delegated token's `jwt.act.sub` (the agent identity) instead of the user's group. Same policy shape, one expression change.
 
 ---
 
@@ -445,11 +436,9 @@ kubectl -n agentgateway-system rollout status deploy/enterprise-agentgateway --t
 
 The STS listens on the controller Service, port 7777. Token endpoint `/token`, JWKS at `/.well-known/jwks.json`.
 
-If the controller was already running with an older STS config, the gateway may reject fresh STS tokens with `token uses the unknown key` for up to about 30 seconds while its JWKS cache refreshes.
-
 Docs: [Token exchange overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/overview/), [On-behalf-of (OBO) tokens](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/obo/), [OAuth token exchange](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/token-exchange/)
 
-Perform the exchange from inside the agent's pod. The mounted SA token is the `actor_token` and the user JWT (with `may_act`) is the `subject_token`. In production the agent does this in code.
+Exchange from inside the agent's pod: the mounted SA token is the `actor_token`, the user JWT is the `subject_token`. In production the agent does this in code.
 
 ```bash
 export DELEGATED_TOKEN=$(kubectl exec -n wp-a deploy/sleep -- sh -c "SA=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token); \
@@ -475,7 +464,7 @@ act: {"iss": "https://kubernetes.default.svc.cluster.local", "sub": "system:serv
 iss: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
 ```
 
-Both token types must be `urn:ietf:params:oauth:token-type:jwt`. The `access_token` type is rejected. Claims such as `Groups` do not propagate into the delegated token; downstream authorization keys on `sub` and `act`.
+Both token types must be `urn:ietf:params:oauth:token-type:jwt`. Claims such as `Groups` do not propagate into the delegated token; downstream authorization keys on `sub` and `act`.
 
 ---
 
@@ -508,7 +497,7 @@ raw user token: 401
 anonymous: 401
 ```
 
-The raw user token is a valid Keycloak JWT for the right user, but it is signed by Keycloak rather than the STS, so it fails authentication (401) at this route. Users cannot bypass the agent chain to reach the API directly. The same JWT plus CEL policy applies unchanged on a Solo Enterprise kgateway route in front of a real API. Only the gateway hosting the policy changes.
+The raw user token is signed by Keycloak rather than the STS, so it fails authentication (401) at this route. Users cannot bypass the agent chain to reach the API. The same policy applies unchanged on a Solo Enterprise kgateway route in front of a real API.
 
 ---
 
@@ -530,9 +519,9 @@ HTTP 200
 HTTP 401
 ```
 
-With the delegated token the chain is agent, gateway, MCP server, gateway, httpbin, and every hop sees the same `sub` and `act`. With the raw user token the MCP hop admits the call but the API route rejects it, so the MCP server cannot reach the API with an identity it was not delegated.
+With the delegated token every hop (agent, gateway, MCP server, gateway, API) sees the same `sub` and `act`. With the raw user token the MCP hop admits the call but the API route rejects it.
 
-The same server is also published through the registry gateway (Step 7). Calling it there gives the same answers, because the API route, not the MCP route, is what enforces delegation:
+The same server is published through the registry gateway (Step 7). It answers the same there, because the API route is what enforces delegation:
 
 ```bash
 mcp-api/mcpcall.sh "$DELEGATED_TOKEN" $RGW /registry/mcp-api
@@ -557,9 +546,9 @@ Docs: [Explore the UI](https://docs.solo.io/agentgateway/kubernetes/latest/docum
 
 ## Step 16 (optional): Deploy from the registry with Solo Enterprise for kagent
 
-So far the workloads were deployed with `kubectl` and registered afterwards. Solo Enterprise for kagent is the registry runtime that creates workloads in a Kubernetes cluster from catalog entries. This step installs it, registers it as a runtime, deploys a second copy of the agent and MCP servers from the catalog, and re-points the `e2e-gw` routes at them. The JWT and CEL policies do not change.
+Solo Enterprise for kagent is the registry runtime that creates workloads in a Kubernetes cluster from catalog entries. This step installs it, registers it as a runtime, deploys a second copy of the agent and MCP servers from the catalog, and re-points the `e2e-gw` routes at them. The policies do not change.
 
-Install kagent. The script upgrades the Step 3 management release (or the one named by `MGMT_RELEASE` and `MGMT_NAMESPACE`) with the kagent and agentregistry products, installs the kagent CRDs, the controller signing key, and kagent-enterprise with OIDC pointed at the realm. The `agentregistry` group is mapped to `global.Writer`, which is how the registry is allowed to create workloads. No LLM key is configured; the agent is a bring-your-own image.
+The script upgrades the Step 3 management release (or the one named by `MGMT_RELEASE` and `MGMT_NAMESPACE`) with the kagent and agentregistry products, then installs the kagent CRDs and kagent-enterprise with OIDC against the realm. The `agentregistry` group maps to `global.Writer`, which is how the registry may create workloads. No LLM key is configured.
 
 ```bash
 ./10-kagent-install.sh
@@ -569,7 +558,7 @@ arctl get runtimes
 
 Expected output ends with `KAGENT-READY`, then `RUNTIME-READY`, and the runtime list gains `kagent` (type Kagent).
 
-Catalog and deploy. The kagent controller marks a bring-your-own agent Ready only once `/.well-known/agent-card.json` answers on port 8080, so `agent-x-kagent` uses `traefik/whoami`, which answers every path and echoes the request it received. Each MCP server entry names its image under `origin.oci` and its listen port and path under `transport`.
+The kagent controller marks a bring-your-own agent Ready only once `/.well-known/agent-card.json` answers on port 8080, so `agent-x-kagent` uses `traefik/whoami`, which answers every path and echoes the request it received. Each MCP server entry names its image under `origin.oci` and its listen port and path under `transport`.
 
 ```bash
 arctl apply -f 10-catalog-kagent.yaml
@@ -581,7 +570,7 @@ kubectl get agents,mcpservers -n kagent
 
 Expected: one pod each for `agent-x-kagent`, `mcp-a-kagent`, `mcp-b-kagent`, and `mcp-api-kagent` in namespace `kagent`, created by the kagent controller from the registry deployments, with matching kagent `Agent` and `MCPServer` resources.
 
-Re-point the gateway. `10-gateway-kagent.yaml` replaces the backends of the Step 10, 11, and 14 routes with the kagent Services (a `ReferenceGrant` lets routes in `e2e-demo` reference Services in `kagent`). Route names and policies stay the same.
+`10-gateway-kagent.yaml` replaces the backends of the Step 10, 11, and 14 routes with the kagent Services (a `ReferenceGrant` lets routes in `e2e-demo` reference Services in `kagent`). Route names and policies stay the same.
 
 ```bash
 kubectl apply -f 10-gateway-kagent.yaml
@@ -634,8 +623,6 @@ Each piece is optional if you already run it. Everything the lab creates is conf
 | Solo UI (management chart) | `01-ui.sh` | Export `MGMT_RELEASE` and `MGMT_NAMESPACE` for Step 16, set the tracing `backendRef.namespace` in `05-gateway.yaml`, and enable `products.agentgateway` on the release if it is not already. Validated only with the lab's own release in namespace `kagent`; upgrading a release in another namespace with the kagent product has not been run here. |
 | Solo Enterprise for kagent | `10-kagent-install.sh` | Run `10-register-kagent-runtime.sh` with `KAGENT_URL` pointing at your controller and `AGENTREGISTRY_CLIENT_SECRET` set to your client secret. |
 | Istio or ambient mesh | Nothing | The lab's namespaces are not mesh-enrolled and do not need to be. |
-
-The STS `tokenExchange` values ride on the controller's Helm release. Enabling it on an existing install is Step 12's `--reuse-values` upgrade, and the Cleanup command removes it again.
 
 ## Cleanup
 

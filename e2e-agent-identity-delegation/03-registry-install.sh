@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Installs Agentregistry Enterprise into the current context.
-# Requires: LICENSE_KEY, Keycloak from 00-keycloak.yaml.
-# Already running Agentregistry Enterprise? Skip this script; 03-registry-env.sh works against your installation.
+# Agentregistry Enterprise. Requires LICENSE_KEY and Keycloak.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
 ARE_VERSION="${ARE_VERSION:-2026.9.0}"
@@ -14,7 +12,7 @@ helm upgrade --install agentregistry-enterprise \
   --set licensing.createSecret=true --set-string licensing.licenseKey="$LICENSE_KEY" \
   --wait --timeout 8m
 kubectl get pods -n agentregistry-system
-# The server restarted; drop a stale port-forward so 03-registry-env.sh opens a fresh one.
+# The server restarted; drop any stale port-forward.
 pkill -f "port-forward -n agentregistry-system svc/agentregistry-enterprise-server 12121" 2>/dev/null || true
 
 echo REGISTRY-READY

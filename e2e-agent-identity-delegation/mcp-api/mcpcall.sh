@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Calls the mcp-api tool through the gateway with the given bearer token and prints the API status the tool saw.
-# Usage: mcp-api/mcpcall.sh <token> [gateway-host:port] [route-path] [api-path]
+# Usage: mcp-api/mcpcall.sh <token> [gateway-host:port] [route-path] [api-path]. Prints the API status the tool saw.
 set -euo pipefail
 T="$1"; GW="${2:-e2e-gw.e2e-demo.svc.cluster.local:8080}"; ROUTE="${3:-/mcp-api}"; APIPATH="${4:-/get}"
 K() { kubectl exec -n wp-a deploy/sleep -- sh -c "$1"; }

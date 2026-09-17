@@ -1,4 +1,4 @@
-# Route /mcp-api for the MCP server deployed in 02-mcp-api.yaml.
+# Route /mcp-api. Accepts a Keycloak user token or an STS delegated token and forwards it to the server.
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayBackend
 metadata: { name: mcp-api, namespace: e2e-demo }
@@ -17,8 +17,6 @@ spec:
     - matches: [ { path: { type: PathPrefix, value: /mcp-api } } ]
       backendRefs: [ { name: mcp-api, group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend } ]
 ---
-# Accepts a Keycloak user token or an STS delegated token at the MCP hop and forwards it to the server.
-# Which token the tool carries decides what the API route answers: delegated 200, raw user 401.
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata: { name: mcp-api-authz, namespace: e2e-demo }
