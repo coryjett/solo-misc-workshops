@@ -1,0 +1,72 @@
+# MCP server whose single tool calls the httpbin API through the gateway, forwarding the caller's bearer token.
+# API_BASE is the API endpoint the tool calls. Default is the /api route on e2e-gw; point it at an existing API gateway instead if preferred.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mcp-api, namespace: e2e-demo }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mcp-api } }
+  template:
+    metadata: { labels: { app: mcp-api } }
+    spec:
+      containers:
+        - name: mcp
+          image: mcp-api:local
+          imagePullPolicy: IfNotPresent
+          ports: [ { containerPort: 8000 } ]
+          env:
+            - name: API_BASE
+              value: http://e2e-gw.e2e-demo.svc.cluster.local:8080/api
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mcp-api, namespace: e2e-demo }
+spec:
+  selector: { app: mcp-api }
+  ports: [ { port: 80, targetPort: 8000, appProtocol: agentgateway.dev/mcp } ]
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata: { name: mcp-api, namespace: e2e-demo }
+spec:
+  mcp:
+    targets:
+      - name: mcp-api
+        static: { host: mcp-api.e2e-demo.svc.cluster.local, port: 80, protocol: StreamableHTTP, path: /mcp }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: mcp-api, namespace: e2e-demo }
+spec:
+  parentRefs: [ { name: e2e-gw } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /mcp-api } } ]
+      backendRefs: [ { name: mcp-api, group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend } ]
+---
+# Accepts a Keycloak user token or an STS delegated token at the MCP hop and forwards it to the server.
+# Which token the tool carries decides what the API route answers: delegated 200, raw user 401.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: mcp-api-authz, namespace: e2e-demo }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: HTTPRoute, name: mcp-api } ]
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      preserveToken: true
+      providers:
+        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo
+          jwks:
+            remote:
+              backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
+              jwksPath: /realms/agent-demo/protocol/openid-connect/certs
+        - issuer: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
+          jwks:
+            remote:
+              backendRef: { name: enterprise-agentgateway, namespace: agentgateway-system, port: 7777 }
+              jwksPath: /.well-known/jwks.json
+    authorization:
+      action: Require
+      policy:
+        matchExpressions:
+          - "('groups' in jwt && 'agent-x-users' in jwt.groups) || ('act' in jwt && jwt.act.sub == 'system:serviceaccount:wp-a:default')"
