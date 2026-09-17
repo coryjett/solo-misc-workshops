@@ -1,34 +1,4 @@
-apiVersion: v1
-kind: Namespace
-metadata: { name: e2e-demo }
----
-# Stand-in "agent-x" workload (httpbin echoes requests; swap for a kagent agent in their env)
-apiVersion: apps/v1
-kind: Deployment
-metadata: { name: agent-x, namespace: e2e-demo }
-spec:
-  replicas: 1
-  selector: { matchLabels: { app: agent-x } }
-  template:
-    metadata: { labels: { app: agent-x } }
-    spec: { containers: [ { name: app, image: mccutchen/go-httpbin:v2.15.0, ports: [ { containerPort: 8080 } ] } ] }
----
-apiVersion: v1
-kind: Service
-metadata: { name: agent-x, namespace: e2e-demo }
-spec: { selector: { app: agent-x }, ports: [ { port: 8000, targetPort: 8080 } ] }
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata: { name: e2e-gw, namespace: e2e-demo }
-spec:
-  gatewayClassName: enterprise-agentgateway
-  listeners:
-    - name: http
-      port: 8080
-      protocol: HTTP
-      allowedRoutes: { namespaces: { from: Same } }
----
+# User to agent. Route /agent-x on e2e-gw; JWT from Keycloak; only members of agent-x-users pass.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: { name: agent-x, namespace: e2e-demo }
@@ -39,8 +9,6 @@ spec:
       filters: [ { type: URLRewrite, urlRewrite: { path: { type: ReplacePrefixMatch, replacePrefixMatch: / } } } ]
       backendRefs: [ { name: agent-x, port: 8000 } ]
 ---
-# Demo 1: user -> agent authorization. JWT validated against Keycloak; only
-# members of agent-x-users may reach agent-x.
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata: { name: agent-x-authz, namespace: e2e-demo }

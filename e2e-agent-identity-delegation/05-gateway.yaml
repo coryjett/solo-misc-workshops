@@ -1,4 +1,15 @@
-# Sends e2e-gw traces to the Solo UI telemetry collector installed by 01-ui.sh.
+# Gateway e2e-gw on port 8080 and the tracing policy that sends its traces to the Solo UI (01-ui.sh).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: e2e-gw, namespace: e2e-demo }
+spec:
+  gatewayClassName: enterprise-agentgateway
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes: { namespaces: { from: Same } }
+---
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata: { name: tracing, namespace: e2e-demo }

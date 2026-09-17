@@ -1,4 +1,4 @@
-# helm upgrade enterprise-agentgateway ... --reuse-values -f sts-values.yaml
+# helm upgrade enterprise-agentgateway ... --reuse-values -f 05-sts-values.yaml
 tokenExchange:
   enabled: true
   issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"

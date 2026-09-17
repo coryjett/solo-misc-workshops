@@ -1,0 +1,27 @@
+# Publish the registered MCP servers through the registry gateway at /registry<pathSuffix>.
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: mcp-a
+spec:
+  targetRef: { kind: MCPServer, name: mcp-a, tag: latest }
+  runtimeRef: { kind: Runtime, name: mcp-gateway }
+  runtimeConfig: { route: { pathSuffix: /mcp-a } }
+---
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: mcp-b
+spec:
+  targetRef: { kind: MCPServer, name: mcp-b, tag: latest }
+  runtimeRef: { kind: Runtime, name: mcp-gateway }
+  runtimeConfig: { route: { pathSuffix: /mcp-b } }
+---
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: mcp-api
+spec:
+  targetRef: { kind: MCPServer, name: mcp-api, tag: latest }
+  runtimeRef: { kind: Runtime, name: mcp-gateway }
+  runtimeConfig: { route: { pathSuffix: /mcp-api } }

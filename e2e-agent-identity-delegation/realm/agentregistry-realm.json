@@ -406,5 +406,6 @@
         "/agentregistry"
       ]
     }
-  ]
+  ],
+  "accessTokenLifespan": 3600
 }

@@ -1,8 +1,8 @@
-# Catalog entries. The agent and MCP servers are deployed to the cluster from these by 07-deploy.yaml.
+# Optional kagent runtime path. Catalog entries with container images; 10-deploy-kagent.yaml deploys them into the cluster.
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
-  name: agent-x
+  name: agent-x-kagent
   tag: "1.0.0"
 spec:
   description: "Demo agent. Users in agent-x-users may call it. Bring-your-own image that answers every path, including the A2A agent card kagent probes, on port 8080."
@@ -12,17 +12,17 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: mcp-a
+  name: mcp-a-kagent
   tag: latest
 spec:
-  title: mcp-a
+  title: mcp-a-kagent
   description: MCP server agent-x is authorized to use.
   source:
     package:
       origin:
         type: oci
         identifier: ghcr.io/peterj/mcp-website-fetcher:main
-        oci: { serverName: io.solo.workshop/mcp-a }
+        oci: { serverName: io.solo.workshop/mcp-a-kagent }
       transport:
         type: http
         port: 8000
@@ -31,17 +31,17 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: mcp-b
+  name: mcp-b-kagent
   tag: latest
 spec:
-  title: mcp-b
+  title: mcp-b-kagent
   description: MCP server agent-x is not authorized to use.
   source:
     package:
       origin:
         type: oci
         identifier: ghcr.io/peterj/mcp-website-fetcher:main
-        oci: { serverName: io.solo.workshop/mcp-b }
+        oci: { serverName: io.solo.workshop/mcp-b-kagent }
       transport:
         type: http
         port: 8000
@@ -50,17 +50,17 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: mcp-api
+  name: mcp-api-kagent
   tag: latest
 spec:
-  title: mcp-api
+  title: mcp-api-kagent
   description: MCP server whose tool calls the httpbin API through the gateway with the caller's token.
   source:
     package:
       origin:
         type: oci
         identifier: mcp-api:local
-        oci: { serverName: io.solo.workshop/mcp-api }
+        oci: { serverName: io.solo.workshop/mcp-api-kagent }
       transport:
         type: http
         port: 8000

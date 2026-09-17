@@ -1,30 +1,4 @@
-# MCP server whose single tool calls the httpbin API through the gateway, forwarding the caller's bearer token.
-# API_BASE is the API endpoint the tool calls. Default is the /api route on e2e-gw; point it at an existing API gateway instead if preferred.
-apiVersion: apps/v1
-kind: Deployment
-metadata: { name: mcp-api, namespace: e2e-demo }
-spec:
-  replicas: 1
-  selector: { matchLabels: { app: mcp-api } }
-  template:
-    metadata: { labels: { app: mcp-api } }
-    spec:
-      containers:
-        - name: mcp
-          image: mcp-api:local
-          imagePullPolicy: IfNotPresent
-          ports: [ { containerPort: 8000 } ]
-          env:
-            - name: API_BASE
-              value: http://e2e-gw.e2e-demo.svc.cluster.local:8080/api
----
-apiVersion: v1
-kind: Service
-metadata: { name: mcp-api, namespace: e2e-demo }
-spec:
-  selector: { app: mcp-api }
-  ports: [ { port: 80, targetPort: 8000, appProtocol: agentgateway.dev/mcp } ]
----
+# Route /mcp-api for the MCP server deployed in 02-mcp-api.yaml.
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayBackend
 metadata: { name: mcp-api, namespace: e2e-demo }

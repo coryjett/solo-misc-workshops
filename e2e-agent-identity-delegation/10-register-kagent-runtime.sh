@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Registers the kagent runtime in Agentregistry Enterprise. Works against the lab registry or an existing one.
 # Environment (defaults suit the lab; override for an existing installation):
-#   ARCTL_API_BASE_URL   registry API, default http://localhost:12121 via port-forward (06-registry-env.sh)
+#   ARCTL_API_BASE_URL   registry API, default http://localhost:12121 via port-forward (03-registry-env.sh)
 #   KEYCLOAK_ISSUER      issuer the registry uses to authenticate to kagent, default in-cluster realm agentregistry
 #   KAGENT_URL           kagent controller management API, default http://kagent-controller.kagent:8083
 #   KAGENT_NAMESPACE     namespace kagent materializes workloads in, default kagent
 #   AGENTREGISTRY_CLIENT_SECRET  secret of the Keycloak client "agentregistry", default agentregistry-secret
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=06-registry-env.sh
-. "$DIR/06-registry-env.sh"
+# shellcheck source=03-registry-env.sh
+. "$DIR/03-registry-env.sh"
 KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry}"
 KAGENT_URL="${KAGENT_URL:-http://kagent-controller.kagent:8083}"
 KAGENT_NAMESPACE="${KAGENT_NAMESPACE:-kagent}"
