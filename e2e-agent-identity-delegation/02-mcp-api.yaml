@@ -10,7 +10,7 @@ spec:
     spec:
       containers:
         - name: mcp
-          image: mcp-api:local
+          image: ghcr.io/coryjett/e2e-mcp-api:v1
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 8000 } ]
           env:

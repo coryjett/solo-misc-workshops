@@ -33,7 +33,7 @@ Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Age
 
 Everything on-cluster is deployed by this lab. Locally you need:
 
-- kubectl, helm, docker, python3
+- kubectl, helm, python3
 - kind, only if you want a local cluster created by `00-kind.sh`
 - A Solo.io enterprise license key
 
@@ -162,23 +162,12 @@ kubectl apply -f 02-workloads.yaml
 kubectl -n e2e-demo rollout status deploy/agent-x deploy/mcp-a deploy/mcp-b deploy/api-backend --timeout=180s
 ```
 
-`02-mcp-api.yaml` deploys `mcp-api`, an MCP server with one tool, `httpbin_get(path)`. The tool calls the API at `API_BASE` and forwards the bearer token it received. `API_BASE` defaults to the `/api` route on `e2e-gw` (created in Step 10); set it to an existing API gateway to route through that instead. Source and Dockerfile are in `mcp-api/`.
-
-On KinD, build the image and load it into the cluster:
-
-```bash
-docker build -t mcp-api:local mcp-api/
-kind load docker-image mcp-api:local --name agw-e2e
-```
-
-On any other cluster, build for the node architecture, push to a registry the cluster can pull from, and set `image:` in `02-mcp-api.yaml` to that reference. Add `imagePullSecrets` the way your other workloads do if the registry is private.
+`02-mcp-api.yaml` deploys `mcp-api`, an MCP server with one tool, `httpbin_get(path)`. The tool calls the API at `API_BASE` and forwards the bearer token it received. `API_BASE` defaults to the `/api` route on `e2e-gw` (created in Step 10); set it to an existing API gateway to route through that instead. The manifest uses the public image `ghcr.io/coryjett/e2e-mcp-api:v1` (amd64 and arm64), so nothing needs building. Source and Dockerfile are in `mcp-api/`; to change the server, build for your node architecture, push to a registry the cluster can pull from, and set `image:` to that reference:
 
 ```bash
 docker build --platform linux/amd64 -t <registry>/<repo>/mcp-api:v1 mcp-api/
 docker push <registry>/<repo>/mcp-api:v1
 ```
-
-Then deploy:
 
 ```bash
 kubectl apply -f 02-mcp-api.yaml
@@ -572,7 +561,7 @@ arctl get runtimes
 
 Expected output ends with `KAGENT-READY`, then `RUNTIME-READY`, and the runtime list gains `kagent` (type Kagent).
 
-The kagent controller marks a bring-your-own agent Ready only once `/.well-known/agent-card.json` answers on port 8080, so `agent-x-kagent` uses `traefik/whoami`, which answers every path and echoes the request it received. Each MCP server entry names its image under `origin.oci` and its listen port and path under `transport`. `mcp-api-kagent` uses the same image reference as `02-mcp-api.yaml`; on a non-KinD cluster set `origin.identifier` to your pushed image.
+The kagent controller marks a bring-your-own agent Ready only once `/.well-known/agent-card.json` answers on port 8080, so `agent-x-kagent` uses `traefik/whoami`, which answers every path and echoes the request it received. Each MCP server entry names its image under `origin.oci` and its listen port and path under `transport`. `mcp-api-kagent` uses the same image as `02-mcp-api.yaml`.
 
 ```bash
 arctl apply -f 10-catalog-kagent.yaml

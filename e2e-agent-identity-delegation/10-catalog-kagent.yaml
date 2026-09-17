@@ -59,7 +59,7 @@ spec:
     package:
       origin:
         type: oci
-        identifier: mcp-api:local
+        identifier: ghcr.io/coryjett/e2e-mcp-api:v1
         oci: { serverName: io.solo.workshop/mcp-api-kagent }
       transport:
         type: http
