@@ -1,0 +1,34 @@
+# Deploy the catalog entries to the cluster through the kagent runtime. Pods land in namespace kagent.
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: agent-x
+spec:
+  targetRef: { kind: Agent, name: agent-x, tag: "1.0.0" }
+  runtimeRef: { kind: Runtime, name: kagent }
+---
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: mcp-a
+spec:
+  targetRef: { kind: MCPServer, name: mcp-a, tag: latest }
+  runtimeRef: { kind: Runtime, name: kagent }
+---
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: mcp-b
+spec:
+  targetRef: { kind: MCPServer, name: mcp-b, tag: latest }
+  runtimeRef: { kind: Runtime, name: kagent }
+---
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: mcp-api
+spec:
+  targetRef: { kind: MCPServer, name: mcp-api, tag: latest }
+  runtimeRef: { kind: Runtime, name: kagent }
+  env:
+    API_BASE: http://e2e-gw.e2e-demo.svc.cluster.local:8080/api
