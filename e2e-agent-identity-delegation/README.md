@@ -119,7 +119,15 @@ Already running Keycloak with the `agentregistry` realm? Skip the apply and impo
 kubectl exec -i -n keycloak deploy/keycloak -- bash -c 'cat > /tmp/add.json && /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin && /opt/keycloak/bin/kcadm.sh create partialImport -r agentregistry -s ifResourceExists=SKIP -o -f /tmp/add.json' < realm/workshop-additions.json
 ```
 
-Then set the issuer in `01-ui.sh`, `03-registry-values.yaml`, `05-agent-authz.yaml`, `05-mcp-authz.yaml`, `05-mcp-api-authz.yaml`, and `05-sts-values.yaml` to your Keycloak URL. Your realm keeps its own token lifespan; re-run the Step 9 exports if a request returns 401 unexpectedly.
+`kcadm.sh` ships in the Keycloak image, and `partialImport` with `ifResourceExists=SKIP` adds only what is missing. Nothing already in your realm is changed. Adjust three things in that command for your deployment:
+
+- `-n keycloak deploy/keycloak`: the namespace and workload where your Keycloak runs (`sts/<name>` for a StatefulSet)
+- `--user admin --password admin`: your bootstrap admin credentials
+- `--server http://localhost:8080`: works when HTTP is enabled inside the pod, which the docs `start-dev` deployment does. A production-mode Keycloak with HTTPS only needs `https://localhost:8443` or your external URL
+
+Then set the issuer in `01-ui.sh`, `03-registry-values.yaml`, `05-agent-authz.yaml`, `05-mcp-authz.yaml`, `05-mcp-api-authz.yaml`, and `05-sts-values.yaml` to your Keycloak URL. Two things the import does not change: your realm keeps its own access token lifespan (Keycloak's default is 5 minutes), so re-run the Step 9 exports if a request returns 401 unexpectedly; and the `agentregistry` client arrives with the lab's fixed secret, so set your own and export it as `AGENTREGISTRY_CLIENT_SECRET` before Step 16.
+
+Confirm the import with the Step 9 decode: mint a token for `alice` through `agw-client` and check the payload shows both `Groups` and `may_act`. If both are present, everything downstream works against your realm.
 
 ---
 
