@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Installs Solo Enterprise for kagent (management chart, CRDs, kagent-enterprise) into the current context.
 # Requires: LICENSE_KEY. Keycloak with the agentregistry realm from 00-keycloak.yaml, the Solo management release from 01-ui.sh.
+# Existing Solo UI: set MGMT_RELEASE and MGMT_NAMESPACE to that release. A cluster holds one management release (its CRDs are
+# cluster-scoped), so this script upgrades it in place. kagent itself always installs into namespace kagent.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
 KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.5.8}"
 KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry}"
+MGMT_RELEASE="${MGMT_RELEASE:-kagent-mgmt}"
+MGMT_NAMESPACE="${MGMT_NAMESPACE:-kagent}"
 
-helm upgrade -i kagent-mgmt oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
-  -n kagent --create-namespace --version "$KAGENT_ENT_VERSION" \
+helm upgrade -i "$MGMT_RELEASE" oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
+  -n "$MGMT_NAMESPACE" --create-namespace --version "$KAGENT_ENT_VERSION" \
   --set cluster=mgmt-cluster \
   --set products.kagent.enabled=true \
+  --set products.kagent.namespace=kagent \
   --set products.agentregistry.enabled=true \
   --set products.agentgateway.enabled=true \
   --set products.agentgateway.namespace=agentgateway-system \
