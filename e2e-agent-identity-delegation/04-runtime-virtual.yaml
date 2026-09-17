@@ -1,0 +1,7 @@
+# Virtual runtime. Its name must equal the agentregistry.solo.io/runtime label in 04-registry-gateway.yaml.
+apiVersion: ar.dev/v1alpha1
+kind: Runtime
+metadata:
+  name: mcp-gateway
+spec:
+  type: Virtual

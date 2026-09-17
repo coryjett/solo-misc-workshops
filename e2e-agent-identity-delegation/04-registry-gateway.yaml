@@ -1,0 +1,27 @@
+# Gateway and parent HTTPRoute for MCP servers the registry exposes. The label binds both to the Virtual runtime
+# named mcp-gateway (04-runtime-virtual.yaml). The registry creates child HTTPRoutes under /registry in its own namespace.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentregistry-gateway
+  namespace: agentgateway-system
+  labels: { agentregistry.solo.io/runtime: mcp-gateway }
+spec:
+  gatewayClassName: enterprise-agentgateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes: { namespaces: { from: All } }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: agentregistry-delegate
+  namespace: agentgateway-system
+  labels: { agentregistry.solo.io/runtime: mcp-gateway }
+spec:
+  parentRefs: [ { name: agentregistry-gateway } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /registry } } ]
+      backendRefs: [ { group: gateway.networking.k8s.io, kind: HTTPRoute, name: "*", namespace: agentregistry-system } ]

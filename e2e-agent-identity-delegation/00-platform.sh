@@ -14,7 +14,7 @@ echo "Installing into context: $(kubectl config current-context)"
 # 2. Gateway API CRDs (standard channel), required by agentgateway
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
 
-# 3. Solo Enterprise for agentgateway: CRDs then controller (license inline; STS comes later via sts-values.yaml)
+# 3. Solo Enterprise for agentgateway: CRDs then controller (license inline; STS comes later via 05-sts-values.yaml)
 helm upgrade -i enterprise-agentgateway-crds \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
   --version "$AGW_VERSION" -n agentgateway-system --create-namespace

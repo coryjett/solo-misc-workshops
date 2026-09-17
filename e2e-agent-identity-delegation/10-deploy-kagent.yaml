@@ -2,9 +2,9 @@
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
-  name: agent-x
+  name: agent-x-kagent
 spec:
-  targetRef: { kind: Agent, name: agent-x, tag: "1.0.0" }
+  targetRef: { kind: Agent, name: agent-x-kagent, tag: "1.0.0" }
   runtimeRef: { kind: Runtime, name: kagent }
   env:
     WHOAMI_PORT_NUMBER: "8080"
@@ -12,25 +12,25 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
-  name: mcp-a
+  name: mcp-a-kagent
 spec:
-  targetRef: { kind: MCPServer, name: mcp-a, tag: latest }
+  targetRef: { kind: MCPServer, name: mcp-a-kagent, tag: latest }
   runtimeRef: { kind: Runtime, name: kagent }
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
-  name: mcp-b
+  name: mcp-b-kagent
 spec:
-  targetRef: { kind: MCPServer, name: mcp-b, tag: latest }
+  targetRef: { kind: MCPServer, name: mcp-b-kagent, tag: latest }
   runtimeRef: { kind: Runtime, name: kagent }
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
-  name: mcp-api
+  name: mcp-api-kagent
 spec:
-  targetRef: { kind: MCPServer, name: mcp-api, tag: latest }
+  targetRef: { kind: MCPServer, name: mcp-api-kagent, tag: latest }
   runtimeRef: { kind: Runtime, name: kagent }
   env:
     API_BASE: http://e2e-gw.e2e-demo.svc.cluster.local:8080/api

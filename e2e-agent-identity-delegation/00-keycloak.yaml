@@ -420,7 +420,8 @@ data:
             "/agentregistry"
           ]
         }
-      ]
+      ],
+      "accessTokenLifespan": 3600
     }
 ---
 apiVersion: apps/v1

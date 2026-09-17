@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs Solo Enterprise for kagent (management chart, CRDs, kagent-enterprise) into the current context.
-# Requires: LICENSE_KEY. Keycloak with the agentregistry realm from 00-keycloak.yaml.
+# Requires: LICENSE_KEY. Keycloak with the agentregistry realm from 00-keycloak.yaml, the Solo management release from 01-ui.sh.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
 KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.5.8}"
