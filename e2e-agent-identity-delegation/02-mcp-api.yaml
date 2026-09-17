@@ -1,5 +1,4 @@
-# MCP server whose single tool calls the httpbin API through the gateway, forwarding the caller's bearer token.
-# API_BASE is the API endpoint the tool calls. Default is the /api route on e2e-gw; point it at an existing API gateway instead if preferred.
+# MCP server whose tool calls the API at API_BASE with the caller's bearer token.
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: mcp-api, namespace: e2e-demo }

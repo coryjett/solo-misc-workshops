@@ -1,5 +1,4 @@
-# Gateway e2e-gw on port 8080 and the tracing policy that sends its traces to the Solo UI (01-ui.sh).
-# Existing Solo UI: change the backendRef namespace below to the namespace of your management release.
+# Gateway e2e-gw and its tracing policy. Existing Solo UI: set the backendRef namespace to your management release.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata: { name: e2e-gw, namespace: e2e-demo }

@@ -1,5 +1,4 @@
-# Gateway and parent HTTPRoute for MCP servers the registry exposes. The label binds both to the Virtual runtime
-# named mcp-gateway (04-runtime-virtual.yaml). The registry creates child HTTPRoutes under /registry in its own namespace.
+# Registry gateway. The label binds both objects to the Virtual runtime mcp-gateway; child routes land under /registry.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Installs the Solo UI (management chart) with the agentgateway product. 05-gateway.yaml sends e2e-gw traces to it.
-# Requires: LICENSE_KEY, Keycloak from 00-keycloak.yaml.
-# The optional kagent step (10-kagent-install.sh) upgrades this same release, so the UI lives in namespace kagent.
-# Already running the Solo UI? Skip this script. Set MGMT_RELEASE and MGMT_NAMESPACE to your release for 10-kagent-install.sh.
+# Solo UI (management chart, agentgateway product). Requires LICENSE_KEY and Keycloak.
+# Existing Solo UI: skip this script and set MGMT_RELEASE and MGMT_NAMESPACE for 10-kagent-install.sh.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
 KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.5.8}"

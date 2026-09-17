@@ -1,5 +1,4 @@
-# Catalog entries for the workloads Part 1 deployed into namespace e2e-demo. Nothing is redeployed;
-# the registry records what runs and where. 04-expose.yaml publishes the MCP servers through the registry gateway.
+# Catalog entries for the running workloads. Nothing is redeployed.
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:

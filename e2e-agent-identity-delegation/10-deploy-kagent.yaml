@@ -1,4 +1,4 @@
-# Deploy the catalog entries to the cluster through the kagent runtime. Pods land in namespace kagent.
+# Deploy through the kagent runtime. Pods land in namespace kagent.
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:

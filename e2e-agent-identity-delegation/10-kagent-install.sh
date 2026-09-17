@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Installs Solo Enterprise for kagent (management chart, CRDs, kagent-enterprise) into the current context.
-# Requires: LICENSE_KEY. Keycloak with the agentregistry realm from 00-keycloak.yaml, the Solo management release from 01-ui.sh.
-# Existing Solo UI: set MGMT_RELEASE and MGMT_NAMESPACE to that release. A cluster holds one management release (its CRDs are
-# cluster-scoped), so this script upgrades it in place. kagent itself always installs into namespace kagent.
+# Solo Enterprise for kagent. Upgrades the management release from 01-ui.sh, then installs kagent CRDs and kagent-enterprise.
+# Existing Solo UI: set MGMT_RELEASE and MGMT_NAMESPACE to that release. kagent itself installs into namespace kagent.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
 KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.5.8}"
@@ -27,7 +25,6 @@ helm upgrade -i "$MGMT_RELEASE" oci://us-docker.pkg.dev/solo-public/solo-enterpr
 helm upgrade -i kagent-crds oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise-crds \
   -n kagent --version "$KAGENT_ENT_VERSION"
 
-# Signing key for on-behalf-of tokens issued by the controller.
 openssl genrsa -out /tmp/kagent-jwt.pem 2048 2>/dev/null
 kubectl create secret generic jwt -n kagent --from-file=jwt=/tmp/kagent-jwt.pem --dry-run=client -o yaml | kubectl apply -f -
 rm -f /tmp/kagent-jwt.pem
@@ -41,7 +38,6 @@ rbac:
       agentregistry: global.Writer
 YAML
 
-# No LLM key is needed for this lab: the agent deployed from the registry is a bring-your-own image.
 helm upgrade -i kagent oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise \
   -n kagent --version "$KAGENT_ENT_VERSION" \
   --set-string licensing.licenseKey="$LICENSE_KEY" \

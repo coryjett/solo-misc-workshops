@@ -1,7 +1,5 @@
 # Usage: . ./03-registry-env.sh
-# Lab default: the registry API is port-forwarded to localhost:12121 and tokens are minted in-cluster so the issuer matches.
-# Existing installation: export ARCTL_API_BASE_URL (your registry URL) and KEYCLOAK_URL (your Keycloak base URL, reachable
-# from this shell) before sourcing; then no port-forward is opened and tokens are requested directly.
+# Existing registry: export ARCTL_API_BASE_URL and KEYCLOAK_URL first; then no port-forward is opened.
 export PATH=$HOME/.arctl/bin:$PATH
 export ARCTL_API_BASE_URL="${ARCTL_API_BASE_URL:-http://localhost:12121}"
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-agentregistry}"

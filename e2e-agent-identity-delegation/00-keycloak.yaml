@@ -2,11 +2,7 @@ apiVersion: v1
 kind: Namespace
 metadata: { name: keycloak }
 ---
-# Realm agentregistry, imported at boot. Same shape as the Agentregistry Enterprise docs (ar-backend,
-# ar-cli-interactive, ar-cli-password, ar-ui, ar-mcp-client, Groups claim, ar-backend audience, admins group,
-# admin-user) plus the workshop additions: agw-client with the may_act mapper, users alice and bob, group
-# agent-x-users, groups readers and writers, kagent-backend, kagent-ui, and the agentregistry service-account client.
-# The same JSON is in realm/agentregistry-realm.json. Secrets are fixed strings for the lab.
+# Realm agentregistry, imported at boot. Same JSON as realm/agentregistry-realm.json.
 apiVersion: v1
 kind: ConfigMap
 metadata: { name: keycloak-realm, namespace: keycloak }
