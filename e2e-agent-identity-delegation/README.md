@@ -156,6 +156,8 @@ kubectl port-forward -n kagent svc/solo-enterprise-ui 4000:80 &
 
 Open http://localhost:4000 and sign in as `admin-user` / `password` (group `admins`, mapped to `global.Admin`). The gateway pages fill in from Step 10 on.
 
+Already running the Solo UI? Skip this script. A cluster holds one management release, because its CRDs are cluster-scoped. Set `MGMT_RELEASE` and `MGMT_NAMESPACE` to your release before Step 16 so that step upgrades it in place, change the tracing policy's `backendRef.namespace` in `05-gateway.yaml` to that namespace, and make sure the release has `products.agentgateway.enabled=true` (the agentgateway UI docs set it). Sign in with any user in a group your release maps to `global.Admin` or `global.Reader`.
+
 Docs: [Set up the UI](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/ui/setup/)
 
 ---
@@ -557,7 +559,7 @@ Docs: [Explore the UI](https://docs.solo.io/agentgateway/kubernetes/latest/docum
 
 So far the workloads were deployed with `kubectl` and registered afterwards. Solo Enterprise for kagent is the registry runtime that creates workloads in a Kubernetes cluster from catalog entries. This step installs it, registers it as a runtime, deploys a second copy of the agent and MCP servers from the catalog, and re-points the `e2e-gw` routes at them. The JWT and CEL policies do not change.
 
-Install kagent. The script upgrades the Step 3 management release with the kagent and agentregistry products, installs the kagent CRDs, the controller signing key, and kagent-enterprise with OIDC pointed at the realm. The `agentregistry` group is mapped to `global.Writer`, which is how the registry is allowed to create workloads. No LLM key is configured; the agent is a bring-your-own image.
+Install kagent. The script upgrades the Step 3 management release (or the one named by `MGMT_RELEASE` and `MGMT_NAMESPACE`) with the kagent and agentregistry products, installs the kagent CRDs, the controller signing key, and kagent-enterprise with OIDC pointed at the realm. The `agentregistry` group is mapped to `global.Writer`, which is how the registry is allowed to create workloads. No LLM key is configured; the agent is a bring-your-own image.
 
 ```bash
 ./10-kagent-install.sh
@@ -629,6 +631,7 @@ Each piece is optional if you already run it. Everything the lab creates is conf
 | Keycloak | `00-keycloak.yaml` | Import `realm/workshop-additions.json` into your `agentregistry` realm (Step 2 shows the partial import). Then set the issuer in `01-ui.sh`, `03-registry-values.yaml`, the `05-*` policies, and `05-sts-values.yaml` to your Keycloak URL. A realm built from the Agentregistry Enterprise docs already carries the `Groups` claim these policies use. |
 | Agentregistry Enterprise | `03-registry-install.sh` | Export `ARCTL_API_BASE_URL` and `KEYCLOAK_URL` before sourcing `03-registry-env.sh`. Steps 6 to 8 then run against your registry. For Step 7 the label on `04-registry-gateway.yaml` must match a Virtual runtime in your registry. |
 | A real agent workload | The httpbin stand-in in `02-workloads.yaml` | Route to it and use its ServiceAccount as the `may_act` subject and in Step 13's `jwt.act.sub`. |
+| Solo UI (management chart) | `01-ui.sh` | Export `MGMT_RELEASE` and `MGMT_NAMESPACE` for Step 16, set the tracing `backendRef.namespace` in `05-gateway.yaml`, and enable `products.agentgateway` on the release if it is not already. Validated only with the lab's own release in namespace `kagent`; upgrading a release in another namespace with the kagent product has not been run here. |
 | Solo Enterprise for kagent | `10-kagent-install.sh` | Run `10-register-kagent-runtime.sh` with `KAGENT_URL` pointing at your controller and `AGENTREGISTRY_CLIENT_SECRET` set to your client secret. |
 | Istio or ambient mesh | Nothing | The lab's namespaces are not mesh-enrolled and do not need to be. |
 
