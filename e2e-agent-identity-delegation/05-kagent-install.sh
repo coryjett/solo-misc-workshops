@@ -11,6 +11,8 @@ helm upgrade -i kagent-mgmt oci://us-docker.pkg.dev/solo-public/solo-enterprise-
   --set cluster=mgmt-cluster \
   --set products.kagent.enabled=true \
   --set products.agentregistry.enabled=true \
+  --set products.agentgateway.enabled=true \
+  --set products.agentgateway.namespace=agentgateway-system \
   --set-string licensing.licenseKey="$LICENSE_KEY" \
   --set-string oidc.issuer="$KEYCLOAK_ISSUER" \
   --set-string ui.backend.oidc.clientId=kagent-backend \

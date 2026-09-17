@@ -1,11 +1,11 @@
 image:
-  tag: v2026.8.0
+  tag: v2026.9.0
 service:
   type: ClusterIP
 oidc:
   issuer: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry"
   clientId: "ar-backend"
-  publicClientId: "ar-cli-interactive"
+  publicClientId: "ar-ui"
   clientSecret: "ar-backend-secret"
   roleClaim: "Groups"
   superuserRole: "admins"

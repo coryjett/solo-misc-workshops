@@ -13,8 +13,9 @@ Validated end to end against controller v2026.9.0 on a local KinD cluster with K
 | `00-kind.sh` | Optional. Creates a local KinD cluster named `agw-e2e` |
 | `00-platform.sh` | Platform bootstrap into the current kubeconfig context: Gateway API CRDs, Enterprise Agentgateway charts, test client |
 | `00-client.yaml` | `sleep` test client in ns `wp-a`. Its ServiceAccount is the actor identity for delegation |
-| `00-keycloak.yaml` | Keycloak 26.1.3 in ns `keycloak` with the `agentregistry` realm imported at boot |
+| `00-keycloak.yaml` | Keycloak 26.1.3 in ns `keycloak` with the `agentregistry` realm imported at boot. Issuer pinned to the in-cluster Service name so browser and pod tokens match |
 | `realm/` | The realm JSON, and the workshop-only additions for an existing Keycloak |
+| `01-ui.sh`, `01-tracing.yaml` | Solo UI (management chart, agentgateway product) and the tracing policy for `e2e-gw` |
 | `01-agent-authz.yaml` | Gateway `e2e-gw`, agent stand-in, JWT plus group-based authz (`EnterpriseAgentgatewayPolicy`) |
 | `02-mcp-authz.yaml` | Two MCP servers, `EnterpriseAgentgatewayBackend` MCP targets, opposing authz policies |
 | `sts-values.yaml` | Helm values enabling the STS (`tokenExchange` block) |
@@ -361,6 +362,34 @@ With the delegated token the chain is agent, gateway, MCP server, gateway, httpb
 
 ---
 
+## Validate Part 1 in the Solo UI
+
+`01-ui.sh` installs the Solo UI (management chart, agentgateway product) into namespace `kagent` and applies `01-tracing.yaml`, which sends `e2e-gw` traces to it. Part 2 upgrades the same release to add kagent and the registry, so there is one UI for the whole lab.
+
+```bash
+./01-ui.sh
+```
+
+The UI signs you in through Keycloak in the browser. The browser is sent to the issuer the servers trust, `http://keycloak.keycloak.svc.cluster.local:8080`, so make that name resolve to your machine and port-forward Keycloak once for the rest of the lab:
+
+```bash
+echo "127.0.0.1 keycloak.keycloak.svc.cluster.local" | sudo tee -a /etc/hosts
+kubectl port-forward -n keycloak svc/keycloak 8080:8080 &
+kubectl port-forward -n kagent svc/solo-enterprise-ui 4000:80 &
+```
+
+Open http://localhost:4000 and sign in as `admin-user` / `password` (group `admins`, mapped to `global.Admin`).
+
+What to check after Steps 4 to 8:
+
+- Gateways: `e2e-gw` in `e2e-demo`, with request count, duration, and error rate. Re-run the Step 4 requests and watch the counts move.
+- Routes: `agent-x`, `mcp-a`, `mcp-b`, `api`, and `mcp-api`. Open a route to see its attached policy and destinations.
+- Policies: the `EnterpriseAgentgatewayPolicy` objects from Steps 4, 5, 7, and 8. Open one and view the applied JSON to confirm the JWT provider issuer and the CEL expression.
+- Tracing: one trace per request. Alice's `/agent-x` call shows 200, bob's shows 403, the anonymous call shows 401, and the Step 7 raw-token call to `/api` shows 401 at the gateway with no upstream span.
+- Playground: select the `agent-x` route, paste `$USER_JWT` as the bearer token, and send a request to `/get`.
+
+Docs: [Set up the UI](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/ui/setup/), [Explore the UI](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/ui/explore/)
+
 ## Validation checklist
 
 1. `anonymous: 401`, `alice: 200`, `bob: 403` on `/agent-x` (Demo 1)
@@ -440,7 +469,7 @@ If Keycloak and Agentregistry Enterprise are already running and configured as t
 
 | File | Purpose |
 |---|---|
-| `05-kagent-install.sh` | Solo Enterprise management chart, kagent CRDs, kagent-enterprise |
+| `05-kagent-install.sh` | Upgrades the Solo management release from `01-ui.sh` with kagent and agentregistry, installs kagent CRDs and kagent-enterprise |
 | `06-registry-install.sh`, `06-registry-values.yaml` | Agentregistry Enterprise |
 | `06-register-kagent-runtime.sh` | Registers the kagent runtime in the registry (lab or existing) |
 | `06-registry-env.sh` | Port-forward, `arctl` environment, token helper |
@@ -452,7 +481,7 @@ If Keycloak and Agentregistry Enterprise are already running and configured as t
 ## Step 9: Install arctl
 
 ```bash
-curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.8.0 sh
+curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.9.0 sh
 export PATH=$HOME/.arctl/bin:$PATH
 arctl version --json
 ```
@@ -561,6 +590,32 @@ ARCTL_API_TOKEN=$(ar_token reader) arctl get agents
 ```
 
 Expected: `mcp-a` and `agent-x` listed, `mcp-b` and `mcp-api` absent. The principal is the Keycloak group name from the `Groups` claim.
+
+## Validate Part 2 in the registry and Solo UIs
+
+Both UIs use the Keycloak hosts entry and port-forward from the Part 1 UI section.
+
+Registry UI, served by the registry server on the port `06-registry-env.sh` already forwards:
+
+```bash
+kubectl port-forward -n agentregistry-system svc/agentregistry-enterprise-server 12121:12121 &
+```
+
+Open http://localhost:12121/are/catalog and sign in as `admin-user` / `password`.
+
+- Catalog: `agent-x` under Agents, and `mcp-a`, `mcp-b`, `mcp-api` under MCP servers, with the descriptions from `07-catalog.yaml`.
+- Runtimes: `kagent` (type Kagent) pointing at `http://kagent-controller.kagent:8083`.
+- Instances: the four Step 12 deployments with status `deployed` and their runtime.
+- Access Policies: `readers-see-agent-x-stack` from Step 14.
+- Gateways and Tracing: the registry side of the gateway integration. This lab drives the gateway from Kubernetes manifests, so these stay empty.
+
+Sign out and sign in as `reader` / `reader`. The catalog shows only `agent-x` and `mcp-a`, the same filter Step 14 showed in `arctl`.
+
+Solo UI (same URL as Part 1, http://localhost:4000, `admin-user` / `password`):
+
+- Agents and MCP servers (kagent product): `agent-x` (type BYO) and `mcp-a`, `mcp-b`, `mcp-api` in namespace `kagent`, all Ready, created by the registry deployments.
+- Gateways and Routes: the same `e2e-gw` routes as Part 1, now with destinations in namespace `kagent` after Step 13.
+- Tracing: the Step 13 requests, showing the registry-deployed pods as the upstream.
 
 ## Validation checklist, Part 2
 
