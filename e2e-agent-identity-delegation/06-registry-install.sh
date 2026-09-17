@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Installs Agentregistry Enterprise into the current context, then registers the kagent runtime.
-# Requires: LICENSE_KEY, arctl on PATH (see Step 9), Keycloak realm from 05-setup-realm-registry.sh, kagent from 05-kagent-install.sh.
+# Requires: LICENSE_KEY, arctl on PATH (Step 9), Keycloak from 00-keycloak.yaml, kagent from 05-kagent-install.sh.
+# Already running Agentregistry Enterprise? Skip this script and run 06-register-kagent-runtime.sh.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
 ARE_VERSION="${ARE_VERSION:-2026.8.0}"
@@ -14,38 +15,5 @@ helm upgrade --install agentregistry-enterprise \
   --wait --timeout 8m
 kubectl get pods -n agentregistry-system
 
-# shellcheck source=06-registry-env.sh
-. "$DIR/06-registry-env.sh"
-
-arctl apply -f - <<YAML
-apiVersion: ar.dev/v1alpha1
-kind: Secret
-metadata:
-  name: kagent-oidc
-spec:
-  type: Opaque
-  stringData:
-    clientSecret: "agentregistry-secret"
-YAML
-
-arctl apply -f - <<YAML
-apiVersion: ar.dev/v1alpha1
-kind: Runtime
-metadata:
-  name: kagent
-spec:
-  type: Kagent
-  telemetryEndpoint: http://agentregistry-enterprise-telemetry-collector.agentregistry-system.svc.cluster.local:4318
-  config:
-    kagentUrl: http://kagent-controller.kagent:8083
-    namespace: kagent
-    auth:
-      oidc:
-        issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo
-        clientId: agentregistry
-        clientSecretRef:
-          name: kagent-oidc
-          key: clientSecret
-YAML
-arctl get runtimes
+"$DIR/06-register-kagent-runtime.sh"
 echo REGISTRY-READY

@@ -55,11 +55,11 @@ spec:
       mode: Strict
       preserveToken: true
       providers:
-        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo
+        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry
           jwks:
             remote:
               backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
-              jwksPath: /realms/agent-demo/protocol/openid-connect/certs
+              jwksPath: /realms/agentregistry/protocol/openid-connect/certs
         - issuer: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
           jwks:
             remote:
@@ -69,4 +69,4 @@ spec:
       action: Require
       policy:
         matchExpressions:
-          - "('groups' in jwt && 'agent-x-users' in jwt.groups) || ('act' in jwt && jwt.act.sub == 'system:serviceaccount:wp-a:default')"
+          - "('groups' in jwt && 'agent-x-users' in jwt.Groups) || ('act' in jwt && jwt.act.sub == 'system:serviceaccount:wp-a:default')"

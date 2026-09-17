@@ -3,9 +3,9 @@ image:
 service:
   type: ClusterIP
 oidc:
-  issuer: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo"
+  issuer: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry"
   clientId: "ar-backend"
-  publicClientId: "ar-cli-password"
+  publicClientId: "ar-cli-interactive"
   clientSecret: "ar-backend-secret"
   roleClaim: "Groups"
   superuserRole: "admins"
