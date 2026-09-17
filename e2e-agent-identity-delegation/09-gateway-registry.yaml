@@ -1,6 +1,6 @@
 # Routes on e2e-gw for the workloads the registry deployed into namespace kagent.
 # Same JWT and CEL policies as Steps 4, 5 and 8; only the backends move.
-apiVersion: gateway.networking.k8s.io/v1
+apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata: { name: e2e-gw-to-kagent, namespace: kagent }
 spec:

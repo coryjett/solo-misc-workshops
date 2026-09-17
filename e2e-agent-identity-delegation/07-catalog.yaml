@@ -5,9 +5,9 @@ metadata:
   name: agent-x
   tag: "1.0.0"
 spec:
-  description: "Demo agent. Users in agent-x-users may call it. Bring-your-own image, serves on port 8080."
+  description: "Demo agent. Users in agent-x-users may call it. Bring-your-own image that answers every path, including the A2A agent card kagent probes, on port 8080."
   source:
-    image: mccutchen/go-httpbin:v2.15.0
+    image: traefik/whoami:v1.11.0
 ---
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
@@ -22,6 +22,7 @@ spec:
       origin:
         type: oci
         identifier: ghcr.io/peterj/mcp-website-fetcher:main
+        oci: { serverName: io.solo.workshop/mcp-a }
       transport:
         type: http
         port: 8000
@@ -40,6 +41,7 @@ spec:
       origin:
         type: oci
         identifier: ghcr.io/peterj/mcp-website-fetcher:main
+        oci: { serverName: io.solo.workshop/mcp-b }
       transport:
         type: http
         port: 8000
@@ -58,6 +60,7 @@ spec:
       origin:
         type: oci
         identifier: mcp-api:local
+        oci: { serverName: io.solo.workshop/mcp-api }
       transport:
         type: http
         port: 8000

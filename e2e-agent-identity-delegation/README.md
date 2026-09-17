@@ -376,6 +376,10 @@ With the delegated token the chain is agent, gateway, MCP server, gateway, httpb
 - API leg: Step 7's policy applies unchanged on a Solo Enterprise kgateway route in front of a real API.
 - Identity provider: Keycloak is the stand-in. Okta, Entra ID, Auth0 and others work the same way; only the issuer and JWKS provider config changes. Multiple identity domains means one JWT provider entry per issuer.
 
+## Follow-ups
+
+- Workload identity without a user: the agent hop already uses the pod's Kubernetes ServiceAccount token as the actor token (Step 6). A further step is to let the MCP and API routes accept a projected ServiceAccount token directly, with a JWT provider pointed at the cluster issuer, for workload-to-workload calls that have no user in the chain. The registry to kagent hop stays on OIDC client credentials; the kagent runtime requires it.
+
 ## Bring your own components
 
 Each piece is optional if you already run it. Everything the lab creates is confined to its own namespaces (`e2e-demo`, `keycloak`, `wp-a`) and its own Gateway `e2e-gw`. Existing gateways, routes, and policies are not touched.
@@ -501,7 +505,7 @@ Docs: [Agentregistry Enterprise setup](https://docs.solo.io/agentregistry/latest
 
 ## Step 12: Catalog the agent and MCP servers, deploy them from the registry
 
-The catalog holds `agent-x` (bring-your-own image, A2A on port 8080), `mcp-a` and `mcp-b` (website fetcher, SSE on port 8000), and `mcp-api` (the Step 8 server, streamable HTTP on port 8000). On KinD, load the local image first:
+The catalog holds `agent-x` (bring-your-own image, A2A on port 8080), `mcp-a` and `mcp-b` (website fetcher, SSE on port 8000), and `mcp-api` (the Step 8 server, streamable HTTP on port 8000). The kagent controller marks a bring-your-own agent Ready only once `/.well-known/agent-card.json` answers on port 8080, so the registry copy of `agent-x` uses `traefik/whoami`, which answers every path and echoes the request it received. Each MCP server entry names its image under `origin.oci` and its listen port and path under `transport`. On KinD, load the local image first:
 
 ```bash
 kind load docker-image mcp-api:local --name agw-e2e
@@ -530,7 +534,9 @@ kubectl -n e2e-demo delete svc agent-x mcp-a mcp-b mcp-api --ignore-not-found
 kubectl apply -f 09-gateway-registry.yaml
 ```
 
-Re-run the Step 4, 5, and 8 requests. Expected results are identical: alice 200 and bob 403 on `/agent-x`, mcp-a 200 and mcp-b 403, `mcp-api/mcpcall.sh` returns HTTP 200 with the delegated token and HTTP 401 with the raw user token. The workloads answering now came from the registry.
+Re-run the Step 4, 5, and 8 requests. Expected results are identical: alice 200 and bob 403 on `/agent-x`, mcp-a 200 and mcp-b 403, `mcp-api/mcpcall.sh` returns HTTP 200 with the delegated token and HTTP 401 with the raw user token. The workloads answering now came from the registry. Alice's `/agent-x` response is the whoami echo, and its `Authorization` line shows the token the gateway forwarded to the pod in namespace `kagent`.
+
+The `ReferenceGrant` in `09-gateway-registry.yaml` lets routes in `e2e-demo` reference Services in `kagent`.
 
 ## Step 14: Govern catalog visibility
 

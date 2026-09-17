@@ -6,6 +6,8 @@ metadata:
 spec:
   targetRef: { kind: Agent, name: agent-x, tag: "1.0.0" }
   runtimeRef: { kind: Runtime, name: kagent }
+  env:
+    WHOAMI_PORT_NUMBER: "8080"
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
