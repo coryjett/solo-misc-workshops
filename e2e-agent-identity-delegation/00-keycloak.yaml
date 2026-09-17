@@ -2,6 +2,427 @@ apiVersion: v1
 kind: Namespace
 metadata: { name: keycloak }
 ---
+# Realm agentregistry, imported at boot. Same shape as the Agentregistry Enterprise docs (ar-backend,
+# ar-cli-interactive, ar-cli-password, ar-ui, ar-mcp-client, Groups claim, ar-backend audience, admins group,
+# admin-user) plus the workshop additions: agw-client with the may_act mapper, users alice and bob, group
+# agent-x-users, groups readers and writers, kagent-backend, kagent-ui, and the agentregistry service-account client.
+# The same JSON is in realm/agentregistry-realm.json. Secrets are fixed strings for the lab.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: keycloak-realm, namespace: keycloak }
+data:
+  agentregistry-realm.json: |
+    {
+      "realm": "agentregistry",
+      "enabled": true,
+      "sslRequired": "none",
+      "loginWithEmailAllowed": true,
+      "clients": [
+        {
+          "clientId": "ar-backend",
+          "enabled": true,
+          "publicClient": false,
+          "standardFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "secret": "ar-backend-secret"
+        },
+        {
+          "clientId": "ar-cli-interactive",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "attributes": {
+            "oauth2.device.authorization.grant.enabled": "true"
+          },
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "ar-backend-audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "ar-backend",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "ar-cli-password",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "ar-backend-audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "ar-backend",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "ar-ui",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": false,
+          "redirectUris": [
+            "*"
+          ],
+          "webOrigins": [
+            "*"
+          ],
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "ar-backend-audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "ar-backend",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "ar-mcp-client",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": false,
+          "redirectUris": [
+            "http://localhost:*"
+          ],
+          "webOrigins": [
+            "http://localhost:*"
+          ],
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "ar-backend-audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "ar-backend",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "agw-client",
+          "enabled": true,
+          "publicClient": false,
+          "standardFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "secret": "agw-client-secret",
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "may-act",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-hardcoded-claim-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "may_act",
+                "claim.value": "{\"sub\":\"system:serviceaccount:wp-a:default\"}",
+                "jsonType.label": "JSON",
+                "access.token.claim": "true",
+                "id.token.claim": "false",
+                "userinfo.token.claim": "false"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "kagent-backend",
+          "enabled": true,
+          "publicClient": false,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "secret": "kagent-backend-secret",
+          "redirectUris": [
+            "*"
+          ],
+          "webOrigins": [
+            "*"
+          ],
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "kagent-ui",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": false,
+          "redirectUris": [
+            "*"
+          ],
+          "webOrigins": [
+            "*"
+          ],
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "agentregistry",
+          "enabled": true,
+          "publicClient": false,
+          "standardFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": true,
+          "secret": "agentregistry-secret",
+          "protocolMappers": [
+            {
+              "name": "Groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "Groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "name": "admins"
+        },
+        {
+          "name": "readers"
+        },
+        {
+          "name": "writers"
+        },
+        {
+          "name": "agent-x-users"
+        },
+        {
+          "name": "agentregistry"
+        }
+      ],
+      "users": [
+        {
+          "username": "admin-user",
+          "email": "admin-user@example.com",
+          "firstName": "Admin",
+          "lastName": "User",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "password",
+              "temporary": false
+            }
+          ],
+          "groups": [
+            "/admins"
+          ],
+          "requiredActions": []
+        },
+        {
+          "username": "alice",
+          "email": "alice@example.com",
+          "firstName": "Alice",
+          "lastName": "Demo",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "pw",
+              "temporary": false
+            }
+          ],
+          "groups": [
+            "/agent-x-users"
+          ],
+          "requiredActions": []
+        },
+        {
+          "username": "bob",
+          "email": "bob@example.com",
+          "firstName": "Bob",
+          "lastName": "Demo",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "pw",
+              "temporary": false
+            }
+          ],
+          "groups": [],
+          "requiredActions": []
+        },
+        {
+          "username": "reader",
+          "email": "reader@example.com",
+          "firstName": "Reader",
+          "lastName": "Demo",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "reader",
+              "temporary": false
+            }
+          ],
+          "groups": [
+            "/readers"
+          ],
+          "requiredActions": []
+        },
+        {
+          "username": "writer",
+          "email": "writer@example.com",
+          "firstName": "Writer",
+          "lastName": "Demo",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "writer",
+              "temporary": false
+            }
+          ],
+          "groups": [
+            "/writers"
+          ],
+          "requiredActions": []
+        },
+        {
+          "username": "service-account-agentregistry",
+          "enabled": true,
+          "serviceAccountClientId": "agentregistry",
+          "groups": [
+            "/agentregistry"
+          ]
+        }
+      ]
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: keycloak, namespace: keycloak }
@@ -13,20 +434,27 @@ spec:
     spec:
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:26.0
-          args: ["start-dev"]
+          image: quay.io/keycloak/keycloak:26.1.3
+          args: ["start-dev", "--import-realm"]
           env:
             - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: admin }
             - { name: KC_BOOTSTRAP_ADMIN_PASSWORD, value: admin }
+            - { name: KC_HTTP_ENABLED, value: "true" }
             - { name: KC_HOSTNAME_STRICT, value: "false" }
-          ports: [ { containerPort: 8080 } ]
+            - { name: KC_PROXY_HEADERS, value: xforwarded }
+          ports: [ { containerPort: 8080, name: http } ]
           readinessProbe:
             httpGet: { path: /realms/master, port: 8080 }
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 60
+          volumeMounts:
+            - { name: realm, mountPath: /opt/keycloak/data/import }
+      volumes:
+        - name: realm
+          configMap: { name: keycloak-realm }
 ---
 apiVersion: v1
 kind: Service
 metadata: { name: keycloak, namespace: keycloak }
-spec: { selector: { app: keycloak }, ports: [ { port: 8080, targetPort: 8080 } ] }
+spec: { selector: { app: keycloak }, ports: [ { name: http, port: 8080, targetPort: 8080 } ] }

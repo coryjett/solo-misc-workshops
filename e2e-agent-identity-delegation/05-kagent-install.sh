@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Installs Solo Enterprise for kagent (management chart, CRDs, kagent-enterprise) into the current context.
-# Requires: LICENSE_KEY. Keycloak realm agent-demo with the clients from 05-setup-realm-registry.sh.
+# Requires: LICENSE_KEY. Keycloak with the agentregistry realm from 00-keycloak.yaml.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
 KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.5.8}"
-KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo}"
+KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry}"
 
 helm upgrade -i kagent-mgmt oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
   -n kagent --create-namespace --version "$KAGENT_ENT_VERSION" \

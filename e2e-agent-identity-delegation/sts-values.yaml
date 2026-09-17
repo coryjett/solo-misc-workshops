@@ -6,7 +6,7 @@ tokenExchange:
   subjectValidator:
     validatorType: remote
     remoteConfig:
-      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo/protocol/openid-connect/certs"
+      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry/protocol/openid-connect/certs"
   actorValidator:
     validatorType: k8s
   apiValidator:

@@ -13,8 +13,8 @@ Validated end to end against controller v2026.9.0 on a local KinD cluster with K
 | `00-kind.sh` | Optional. Creates a local KinD cluster named `agw-e2e` |
 | `00-platform.sh` | Platform bootstrap into the current kubeconfig context: Gateway API CRDs, Enterprise Agentgateway charts, test client |
 | `00-client.yaml` | `sleep` test client in ns `wp-a`. Its ServiceAccount is the actor identity for delegation |
-| `00-keycloak.yaml` | Keycloak 26 (start-dev) in ns `keycloak` |
-| `00-setup-realm.sh` | Realm `agent-demo`: users, group, client, `groups` and `may_act` mappers |
+| `00-keycloak.yaml` | Keycloak 26.1.3 in ns `keycloak` with the `agentregistry` realm imported at boot |
+| `realm/` | The realm JSON, and the workshop-only additions for an existing Keycloak |
 | `01-agent-authz.yaml` | Gateway `e2e-gw`, agent stand-in, JWT plus group-based authz (`EnterpriseAgentgatewayPolicy`) |
 | `02-mcp-authz.yaml` | Two MCP servers, `EnterpriseAgentgatewayBackend` MCP targets, opposing authz policies |
 | `sts-values.yaml` | Helm values enabling the STS (`tokenExchange` block) |
@@ -89,32 +89,29 @@ The `sleep` pod's ServiceAccount (`system:serviceaccount:wp-a:default`) stands i
 
 ---
 
-## Step 2: Deploy Keycloak and configure the realm
+## Step 2: Deploy Keycloak with the agentregistry realm
 
 ```bash
 kubectl apply -f 00-keycloak.yaml
 kubectl -n keycloak rollout status deploy/keycloak --timeout=300s
 ```
 
-`00-setup-realm.sh` creates realm `agent-demo` with users `alice` and `bob` (password `pw`), group `agent-x-users` (alice only), confidential client `agw-client` with secret `agw-client-secret`, a `groups` protocol mapper, and a `may_act` mapper naming the agent's ServiceAccount. Run it inside the Keycloak pod:
+The realm is imported from a ConfigMap at boot (`start-dev --import-realm`), so there is nothing to run inside the pod and a restart re-imports it. It is the `agentregistry` realm from the Agentregistry Enterprise docs (clients `ar-backend`, `ar-cli-interactive`, `ar-cli-password`, `ar-ui`, `ar-mcp-client`; `Groups` claim; `ar-backend` audience; group `admins`; user `admin-user` with password `password`) plus what this lab adds:
 
-```bash
-kubectl exec -i -n keycloak deploy/keycloak -- bash -c "AGENT_SA=system:serviceaccount:wp-a:default bash -s" < 00-setup-realm.sh
-```
-
-The `-i` flag is required. Without it the script is not delivered to the pod and exits 0 having created nothing.
-
-Expected output (truncated):
-
-```
-Created new realm with id 'agent-demo'
-...
-REALM-READY
-```
+- Client `agw-client` (confidential, secret `agw-client-secret`) with the `Groups` mapper and a `may_act` mapper naming the agent's ServiceAccount
+- Users `alice` and `bob` (password `pw`); alice is in group `agent-x-users`
+- Groups `readers` and `writers` with users `reader` and `writer` (password equals username), used in Part 2
+- Clients `kagent-backend`, `kagent-ui`, and `agentregistry` (service account in group `agentregistry`), used in Part 2
 
 The STS refuses a delegation exchange unless the user's token carries a `may_act` claim naming the actor. The identity provider decides which agent may act on the user's behalf (RFC 8693 section 4.4).
 
-Keycloak in `start-dev` mode keeps the realm in an in-memory database. A pod restart loses it. Re-run the command above if that happens.
+Already running Keycloak with the `agentregistry` realm? Skip the apply and import only the additions:
+
+```bash
+kubectl exec -i -n keycloak deploy/keycloak -- bash -c 'cat > /tmp/add.json && /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin && /opt/keycloak/bin/kcadm.sh create partialImport -r agentregistry -s ifResourceExists=SKIP -o -f /tmp/add.json' < realm/workshop-additions.json
+```
+
+Then set the issuer in `01-agent-authz.yaml`, `02-mcp-authz.yaml`, `04-mcp-api.yaml`, `sts-values.yaml`, `05-kagent-install.sh`, `06-registry-values.yaml`, and `06-registry-install.sh` to your Keycloak URL.
 
 ---
 
@@ -124,7 +121,7 @@ All requests in this lab are sent from the in-cluster `sleep` pod, so the gatewa
 
 ```bash
 TOK() { kubectl exec -n wp-a deploy/sleep -- curl -s -X POST \
-  http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo/protocol/openid-connect/token \
+  http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry/protocol/openid-connect/token \
   -d grant_type=password -d client_id=agw-client -d client_secret=agw-client-secret \
   -d username=$1 -d password=pw | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])"; }
 
@@ -137,13 +134,13 @@ Decode alice's payload:
 ```bash
 _seg=$(echo "$USER_JWT" | cut -d. -f2 | tr '_-' '/+')
 while [ $(( ${#_seg} % 4 )) -ne 0 ]; do _seg="${_seg}="; done
-echo "$_seg" | base64 -d 2>/dev/null | python3 -m json.tool | grep -A3 -E 'groups|may_act'
+echo "$_seg" | base64 -d 2>/dev/null | python3 -m json.tool | grep -A3 -E 'Groups|may_act'
 ```
 
 Expected output:
 
 ```
-    "groups": [
+    "Groups": [
         "agent-x-users"
     ],
     "may_act": {
@@ -151,7 +148,7 @@ Expected output:
     }
 ```
 
-Bob's token carries `may_act` but not the `agent-x-users` group. The group is what Demo 1 checks.
+Decode bob's token the same way (`$BOB_JWT`): `may_act` is present and there is no `Groups` block, because bob is in no group. That missing group is what Demo 1 checks.
 
 ---
 
@@ -164,16 +161,16 @@ Bob's token carries `may_act` but not the `agent-x-users` group. The group is wh
     jwtAuthentication:
       mode: Strict
       providers:
-        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo
+        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry
           jwks:
             remote:
               backendRef: {name: keycloak-jwks, ...}
-              jwksPath: /realms/agent-demo/protocol/openid-connect/certs
+              jwksPath: /realms/agentregistry/protocol/openid-connect/certs
     authorization:
       action: Require
       policy:
         matchExpressions:
-          - "'agent-x-users' in jwt.groups"
+          - "'agent-x-users' in jwt.Groups"
 ```
 
 `jwksPath` is required whenever `jwks.remote.backendRef` is set.
@@ -387,7 +384,7 @@ Each piece is optional if you already run it. Everything the lab creates is conf
 |---|---|---|
 | Kubernetes cluster | `00-kind.sh` | Point `kubectl` at your cluster and run `00-platform.sh`. The lab needs no StorageClass and no LoadBalancer; the gateway is reached by Service DNS. |
 | Enterprise Agentgateway | Step 1, but still `kubectl apply -f 00-client.yaml` (the client's SA is the actor identity) | The chart names the controller Service `enterprise-agentgateway` regardless of release name, so only a different namespace changes the STS address. Update it in three places: `sts-values.yaml` (`issuer`), `03-api-authz.yaml` (provider `issuer` and JWKS `backendRef` namespace), and Step 6's exchange URL. Step 6's `helm upgrade` must target your release name and namespace. Validated with release `my-agw` in ns `gw-system`. |
-| Keycloak | `00-keycloak.yaml` | Run `00-setup-realm.sh` against your instance (needs kcadm admin credentials; the realm it creates is additive). Then update the Keycloak host and realm in three files: `01-agent-authz.yaml` and `02-mcp-authz.yaml` (provider `issuer` and JWKS `backendRef` in each policy) and `sts-values.yaml` (`subjectValidator.remoteConfig.url`). Validated with Keycloak at `sso.idp.svc`. Reusing an existing realm also works if it has a groups claim matching the CEL expression and a `may_act` mapper naming the actor SA. |
+| Keycloak | `00-keycloak.yaml` | Import `realm/workshop-additions.json` into your `agentregistry` realm (Step 2 shows the partial import). Then set the issuer in `01-agent-authz.yaml`, `02-mcp-authz.yaml`, `04-mcp-api.yaml`, `sts-values.yaml`, `05-kagent-install.sh`, `06-registry-values.yaml`, and `06-registry-install.sh` to your Keycloak URL. A realm built from the Agentregistry Enterprise docs already carries the `Groups` claim these policies use. |
 | agentregistry | Nothing, the lab never touches it | Deploy your real agent through the registry, point the `/agent-x` HTTPRoute's backendRef at its Service, and use its ServiceAccount as `AGENT_SA` (Step 2) and in Step 7's `jwt.act.sub` expression. |
 | A real agent workload | The httpbin stand-in in `01-agent-authz.yaml` | Route to it and use its ServiceAccount as `AGENT_SA` everywhere. |
 | Istio or ambient mesh | Nothing | The lab's namespaces are not mesh-enrolled and do not need to be. |
@@ -425,20 +422,30 @@ Part 1 deployed the agent and MCP servers with `kubectl`. Part 2 makes the regis
 
 Everything runs against the same cluster and Keycloak realm. Access is CLI-first: the registry API is port-forwarded and tokens are minted in-cluster. Browser login to the registry or kagent UI needs a Keycloak issuer the browser can reach, which a cluster with a LoadBalancer provides and a local KinD cluster does not.
 
+## Using an existing Keycloak and Agentregistry Enterprise
+
+If Keycloak and Agentregistry Enterprise are already running and configured as the Agentregistry Enterprise docs describe (realm `agentregistry`, `Groups` claim, `admins` superuser group), use them instead of the lab copies:
+
+1. Import the workshop additions into your realm (Step 2 shows the partial import with `realm/workshop-additions.json`). This adds `agw-client`, alice and bob, the `readers` and `writers` groups, and the `kagent-backend`, `kagent-ui`, and `agentregistry` clients. Set the `agentregistry` client secret to a value of your choice and export it as `AGENTREGISTRY_CLIENT_SECRET`.
+2. Point the Part 1 policies and `sts-values.yaml` at your issuer, then run Steps 3 to 8 against it.
+3. Install kagent with your issuer: `KEYCLOAK_ISSUER=<your issuer> ./05-kagent-install.sh`.
+4. Skip `06-registry-install.sh`. Export `ARCTL_API_BASE_URL` (your registry URL), `KEYCLOAK_URL` (your Keycloak base URL), and `KEYCLOAK_ISSUER`, then run `./06-register-kagent-runtime.sh`. The kagent controller must be reachable from the registry at `KAGENT_URL` (default `http://kagent-controller.kagent:8083`, same cluster).
+5. Continue with Steps 12 to 14. `. ./06-registry-env.sh` honors the same variables, so `arctl` and `ar_token` work against your installation.
+
 ## Files for Part 2
 
 | File | Purpose |
 |---|---|
-| `05-setup-realm-registry.sh` | Adds the registry and kagent clients, groups, and users to the `agent-demo` realm |
 | `05-kagent-install.sh` | Solo Enterprise management chart, kagent CRDs, kagent-enterprise |
-| `06-registry-install.sh`, `06-registry-values.yaml` | Agentregistry Enterprise, the kagent runtime registration |
+| `06-registry-install.sh`, `06-registry-values.yaml` | Agentregistry Enterprise |
+| `06-register-kagent-runtime.sh` | Registers the kagent runtime in the registry (lab or existing) |
 | `06-registry-env.sh` | Port-forward, `arctl` environment, token helper |
 | `07-catalog.yaml` | Agent and MCP server catalog entries |
 | `07-deploy.yaml` | Registry deployments to the kagent runtime |
 | `08-access-policy.yaml` | Catalog visibility for readers |
 | `09-gateway-registry.yaml` | Gateway routes and backends for the registry-deployed workloads |
 
-## Step 9: Install arctl and extend the realm
+## Step 9: Install arctl
 
 ```bash
 curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.8.0 sh
@@ -446,17 +453,7 @@ export PATH=$HOME/.arctl/bin:$PATH
 arctl version --json
 ```
 
-Add the registry and kagent clients to the realm. `admin-user`, `reader`, and `writer` (password equals username) join groups `admins`, `readers`, and `writers`. The `agentregistry` client has a service account in group `agentregistry`; kagent maps that group to `global.Writer`, which is how the registry is allowed to create workloads.
-
-```bash
-kubectl exec -i -n keycloak deploy/keycloak -- bash -s < 05-setup-realm-registry.sh
-```
-
-Expected output ends with:
-
-```
-REGISTRY-REALM-READY
-```
+The realm already holds everything Part 2 needs (Step 2): `admin-user` in `admins`, `reader` and `writer`, and the `kagent-backend`, `kagent-ui`, and `agentregistry` clients. The `agentregistry` client's service account is in group `agentregistry`; kagent maps that group to `global.Writer`, which is how the registry is allowed to create workloads.
 
 ## Step 10: Install Solo Enterprise for kagent
 
@@ -482,7 +479,7 @@ Docs: [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/in
 ./06-registry-install.sh
 ```
 
-The script installs the registry (ClusterIP, bundled PostgreSQL and ClickHouse, OIDC against the realm with `Groups` as the role claim and `admins` as the superuser group), port-forwards the API, logs in as `admin-user`, stores the `agentregistry` client secret as a registry Secret, and registers the kagent runtime pointing at `kagent-controller.kagent:8083`.
+The script installs the registry (ClusterIP, bundled PostgreSQL and ClickHouse, OIDC against the realm with `Groups` as the role claim and `admins` as the superuser group), then calls `06-register-kagent-runtime.sh`, which port-forwards the API, logs in as `admin-user`, stores the `agentregistry` client secret as a registry Secret, and registers the kagent runtime pointing at `kagent-controller.kagent:8083`.
 
 Expected output ends with:
 
@@ -490,6 +487,7 @@ Expected output ends with:
 NAME              TYPE
 kagent            Kagent
 virtual-default   Virtual
+RUNTIME-READY
 REGISTRY-READY
 ```
 

@@ -28,7 +28,7 @@ kubectl -n agentgateway-system rollout status deploy -l app.kubernetes.io/name=e
 kubectl get gatewayclass enterprise-agentgateway
 
 # 4. Test client pod (its namespace/SA is also the ACTOR identity for the STS demo:
-#    system:serviceaccount:wp-a:default, referenced by 00-setup-realm.sh AGENT_SA and 03-api-authz.yaml)
+#    system:serviceaccount:wp-a:default, referenced by the may_act mapper in 00-keycloak.yaml and by 03-api-authz.yaml)
 kubectl apply -f 00-client.yaml
 kubectl -n wp-a rollout status deploy/sleep --timeout=120s
 

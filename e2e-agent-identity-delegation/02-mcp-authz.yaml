@@ -82,15 +82,15 @@ spec:
       mode: Strict
       preserveToken: true
       providers:
-        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo
+        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry
           jwks:
             remote:
               backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
-              jwksPath: /realms/agent-demo/protocol/openid-connect/certs
+              jwksPath: /realms/agentregistry/protocol/openid-connect/certs
     authorization:
       action: Require
       policy:
-        matchExpressions: [ "'agent-x-users' in jwt.groups" ]
+        matchExpressions: [ "'agent-x-users' in jwt.Groups" ]
 ---
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
@@ -102,12 +102,12 @@ spec:
       mode: Strict
       preserveToken: true
       providers:
-        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo
+        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry
           jwks:
             remote:
               backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
-              jwksPath: /realms/agent-demo/protocol/openid-connect/certs
+              jwksPath: /realms/agentregistry/protocol/openid-connect/certs
     authorization:
       action: Require
       policy:
-        matchExpressions: [ "'other-agents' in jwt.groups" ]
+        matchExpressions: [ "'other-agents' in jwt.Groups" ]
