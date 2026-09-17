@@ -19,7 +19,7 @@ Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Age
 | `03-registry-install.sh`, `03-registry-values.yaml` | Agentregistry Enterprise |
 | `03-registry-env.sh` | Port-forward, `arctl` environment, token helper |
 | `04-catalog.yaml` | Catalog entries for the running workloads |
-| `04-registry-gateway.yaml`, `04-runtime-virtual.yaml`, `04-expose.yaml` | Registry gateway, Virtual runtime, and the deployments that publish the MCP servers through it |
+| `04-registry-gateway.yaml`, `04-runtime-virtual.yaml`, `04-expose.yaml` | Agentgateway proxy the registry publishes to, its Virtual runtime, and the deployments that publish the MCP servers |
 | `04-access-policy.yaml` | Catalog visibility for readers |
 | `05-gateway.yaml` | Gateway `e2e-gw` and its tracing policy |
 | `05-agent-authz.yaml` | Route `/agent-x`, JWT plus group-based authorization |
@@ -43,7 +43,7 @@ Bringing your own cluster: skip `00-kind.sh`. `00-platform.sh` installs into wha
 
 1. Install the platform, Keycloak, and the Solo UI (Steps 1 to 3)
 2. Deploy the agent, MCP servers, and API (Step 4)
-3. Install Agentregistry Enterprise, register the workloads, publish the MCP servers through the registry gateway, and govern who sees what (Steps 5 to 8)
+3. Install Agentregistry Enterprise, register the workloads, publish the MCP servers through agentgateway from the registry, and govern who sees what (Steps 5 to 8)
 4. Mint user tokens and secure every hop with Enterprise Agentgateway: user to agent, agent to MCP, delegation through the STS, MCP or agent to API, MCP server to API (Steps 9 to 14)
 5. Validate in the Solo UI (Step 15)
 6. Optional: let the registry deploy workloads into the cluster through Solo Enterprise for kagent (Step 16)
@@ -235,9 +235,11 @@ Docs: [Register remote MCP servers](https://docs.solo.io/agentregistry/latest/mc
 
 ---
 
-## Step 7: Publish the MCP servers through the registry gateway
+## Step 7: Publish the MCP servers through agentgateway from the registry
 
-`04-registry-gateway.yaml` creates a Gateway (`agentregistry-gateway`, port 80) and a parent HTTPRoute that delegates `/registry` to child routes the registry creates. Both carry the label `agentregistry.solo.io/runtime: mcp-gateway`, and `04-runtime-virtual.yaml` creates the Virtual runtime of that name. `04-expose.yaml` then publishes each MCP server at `/registry<pathSuffix>`.
+The registry does not proxy traffic. It writes routes onto an Enterprise Agentgateway proxy you give it, and that proxy serves the MCP traffic. `04-registry-gateway.yaml` creates that proxy: a Gateway named `agentregistry-gateway` (class `enterprise-agentgateway`, port 80, so the controller deploys a proxy and a Service of the same name) and a parent HTTPRoute that delegates `/registry` to child routes the registry will create. Both carry the label `agentregistry.solo.io/runtime: mcp-gateway`, and `04-runtime-virtual.yaml` creates the Virtual runtime of that name. `04-expose.yaml` then publishes each MCP server at `/registry<pathSuffix>`: for each one the registry creates a child HTTPRoute and an agentgateway Backend in `agentregistry-system`, and the agentgateway controller programs the proxy.
+
+Request path: client, the proxy's load balancer or Service, parent route `/registry`, child route `/registry/mcp-a`, Backend, `mcp-a` in `e2e-demo`. The registry is not in it.
 
 ```bash
 kubectl apply -f 04-registry-gateway.yaml
@@ -247,7 +249,7 @@ arctl get deployments
 kubectl get httproute -n agentregistry-system
 ```
 
-Expected: three registry deployments on runtime `mcp-gateway`, and three child HTTPRoutes in `agentregistry-system`. On KinD without a LoadBalancer the deployment status reports `NoAcceptedListener` because the Gateway has no external address. The routes still work in-cluster. Call one from the test client:
+Expected: three registry deployments on runtime `mcp-gateway`, and three child HTTPRoutes in `agentregistry-system`. On KinD without a LoadBalancer the deployment status reports `NoAcceptedListener` because the Gateway has no external address. The routes still work in-cluster. Call one from the test client. `RGW` is the proxy's Service, named after the Gateway:
 
 ```bash
 export RGW=agentregistry-gateway.agentgateway-system.svc.cluster.local:80
@@ -264,7 +266,7 @@ mcp-a via registry: 200
 
 Registry UI: Runtimes shows `mcp-gateway` (Virtual) next to `virtual-default`; Instances shows the three deployments.
 
-Using an existing Gateway instead: label it `agentregistry.solo.io/runtime=mcp-gateway`, drop the Gateway document from `04-registry-gateway.yaml`, and point the HTTPRoute's `parentRefs` at your Gateway's name. If the deployments were created before the label landed they stay `pending` with reason `NoGatewayBound`; `arctl delete -f 04-expose.yaml && arctl apply -f 04-expose.yaml` binds them.
+Using an existing agentgateway Gateway instead: label it `agentregistry.solo.io/runtime=mcp-gateway`, drop the Gateway document from `04-registry-gateway.yaml`, and point the HTTPRoute's `parentRefs` at your Gateway's name. `RGW` becomes `<gateway-name>.<namespace>.svc.cluster.local:80`, or the Gateway's load balancer address from outside the cluster. If the deployments were created before the label landed they stay `pending` with reason `NoGatewayBound`; `arctl delete -f 04-expose.yaml && arctl apply -f 04-expose.yaml` binds them.
 
 Docs: [Virtual runtime](https://docs.solo.io/agentregistry/latest/setup/runtime/virtual/), [Expose MCP servers with agentgateway](https://docs.solo.io/agentregistry/latest/quickstart/mcp-gateway/)
 
@@ -526,7 +528,7 @@ HTTP 401
 
 With the delegated token every hop (agent, gateway, MCP server, gateway, API) sees the same `sub` and `act`. With the raw user token the MCP hop admits the call but the API route rejects it.
 
-The same server is published through the registry gateway (Step 7). It answers the same there, because the API route is what enforces delegation:
+The same server is published through the second agentgateway proxy (Step 7). It answers the same there, because the API route is what enforces delegation:
 
 ```bash
 mcp-api/mcpcall.sh "$DELEGATED_TOKEN" $RGW /registry/mcp-api
@@ -632,7 +634,7 @@ Each piece is optional if you already run it. Everything the lab creates is conf
 ## Cleanup
 
 ```bash
-# 1. Registry objects, then the registry gateway
+# 1. Registry objects, then the proxy the registry published to
 arctl delete -f 04-access-policy.yaml
 arctl delete -f 04-expose.yaml
 arctl delete -f 04-runtime-virtual.yaml
