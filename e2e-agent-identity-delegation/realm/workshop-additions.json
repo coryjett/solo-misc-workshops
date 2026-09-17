@@ -124,16 +124,36 @@
   ],
   "groups": [
     {
-      "name": "readers"
+      "name": "readers",
+      "path": "/readers",
+      "subGroups": [],
+      "attributes": {},
+      "realmRoles": [],
+      "clientRoles": {}
     },
     {
-      "name": "writers"
+      "name": "writers",
+      "path": "/writers",
+      "subGroups": [],
+      "attributes": {},
+      "realmRoles": [],
+      "clientRoles": {}
     },
     {
-      "name": "agent-x-users"
+      "name": "agent-x-users",
+      "path": "/agent-x-users",
+      "subGroups": [],
+      "attributes": {},
+      "realmRoles": [],
+      "clientRoles": {}
     },
     {
-      "name": "agentregistry"
+      "name": "agentregistry",
+      "path": "/agentregistry",
+      "subGroups": [],
+      "attributes": {},
+      "realmRoles": [],
+      "clientRoles": {}
     }
   ],
   "users": [
