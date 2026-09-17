@@ -7,6 +7,7 @@ KAGENT_ENT_VERSION="${KAGENT_ENT_VERSION:-0.5.8}"
 KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry}"
 MGMT_RELEASE="${MGMT_RELEASE:-kagent-mgmt}"
 MGMT_NAMESPACE="${MGMT_NAMESPACE:-kagent}"
+AGW_NAMESPACE="${AGW_NAMESPACE:-agentgateway-system}"
 
 helm upgrade -i "$MGMT_RELEASE" oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
   -n "$MGMT_NAMESPACE" --create-namespace --version "$KAGENT_ENT_VERSION" \
@@ -15,7 +16,7 @@ helm upgrade -i "$MGMT_RELEASE" oci://us-docker.pkg.dev/solo-public/solo-enterpr
   --set products.kagent.namespace=kagent \
   --set products.agentregistry.enabled=true \
   --set products.agentgateway.enabled=true \
-  --set products.agentgateway.namespace=agentgateway-system \
+  --set products.agentgateway.namespace="$AGW_NAMESPACE" \
   --set-string licensing.licenseKey="$LICENSE_KEY" \
   --set-string oidc.issuer="$KEYCLOAK_ISSUER" \
   --set-string ui.backend.oidc.clientId=kagent-backend \
