@@ -1,67 +1,73 @@
 # Configure End-to-End Agent Identity, Authorization, and Delegation
 
-In this lab, you'll secure every hop of an agentic call chain — user → agent → MCP server → API — with Enterprise Agentgateway: JWT authentication and CEL-based authorization at each hop, and RFC 8693 token exchange so the user's identity travels the whole chain with the agent's identity attached.
+This lab secures every hop of an agentic call chain (user, agent, MCP server, API) with Enterprise Agentgateway. Each hop gets JWT authentication and CEL-based authorization, and RFC 8693 token exchange carries the user's identity through the whole chain with the agent's identity attached.
 
-This runbook was validated end to end against controller **v2026.9.0** on a local KinD cluster (Keycloak 26), including a clean-room run from an empty cluster using only the files in this folder. All `Expected output:` blocks show actual observed results.
+Validated end to end against controller v2026.9.0 on a local KinD cluster with Keycloak 26, including a clean-room run from an empty cluster using only the files in this folder. Every `Expected output` block is an observed result.
 
 ## Files in this folder
 
 | File | Purpose |
 |---|---|
-| `00-platform.sh` | Platform bootstrap: KinD cluster, Gateway API CRDs, Enterprise Agentgateway charts, test client |
-| `00-client.yaml` | `sleep` test client in ns `wp-a` — its ServiceAccount is the **actor identity** for delegation |
+| `00-kind.sh` | Optional. Creates a local KinD cluster named `agw-e2e` |
+| `00-platform.sh` | Platform bootstrap into the current kubeconfig context: Gateway API CRDs, Enterprise Agentgateway charts, test client |
+| `00-client.yaml` | `sleep` test client in ns `wp-a`. Its ServiceAccount is the actor identity for delegation |
 | `00-keycloak.yaml` | Keycloak 26 (start-dev) in ns `keycloak` |
-| `00-setup-realm.sh` | Realm `agent-demo`: users, group, client, `groups` + `may_act` mappers |
-| `01-agent-authz.yaml` | Gateway `e2e-gw`, agent stand-in, JWT + group-based authz (`EnterpriseAgentgatewayPolicy`) |
+| `00-setup-realm.sh` | Realm `agent-demo`: users, group, client, `groups` and `may_act` mappers |
+| `01-agent-authz.yaml` | Gateway `e2e-gw`, agent stand-in, JWT plus group-based authz (`EnterpriseAgentgatewayPolicy`) |
 | `02-mcp-authz.yaml` | Two MCP servers, `EnterpriseAgentgatewayBackend` MCP targets, opposing authz policies |
 | `sts-values.yaml` | Helm values enabling the STS (`tokenExchange` block) |
 | `03-api-authz.yaml` | API route that trusts only STS-issued delegated tokens |
 
-## Pre-requisites
+## Prerequisites
 
 Everything on-cluster is deployed by this lab. Locally you need:
-- kubectl, helm, kind (skippable if you bring a cluster), python3
-- **Solo.io Trial License Key**: Enterprise Agentgateway requires a valid license key.
 
-## Lab Objectives
+- kubectl, helm, python3
+- kind, only if you want a local cluster created by `00-kind.sh`
+- A Solo.io enterprise license key
+
+Bringing your own cluster: skip `00-kind.sh`. `00-platform.sh` installs into whatever `kubectl config current-context` points at and never creates a cluster.
+
+## Lab objectives
 
 - Install Enterprise Agentgateway and deploy Keycloak as the identity provider
-- **Demo 1 — User → Agent:** Require a Keycloak JWT and authorize on `groups` with a CEL `matchExpression` in an `EnterpriseAgentgatewayPolicy`
-- **Demo 2 — Agent → MCP:** Route MCP traffic through the gateway via `EnterpriseAgentgatewayBackend` MCP targets and authorize which MCP servers a caller may reach
-- **Demo 3 — Delegation:** Enable the built-in STS and exchange the user JWT + the agent's Kubernetes SA token for a delegated token carrying both `sub` (user) and `act` (agent)
-- **Demo 4 — MCP/Agent → API:** Restrict an API route to STS-issued delegated tokens only, so raw user tokens cannot bypass the agent chain
-- Validate every allow AND deny path (200 / 401 / 403)
+- Demo 1, user to agent: require a Keycloak JWT and authorize on `groups` with a CEL `matchExpression`
+- Demo 2, agent to MCP: route MCP traffic through the gateway with `EnterpriseAgentgatewayBackend` MCP targets and authorize which MCP servers a caller may reach
+- Demo 3, delegation: enable the built-in STS and exchange the user JWT plus the agent's Kubernetes SA token for a delegated token carrying both `sub` (user) and `act` (agent)
+- Demo 4, MCP or agent to API: restrict an API route to STS-issued delegated tokens so raw user tokens cannot bypass the agent chain
+- Validate every allow and deny path (200, 401, 403)
 
 ## Background
 
-At every hop, the question is the same — *who is calling, and are they allowed to call this?* — but the identity answering it changes:
+At every hop the question is the same: who is calling, and are they allowed to call this? The identity answering it changes at each hop.
 
-```
-alice ──[user JWT]──► AGW ──► agent-x                 (Demo 1: bob denied, 403)
-                        │
-        agent ──[user JWT + SA token]──► STS :7777 ──► delegated token {sub: alice, act: agent}
-                        │                              (Demo 3)
-        agent ──[JWT]──► AGW ──► mcp-a                 (Demo 2: mcp-b denied, 403)
-                        │
-        MCP tool ──[delegated token]──► AGW ──► API    (Demo 4: raw user token denied, 401)
-```
+1. alice calls the gateway with her user JWT and reaches agent-x. bob is denied with 403. (Demo 1)
+2. The agent sends the user JWT plus its own SA token to the STS on port 7777 and receives a delegated token with `sub: alice` and `act: agent`. (Demo 3)
+3. The agent calls the gateway with a JWT and reaches mcp-a. mcp-b is denied with 403. (Demo 2)
+4. An MCP tool calls the gateway with the delegated token and reaches the API. A raw user token is denied with 401. (Demo 4)
 
-Enterprise Agentgateway includes a built-in STS on port 7777 (RFC 8693 token exchange). The delegated token it issues preserves the user's `sub` and embeds the agent's identity in `act` — downstream services see who asked and through what, natively.
+Enterprise Agentgateway includes a built-in STS on port 7777 (RFC 8693 token exchange). The delegated token it issues preserves the user's `sub` and embeds the agent's identity in `act`, so downstream services see who asked and through which agent.
 
-> **Why not just forward the user's token?** A raw user token says nothing about *which agent* is acting, can be replayed against any route the user could reach, and grants the agent everything the user has. The delegated token is scoped: signed by the STS, carrying both identities, and only accepted where STS-issued tokens are trusted.
+Why not forward the user's token: a raw user token says nothing about which agent is acting, can be replayed against any route the user could reach, and grants the agent everything the user has. The delegated token is signed by the STS, carries both identities, and is only accepted where STS-issued tokens are trusted.
 
 ---
 
-## Step 1 — Install the Platform
+## Step 1: Install the platform
 
-`00-platform.sh` creates a KinD cluster (skip with `SKIP_KIND=1` to use your current context), installs the Gateway API CRDs and both Enterprise Agentgateway charts, and deploys the `sleep` test client:
+Local KinD cluster (skip this if you are bringing your own cluster):
+
+```bash
+./00-kind.sh
+```
+
+`00-platform.sh` installs the Gateway API CRDs and both Enterprise Agentgateway charts into the current kubeconfig context, and deploys the `sleep` test client:
 
 ```bash
 export LICENSE_KEY=<solo-enterprise-license-key>
 ./00-platform.sh
 ```
 
-> **Note:** The controller upgrade uses `--reuse-values`, so re-running this script after Step 5 will not wipe the STS configuration.
+The controller upgrade uses `--reuse-values`, so re-running this script after Step 6 does not wipe the STS configuration.
 
 Docs: [Install with Helm](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/helm/)
 
@@ -75,24 +81,24 @@ deployment "sleep" successfully rolled out
 PLATFORM-READY
 ```
 
-> **Note — the client pod is also an identity:** the `sleep` pod's ServiceAccount (`system:serviceaccount:wp-a:default`) stands in for the agent's workload identity. Its mounted SA token is the **actor token** in Step 6, and Step 7's policy authorizes on exactly this identity via `jwt.act.sub`.
+The `sleep` pod's ServiceAccount (`system:serviceaccount:wp-a:default`) stands in for the agent's workload identity. Its mounted SA token is the actor token in Step 6, and Step 7's policy authorizes on this identity via `jwt.act.sub`.
 
 ---
 
-## Step 2 — Deploy Keycloak and Configure the Realm
+## Step 2: Deploy Keycloak and configure the realm
 
 ```bash
 kubectl apply -f 00-keycloak.yaml
 kubectl -n keycloak rollout status deploy/keycloak --timeout=300s
 ```
 
-`00-setup-realm.sh` creates realm `agent-demo` with users `alice` and `bob` (password `pw`), group `agent-x-users` (alice only), confidential client `agw-client`/`agw-client-secret`, a `groups` protocol mapper, and a hardcoded `may_act` mapper naming the agent's ServiceAccount. Run it inside the Keycloak pod:
+`00-setup-realm.sh` creates realm `agent-demo` with users `alice` and `bob` (password `pw`), group `agent-x-users` (alice only), confidential client `agw-client` with secret `agw-client-secret`, a `groups` protocol mapper, and a `may_act` mapper naming the agent's ServiceAccount. Run it inside the Keycloak pod:
 
 ```bash
 kubectl exec -i -n keycloak deploy/keycloak -- bash -c "AGENT_SA=system:serviceaccount:wp-a:default bash -s" < 00-setup-realm.sh
 ```
 
-> **Note:** the `-i` flag on `kubectl exec` is required — without it the script is silently not delivered to the pod (exit 0, nothing created).
+The `-i` flag is required. Without it the script is not delivered to the pod and exits 0 having created nothing.
 
 Expected output (truncated):
 
@@ -102,13 +108,15 @@ Created new realm with id 'agent-demo'
 REALM-READY
 ```
 
-> **Why the `may_act` mapper?** The STS refuses a delegation exchange unless the **user's** token carries a `may_act` claim naming the actor. That is Keycloak — the identity authority — explicitly authorizing which agent may act on the user's behalf (RFC 8693 §4.4). Governance, not friction.
+The STS refuses a delegation exchange unless the user's token carries a `may_act` claim naming the actor. The identity provider decides which agent may act on the user's behalf (RFC 8693 section 4.4).
+
+Keycloak in `start-dev` mode keeps the realm in an in-memory database. A pod restart loses it. Re-run the command above if that happens.
 
 ---
 
-## Step 3 — Mint User Tokens and Inspect Claims
+## Step 3: Mint user tokens and inspect claims
 
-All requests in this lab are sent from the in-cluster `sleep` pod (KinD has no LoadBalancer, so the gateway is reached by its in-cluster Service DNS). Define a token helper and mint both users:
+All requests in this lab are sent from the in-cluster `sleep` pod, so the gateway is reached by its Service DNS name and no LoadBalancer is needed. Define a token helper and mint both users:
 
 ```bash
 TOK() { kubectl exec -n wp-a deploy/sleep -- curl -s -X POST \
@@ -120,7 +128,7 @@ export USER_JWT=$(TOK alice)
 export BOB_JWT=$(TOK bob)
 ```
 
-Decode alice's payload to inspect the claims:
+Decode alice's payload:
 
 ```bash
 _seg=$(echo "$USER_JWT" | cut -d. -f2 | tr '_-' '/+')
@@ -139,11 +147,11 @@ Expected output:
     }
 ```
 
-Bob's token carries `may_act` but **no** `agent-x-users` group — the group is what Demo 1 checks.
+Bob's token carries `may_act` but not the `agent-x-users` group. The group is what Demo 1 checks.
 
 ---
 
-## Step 4 — Enforce User → Agent Authorization (Demo 1)
+## Step 4: Enforce user to agent authorization (Demo 1)
 
 `01-agent-authz.yaml` creates ns `e2e-demo` with the agent stand-in (`agent-x`, httpbin), Gateway `e2e-gw` (class `enterprise-agentgateway`, port 8080), an `HTTPRoute` on `/agent-x`, and an `EnterpriseAgentgatewayPolicy` combining JWT authentication with CEL authorization:
 
@@ -164,9 +172,9 @@ Bob's token carries `may_act` but **no** `agent-x-users` group — the group is 
           - "'agent-x-users' in jwt.groups"
 ```
 
-> **Note:** `jwksPath` is required whenever `jwks.remote.backendRef` is set — omitting it is a validation error.
+`jwksPath` is required whenever `jwks.remote.backendRef` is set.
 
-Docs: [JWT authentication](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/) · [Authorization policies (CEL)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/authorization/)
+Docs: [JWT authentication](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/), [Authorization policies (CEL)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/authorization/)
 
 ```bash
 kubectl apply -f 01-agent-authz.yaml
@@ -192,26 +200,27 @@ alice: 200
 bob: 403
 ```
 
-The 401/403 split matters: 401 = no/invalid token (authentication), 403 = valid token, insufficient claims (authorization).
+401 means no or invalid token (authentication). 403 means a valid token with insufficient claims (authorization).
 
 ---
 
-## Step 5 — Enforce Agent → MCP Authorization (Demo 2)
+## Step 5: Enforce agent to MCP authorization (Demo 2)
 
-`02-mcp-authz.yaml` deploys two MCP servers (`mcp-a`, `mcp-b` — `mcp-website-fetcher`), each behind an `EnterpriseAgentgatewayBackend` with an MCP static target, routed at `/mcp-a` and `/mcp-b` with opposing authz policies: `mcp-a` requires alice's group; `mcp-b` requires a group nobody has.
+`02-mcp-authz.yaml` deploys two MCP servers (`mcp-a` and `mcp-b`, both `mcp-website-fetcher`), each behind an `EnterpriseAgentgatewayBackend` with an MCP static target, routed at `/mcp-a` and `/mcp-b` with opposing authz policies. `mcp-a` requires alice's group. `mcp-b` requires a group nobody has.
 
-Key manifest details:
-- The MCP `Service` port carries `appProtocol: agentgateway.dev/mcp` — omit it and the backend never picks the server up.
-- `spec.mcp.targets[].static: {host, port, protocol: SSE}` on the backend; the `HTTPRoute` backendRef carries `group: enterpriseagentgateway.solo.io`, `kind: EnterpriseAgentgatewayBackend`.
+Manifest details that matter:
 
-Docs: [About MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/about/) · [Static MCP backends](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/static-mcp/) · [Control access to tools](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
+- The MCP `Service` port carries `appProtocol: agentgateway.dev/mcp`. Without it the backend never picks the server up.
+- The backend uses `spec.mcp.targets[].static: {host, port, protocol: SSE}`. The `HTTPRoute` backendRef carries `group: enterpriseagentgateway.solo.io` and `kind: EnterpriseAgentgatewayBackend`.
+
+Docs: [About MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/about/), [Static MCP backends](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/static-mcp/), [Control access to tools](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
 ```bash
 kubectl apply -f 02-mcp-authz.yaml
 kubectl -n e2e-demo rollout status deploy/mcp-a deploy/mcp-b --timeout=180s
 ```
 
-Send a real MCP `initialize` through the gateway as alice:
+Send an MCP `initialize` through the gateway as alice:
 
 ```bash
 INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"ws","version":"1.0"}}}'
@@ -234,13 +243,13 @@ data: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabili
 mcp-b: 403
 ```
 
-> **Note:** in the full production flow this policy's CEL matches the DELEGATED token's `jwt.act.sub` (the agent identity) rather than the user's group — same policy shape, one expression change.
+In the full production flow this policy's CEL matches the delegated token's `jwt.act.sub` (the agent identity) instead of the user's group. Same policy shape, one expression change.
 
 ---
 
-## Step 6 — Enable the STS and Exchange for a Delegated Token (Demo 3)
+## Step 6: Enable the STS and exchange for a delegated token (Demo 3)
 
-Upgrade the controller with the `tokenExchange` block (`sts-values.yaml` — subject validator points at the Keycloak JWKS, actor validator is `k8s`):
+Upgrade the controller with the `tokenExchange` block from `sts-values.yaml`. The subject validator points at the Keycloak JWKS and the actor validator is `k8s`.
 
 ```bash
 export ENTERPRISE_AGW_VERSION=$(helm get metadata enterprise-agentgateway -n agentgateway-system | awk '/^VERSION:/ {print $2}')
@@ -251,13 +260,13 @@ helm upgrade enterprise-agentgateway \
 kubectl -n agentgateway-system rollout status deploy/enterprise-agentgateway --timeout=180s
 ```
 
-The STS listens on the controller Service, port 7777: token endpoint `/token`, JWKS at `/.well-known/jwks.json`.
+The STS listens on the controller Service, port 7777. Token endpoint `/token`, JWKS at `/.well-known/jwks.json`.
 
-> **Note:** if the controller was already running with an older STS config, the gateway may briefly reject fresh STS tokens with `token uses the unknown key` until its JWKS cache refreshes (~30s). See Troubleshooting.
+If the controller was already running with an older STS config, the gateway may reject fresh STS tokens with `token uses the unknown key` for up to about 30 seconds while its JWKS cache refreshes.
 
-Docs: [Token exchange overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/overview/) · [On-behalf-of (OBO) tokens](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/obo/) · [OAuth token exchange](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/token-exchange/)
+Docs: [Token exchange overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/overview/), [On-behalf-of (OBO) tokens](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/obo/), [OAuth token exchange](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/token-exchange/)
 
-Perform the exchange from inside the agent's pod — the mounted SA token is the `actor_token`, the user JWT (with `may_act`) is the `subject_token`. In production the agent does this in code; here by hand:
+Perform the exchange from inside the agent's pod. The mounted SA token is the `actor_token` and the user JWT (with `may_act`) is the `subject_token`. In production the agent does this in code.
 
 ```bash
 export DELEGATED_TOKEN=$(kubectl exec -n wp-a deploy/sleep -- sh -c "SA=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token); \
@@ -283,13 +292,13 @@ act: {"iss": "https://kubernetes.default.svc.cluster.local", "sub": "system:serv
 iss: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
 ```
 
-> **Note:** both token types must be `urn:ietf:params:oauth:token-type:jwt` — `...token-type:access_token` is rejected. And claims like `groups` do **not** propagate into the delegated token: downstream authorization keys on `sub`/`act`, which is the point.
+Both token types must be `urn:ietf:params:oauth:token-type:jwt`. The `access_token` type is rejected. Claims such as `groups` do not propagate into the delegated token; downstream authorization keys on `sub` and `act`.
 
 ---
 
-## Step 7 — Restrict the API to Delegated Identities (Demo 4)
+## Step 7: Restrict the API to delegated identities (Demo 4)
 
-`03-api-authz.yaml` deploys `api-backend` on route `/api` with a policy whose JWT provider trusts **only the STS issuer** (JWKS via a backend to the controller's port 7777) and authorizes on the agent's identity:
+`03-api-authz.yaml` deploys `api-backend` on route `/api` with a policy whose JWT provider trusts only the STS issuer (JWKS fetched from the controller's port 7777) and authorizes on the agent's identity:
 
 ```yaml
     authorization:
@@ -316,50 +325,52 @@ raw user token: 401
 anonymous: 401
 ```
 
-The raw user token is a valid Keycloak JWT with the right user — but it is signed by Keycloak, not the STS, so it fails **authentication** (401) at this route. Users cannot bypass the agent chain to reach the API directly. The same JWT+CEL policy shape applies unchanged on a Solo Enterprise kgateway route in front of a real API — the gateway hosting the policy changes, the policy doesn't.
+The raw user token is a valid Keycloak JWT for the right user, but it is signed by Keycloak rather than the STS, so it fails authentication (401) at this route. Users cannot bypass the agent chain to reach the API directly. The same JWT plus CEL policy applies unchanged on a Solo Enterprise kgateway route in front of a real API. Only the gateway hosting the policy changes.
 
 ---
 
 ## Validation checklist
 
-1. `anonymous: 401 / alice: 200 / bob: 403` on `/agent-x` (Demo 1)
+1. `anonymous: 401`, `alice: 200`, `bob: 403` on `/agent-x` (Demo 1)
 2. MCP `initialize` result from `mcp-a`, `403` from `mcp-b` (Demo 2)
 3. Delegated token decodes with `sub` = alice and `act.sub` = `system:serviceaccount:wp-a:default` (Demo 3)
-4. `delegated: 200 / raw user: 401 / anonymous: 401` on `/api` (Demo 4)
+4. `delegated: 200`, `raw user: 401`, `anonymous: 401` on `/api` (Demo 4)
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
+| Symptom | Cause | Fix |
 |---|---|---|
-| Realm script exits 0 but creates nothing | `kubectl exec` without `-i` — stdin never reached the pod | Use `kubectl exec -i` |
+| Realm script exits 0 but creates nothing | `kubectl exec` without `-i`, so stdin never reached the pod | Use `kubectl exec -i` |
+| Realm missing after a Keycloak restart | `start-dev` keeps the realm in memory | Re-run the Step 2 realm command |
 | Policy rejected: `jwksPath is required` | `jwks.remote.backendRef` set without `jwksPath` | Add the explicit JWKS path |
-| Keycloak: `Account is not fully set up` | User missing profile fields / pending required actions | Set `firstName`/`lastName`/`email`, `requiredActions: []` |
-| Keycloak mints no tokens, `unknown_error` | An empty protocol mapper (inline `kcadm -s config...` quoting silently produced blank config) | Create mappers from a JSON file with `kcadm -f` |
-| STS: `subject token does not contain may_act claim` | `may_act` mapper missing, or its `sub` doesn't match the actor token's `sub` | Re-check the mapper against the agent's SA identity |
-| STS 400: unsupported token type | `subject_token_type`/`actor_token_type` set to `...access_token` | Use `urn:ietf:params:oauth:token-type:jwt` for both |
-| `mcp: no backends configured` / resets on MCP route | Service port missing MCP `appProtocol` | Set `appProtocol: agentgateway.dev/mcp` |
-| 401 `token uses the unknown key "..."` on the API route right after enabling the STS | The gateway cached the STS JWKS from before the controller restart (the STS signing key changes on restart) | Self-heals on the next JWKS refresh — wait ~30s and retry |
+| Keycloak: `Account is not fully set up` | User missing profile fields or has pending required actions | Set `firstName`, `lastName`, `email`, `requiredActions: []` |
+| Keycloak mints no tokens, `unknown_error` | An empty protocol mapper from inline `kcadm -s config...` quoting | Create mappers from a JSON file with `kcadm -f` |
+| STS: `subject token does not contain may_act claim` | `may_act` mapper missing, or its `sub` does not match the actor token's `sub` | Re-check the mapper against the agent's SA identity |
+| STS 400: unsupported token type | `subject_token_type` or `actor_token_type` set to `...access_token` | Use `urn:ietf:params:oauth:token-type:jwt` for both |
+| `mcp: no backends configured` or resets on the MCP route | Service port missing the MCP `appProtocol` | Set `appProtocol: agentgateway.dev/mcp` |
+| 401 `token uses the unknown key "..."` on the API route right after enabling the STS | The gateway cached the STS JWKS from before the controller restart | Wait about 30 seconds for the JWKS refresh and retry |
 
-## Adapting This to Production
+## Adapting this to production
 
-- **Agent:** swap the httpbin stand-in for a real agent (e.g. a kagent agent). The agent's ServiceAccount becomes `AGENT_SA` in Step 2 and the `act.sub` in Step 7.
-- **In-agent exchange:** agents perform Step 6's token exchange in code (e.g. via the agentsts-adk package) rather than by hand.
-- **API leg:** Step 7's policy shape applies unchanged on a Solo Enterprise kgateway route in front of a real API.
-- **Identity provider:** Keycloak is the stand-in — the same shape carries over to Okta, Entra ID, Auth0, etc.; only the issuer/JWKS provider config changes. Multiple identity domains means one JWT provider entry per issuer.
+- Agent: replace the httpbin stand-in with a real agent, for example a kagent agent. Its ServiceAccount becomes `AGENT_SA` in Step 2 and the `act.sub` in Step 7.
+- In-agent exchange: agents perform Step 6's token exchange in code (for example with the agentsts-adk package).
+- API leg: Step 7's policy applies unchanged on a Solo Enterprise kgateway route in front of a real API.
+- Identity provider: Keycloak is the stand-in. Okta, Entra ID, Auth0 and others work the same way; only the issuer and JWKS provider config changes. Multiple identity domains means one JWT provider entry per issuer.
 
-## Bring Your Own Components
+## Bring your own components
 
-Each piece is optional if you already run it. Everything the lab creates is confined to its own namespaces (`e2e-demo`, `keycloak`, `wp-a`) and its own Gateway `e2e-gw` — existing gateways, routes, and policies are never touched.
+Each piece is optional if you already run it. Everything the lab creates is confined to its own namespaces (`e2e-demo`, `keycloak`, `wp-a`) and its own Gateway `e2e-gw`. Existing gateways, routes, and policies are not touched.
 
 | You already have | Skip | Adjust |
 |---|---|---|
-| **Enterprise Agentgateway** | Step 1 (still `kubectl apply -f 00-client.yaml` — the client's SA is the actor identity) | The chart names the controller Service `enterprise-agentgateway` regardless of release name, so only a different **namespace** changes the STS address — update it in three places: `sts-values.yaml` (`issuer`), `03-api-authz.yaml` (provider `issuer` + JWKS `backendRef` namespace), and Step 6's exchange URL. Step 6's `helm upgrade` must target **your** release name and namespace. (Validated: custom release `my-agw` in ns `gw-system` — all four demos pass.) |
-| **Keycloak** | `00-keycloak.yaml` | Run `00-setup-realm.sh` against your instance (it only needs kcadm admin credentials; the realm it creates is additive). Then update the Keycloak host/realm in **three** files: `01-agent-authz.yaml` AND `02-mcp-authz.yaml` (provider `issuer` + JWKS `backendRef` in each policy) and `sts-values.yaml` (`subjectValidator.remoteConfig.url`). (Validated: Keycloak as `sso.idp.svc` — all four demos pass.) Reusing an existing realm instead also works — it needs a groups claim matching the CEL expression and a `may_act` mapper naming the actor SA. |
-| **agentregistry** | Nothing — the lab never touches it | Deploy your real agent through the registry, point the `/agent-x` HTTPRoute's backendRef at its Service, and use its ServiceAccount as `AGENT_SA` (Step 2) and in Step 7's `jwt.act.sub` expression. |
-| **A real agent workload** | The httpbin stand-in in `01-agent-authz.yaml` | Same as above: route to it, and swap `AGENT_SA` to its ServiceAccount everywhere. |
-| **Istio / ambient mesh** | Nothing | Coexists — the lab's namespaces aren't mesh-enrolled and don't need to be. |
+| Kubernetes cluster | `00-kind.sh` | Point `kubectl` at your cluster and run `00-platform.sh`. The lab needs no StorageClass and no LoadBalancer; the gateway is reached by Service DNS. |
+| Enterprise Agentgateway | Step 1, but still `kubectl apply -f 00-client.yaml` (the client's SA is the actor identity) | The chart names the controller Service `enterprise-agentgateway` regardless of release name, so only a different namespace changes the STS address. Update it in three places: `sts-values.yaml` (`issuer`), `03-api-authz.yaml` (provider `issuer` and JWKS `backendRef` namespace), and Step 6's exchange URL. Step 6's `helm upgrade` must target your release name and namespace. Validated with release `my-agw` in ns `gw-system`. |
+| Keycloak | `00-keycloak.yaml` | Run `00-setup-realm.sh` against your instance (needs kcadm admin credentials; the realm it creates is additive). Then update the Keycloak host and realm in three files: `01-agent-authz.yaml` and `02-mcp-authz.yaml` (provider `issuer` and JWKS `backendRef` in each policy) and `sts-values.yaml` (`subjectValidator.remoteConfig.url`). Validated with Keycloak at `sso.idp.svc`. Reusing an existing realm also works if it has a groups claim matching the CEL expression and a `may_act` mapper naming the actor SA. |
+| agentregistry | Nothing, the lab never touches it | Deploy your real agent through the registry, point the `/agent-x` HTTPRoute's backendRef at its Service, and use its ServiceAccount as `AGENT_SA` (Step 2) and in Step 7's `jwt.act.sub` expression. |
+| A real agent workload | The httpbin stand-in in `01-agent-authz.yaml` | Route to it and use its ServiceAccount as `AGENT_SA` everywhere. |
+| Istio or ambient mesh | Nothing | The lab's namespaces are not mesh-enrolled and do not need to be. |
 
-> **Note:** the STS `tokenExchange` values ride on the controller's helm release — enabling it on an existing install is Step 6's `--reuse-values` upgrade, and Cleanup's final helm command removes it again.
+The STS `tokenExchange` values ride on the controller's Helm release. Enabling it on an existing install is Step 6's `--reuse-values` upgrade, and the final Cleanup command removes it again.
 
 ## Cleanup
 
@@ -379,6 +390,6 @@ helm upgrade enterprise-agentgateway \
 kubectl delete -f 00-keycloak.yaml --ignore-not-found
 kubectl delete -f 00-client.yaml --ignore-not-found
 
-# Or, if 00-platform.sh created the KinD cluster, delete it all at once:
+# Or, if 00-kind.sh created the KinD cluster, delete it all at once:
 kind delete cluster --name agw-e2e
 ```
