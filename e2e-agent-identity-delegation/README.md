@@ -17,6 +17,7 @@ Validated end to end against controller v2026.9.0 on a local KinD cluster with K
 | `02-mcp-authz.yaml` | Two MCP servers, `EnterpriseAgentgatewayBackend` MCP targets, opposing authz policies |
 | `sts-values.yaml` | Helm values enabling the STS (`tokenExchange` block) |
 | `03-api-authz.yaml` | API route that trusts only STS-issued delegated tokens |
+| `04-mcp-api.yaml`, `mcp-api/` | MCP server whose tool calls the API through the gateway with the caller's token |
 
 ## Prerequisites
 
@@ -35,6 +36,7 @@ Bringing your own cluster: skip `00-kind.sh`. `00-platform.sh` installs into wha
 - Demo 2, agent to MCP: route MCP traffic through the gateway with `EnterpriseAgentgatewayBackend` MCP targets and authorize which MCP servers a caller may reach
 - Demo 3, delegation: enable the built-in STS and exchange the user JWT plus the agent's Kubernetes SA token for a delegated token carrying both `sub` (user) and `act` (agent)
 - Demo 4, MCP or agent to API: restrict an API route to STS-issued delegated tokens so raw user tokens cannot bypass the agent chain
+- Step 8, MCP server to API: an MCP tool calls the API through the gateway carrying the delegated token, and is refused with a raw user token
 - Validate every allow and deny path (200, 401, 403)
 
 ## Background
@@ -329,12 +331,44 @@ The raw user token is a valid Keycloak JWT for the right user, but it is signed 
 
 ---
 
+## Step 8: MCP server calls the API through the gateway
+
+`04-mcp-api.yaml` deploys `mcp-api`, an MCP server with one tool, `httpbin_get(path)`. The tool calls the API at `API_BASE` and forwards the bearer token it received. `API_BASE` defaults to the `/api` route on `e2e-gw`; set it to an existing API gateway to route through that instead. Source and Dockerfile are in `mcp-api/`.
+
+Build the image and make it available to the cluster (KinD shown; push to a registry for any other cluster and set `image:` in the manifest):
+
+```bash
+docker build -t mcp-api:local mcp-api/
+kind load docker-image mcp-api:local --name agw-e2e
+kubectl apply -f 04-mcp-api.yaml
+kubectl -n e2e-demo rollout status deploy/mcp-api --timeout=120s
+```
+
+The route `/mcp-api` accepts a Keycloak user token or an STS delegated token and forwards it to the server (`preserveToken: true`). Call the tool with each:
+
+```bash
+mcp-api/mcpcall.sh "$DELEGATED_TOKEN"
+mcp-api/mcpcall.sh "$USER_JWT"
+```
+
+Expected output:
+
+```
+HTTP 200
+HTTP 401
+```
+
+With the delegated token the chain is agent, gateway, MCP server, gateway, httpbin, and every hop sees the same `sub` and `act`. With the raw user token the MCP hop admits the call but the API route rejects it, so the MCP server cannot reach the API with an identity it was not delegated.
+
+---
+
 ## Validation checklist
 
 1. `anonymous: 401`, `alice: 200`, `bob: 403` on `/agent-x` (Demo 1)
 2. MCP `initialize` result from `mcp-a`, `403` from `mcp-b` (Demo 2)
 3. Delegated token decodes with `sub` = alice and `act.sub` = `system:serviceaccount:wp-a:default` (Demo 3)
 4. `delegated: 200`, `raw user: 401`, `anonymous: 401` on `/api` (Demo 4)
+5. `HTTP 200` then `HTTP 401` from `mcp-api/mcpcall.sh` with the delegated and raw tokens (Step 8)
 
 ## Adapting this to production
 
@@ -362,6 +396,7 @@ The STS `tokenExchange` values ride on the controller's Helm release. Enabling i
 
 ```bash
 # 1. Remove demo routes, policies, and workloads
+kubectl delete -f 04-mcp-api.yaml --ignore-not-found
 kubectl delete -f 03-api-authz.yaml --ignore-not-found
 kubectl delete -f 02-mcp-authz.yaml --ignore-not-found
 kubectl delete -f 01-agent-authz.yaml --ignore-not-found
