@@ -162,11 +162,25 @@ kubectl apply -f 02-workloads.yaml
 kubectl -n e2e-demo rollout status deploy/agent-x deploy/mcp-a deploy/mcp-b deploy/api-backend --timeout=180s
 ```
 
-`02-mcp-api.yaml` deploys `mcp-api`, an MCP server with one tool, `httpbin_get(path)`. The tool calls the API at `API_BASE` and forwards the bearer token it received. `API_BASE` defaults to the `/api` route on `e2e-gw` (created in Step 10); set it to an existing API gateway to route through that instead. Source and Dockerfile are in `mcp-api/`. Build the image and make it available to the cluster (KinD shown; push to a registry for any other cluster and set `image:` in the manifest):
+`02-mcp-api.yaml` deploys `mcp-api`, an MCP server with one tool, `httpbin_get(path)`. The tool calls the API at `API_BASE` and forwards the bearer token it received. `API_BASE` defaults to the `/api` route on `e2e-gw` (created in Step 10); set it to an existing API gateway to route through that instead. Source and Dockerfile are in `mcp-api/`.
+
+On KinD, build the image and load it into the cluster:
 
 ```bash
 docker build -t mcp-api:local mcp-api/
 kind load docker-image mcp-api:local --name agw-e2e
+```
+
+On any other cluster, build for the node architecture, push to a registry the cluster can pull from, and set `image:` in `02-mcp-api.yaml` to that reference. Add `imagePullSecrets` the way your other workloads do if the registry is private.
+
+```bash
+docker build --platform linux/amd64 -t <registry>/<repo>/mcp-api:v1 mcp-api/
+docker push <registry>/<repo>/mcp-api:v1
+```
+
+Then deploy:
+
+```bash
 kubectl apply -f 02-mcp-api.yaml
 kubectl -n e2e-demo rollout status deploy/mcp-api --timeout=120s
 ```
@@ -558,7 +572,7 @@ arctl get runtimes
 
 Expected output ends with `KAGENT-READY`, then `RUNTIME-READY`, and the runtime list gains `kagent` (type Kagent).
 
-The kagent controller marks a bring-your-own agent Ready only once `/.well-known/agent-card.json` answers on port 8080, so `agent-x-kagent` uses `traefik/whoami`, which answers every path and echoes the request it received. Each MCP server entry names its image under `origin.oci` and its listen port and path under `transport`.
+The kagent controller marks a bring-your-own agent Ready only once `/.well-known/agent-card.json` answers on port 8080, so `agent-x-kagent` uses `traefik/whoami`, which answers every path and echoes the request it received. Each MCP server entry names its image under `origin.oci` and its listen port and path under `transport`. `mcp-api-kagent` uses the same image reference as `02-mcp-api.yaml`; on a non-KinD cluster set `origin.identifier` to your pushed image.
 
 ```bash
 arctl apply -f 10-catalog-kagent.yaml
