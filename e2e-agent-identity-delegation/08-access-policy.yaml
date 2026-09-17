@@ -1,0 +1,17 @@
+# Readers see agent-x and mcp-a only. Principal is the Keycloak group name from the Groups claim.
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: readers-see-agent-x-stack
+spec:
+  description: "Readers may discover agent-x and the MCP server it is authorized to use"
+  principals:
+    - kind: Role
+      name: "readers"
+  rules:
+    - actions: ["registry:read"]
+      resources:
+        - kind: agent
+          name: "agent-x"
+        - kind: server
+          name: "mcp-a"

@@ -1,0 +1,47 @@
+# Routes on e2e-gw for the workloads the registry deployed into namespace kagent.
+# Same JWT and CEL policies as Steps 4, 5 and 8; only the backends move.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata: { name: e2e-gw-to-kagent, namespace: kagent }
+spec:
+  from:
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: e2e-demo }
+  to:
+    - { group: "", kind: Service }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: agent-x, namespace: e2e-demo }
+spec:
+  parentRefs: [ { name: e2e-gw } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /agent-x } } ]
+      filters: [ { type: URLRewrite, urlRewrite: { path: { type: ReplacePrefixMatch, replacePrefixMatch: / } } } ]
+      backendRefs: [ { name: agent-x, namespace: kagent, port: 8080 } ]
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata: { name: mcp-a, namespace: e2e-demo }
+spec:
+  mcp:
+    targets:
+      - name: mcp-a
+        static: { host: mcp-a.kagent.svc.cluster.local, port: 8000, protocol: SSE }
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata: { name: mcp-b, namespace: e2e-demo }
+spec:
+  mcp:
+    targets:
+      - name: mcp-b
+        static: { host: mcp-b.kagent.svc.cluster.local, port: 8000, protocol: SSE }
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata: { name: mcp-api, namespace: e2e-demo }
+spec:
+  mcp:
+    targets:
+      - name: mcp-api
+        static: { host: mcp-api.kagent.svc.cluster.local, port: 8000, protocol: StreamableHTTP, path: /mcp }

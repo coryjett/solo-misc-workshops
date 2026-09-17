@@ -1,0 +1,24 @@
+image:
+  tag: v2026.8.0
+service:
+  type: ClusterIP
+oidc:
+  issuer: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agent-demo"
+  clientId: "ar-backend"
+  publicClientId: "ar-cli-password"
+  clientSecret: "ar-backend-secret"
+  roleClaim: "Groups"
+  superuserRole: "admins"
+  insecureSkipVerify: false
+database:
+  postgres:
+    type: bundled
+clickhouse:
+  enabled: true
+telemetry:
+  enabled: true
+extraEnvVars:
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://agentregistry-enterprise-telemetry-collector:4317"
+  - name: OTEL_SERVICE_NAME
+    value: "agentregistry-enterprise"

@@ -1,5 +1,7 @@
 # Configure End-to-End Agent Identity, Authorization, and Delegation
 
+Part 1 (Steps 1 to 8) secures every hop with Enterprise Agentgateway. Part 2 (Steps 9 to 14) adds Agentregistry Enterprise and Solo Enterprise for kagent so the agent and MCP servers are cataloged, deployed into the cluster from the registry, and governed by access policy.
+
 This lab secures every hop of an agentic call chain (user, agent, MCP server, API) with Enterprise Agentgateway. Each hop gets JWT authentication and CEL-based authorization, and RFC 8693 token exchange carries the user's identity through the whole chain with the agent's identity attached.
 
 Validated end to end against controller v2026.9.0 on a local KinD cluster with Keycloak 26, including a clean-room run from an empty cluster using only the files in this folder. Every `Expected output` block is an observed result.
@@ -413,4 +415,163 @@ kubectl delete -f 00-client.yaml --ignore-not-found
 
 # Or, if 00-kind.sh created the KinD cluster, delete it all at once:
 kind delete cluster --name agw-e2e
+```
+
+---
+
+# Part 2: Agentregistry Enterprise and Solo Enterprise for kagent
+
+Part 1 deployed the agent and MCP servers with `kubectl`. Part 2 makes the registry the source of truth: the agent and MCP servers are cataloged in Agentregistry Enterprise, deployed into the cluster from the catalog through the kagent runtime, and visibility is governed by registry access policies. The gateway policies from Part 1 then apply to the registry-deployed workloads.
+
+Everything runs against the same cluster and Keycloak realm. Access is CLI-first: the registry API is port-forwarded and tokens are minted in-cluster. Browser login to the registry or kagent UI needs a Keycloak issuer the browser can reach, which a cluster with a LoadBalancer provides and a local KinD cluster does not.
+
+## Files for Part 2
+
+| File | Purpose |
+|---|---|
+| `05-setup-realm-registry.sh` | Adds the registry and kagent clients, groups, and users to the `agent-demo` realm |
+| `05-kagent-install.sh` | Solo Enterprise management chart, kagent CRDs, kagent-enterprise |
+| `06-registry-install.sh`, `06-registry-values.yaml` | Agentregistry Enterprise, the kagent runtime registration |
+| `06-registry-env.sh` | Port-forward, `arctl` environment, token helper |
+| `07-catalog.yaml` | Agent and MCP server catalog entries |
+| `07-deploy.yaml` | Registry deployments to the kagent runtime |
+| `08-access-policy.yaml` | Catalog visibility for readers |
+| `09-gateway-registry.yaml` | Gateway routes and backends for the registry-deployed workloads |
+
+## Step 9: Install arctl and extend the realm
+
+```bash
+curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.8.0 sh
+export PATH=$HOME/.arctl/bin:$PATH
+arctl version --json
+```
+
+Add the registry and kagent clients to the realm. `admin-user`, `reader`, and `writer` (password equals username) join groups `admins`, `readers`, and `writers`. The `agentregistry` client has a service account in group `agentregistry`; kagent maps that group to `global.Writer`, which is how the registry is allowed to create workloads.
+
+```bash
+kubectl exec -i -n keycloak deploy/keycloak -- bash -s < 05-setup-realm-registry.sh
+```
+
+Expected output ends with:
+
+```
+REGISTRY-REALM-READY
+```
+
+## Step 10: Install Solo Enterprise for kagent
+
+```bash
+export LICENSE_KEY=<solo-enterprise-license-key>
+./05-kagent-install.sh
+```
+
+The script installs the management chart with the kagent and agentregistry products enabled, the kagent CRDs, the controller signing key, and kagent-enterprise with OIDC pointed at the realm. The `agentregistry` group is mapped to `global.Writer`. No LLM key is configured; the agent deployed in Step 12 is a bring-your-own image.
+
+Expected output ends with:
+
+```
+deployment "kagent-controller" successfully rolled out
+KAGENT-READY
+```
+
+Docs: [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/install/install-kagent/), [Keycloak identity provider](https://docs.solo.io/kagent/latest/security/idp/keycloak/)
+
+## Step 11: Install Agentregistry Enterprise and register the kagent runtime
+
+```bash
+./06-registry-install.sh
+```
+
+The script installs the registry (ClusterIP, bundled PostgreSQL and ClickHouse, OIDC against the realm with `Groups` as the role claim and `admins` as the superuser group), port-forwards the API, logs in as `admin-user`, stores the `agentregistry` client secret as a registry Secret, and registers the kagent runtime pointing at `kagent-controller.kagent:8083`.
+
+Expected output ends with:
+
+```
+NAME              TYPE
+kagent            Kagent
+virtual-default   Virtual
+REGISTRY-READY
+```
+
+In a new shell, load the environment before running `arctl`:
+
+```bash
+. ./06-registry-env.sh
+```
+
+Docs: [Agentregistry Enterprise setup](https://docs.solo.io/agentregistry/latest/setup/), [kagent runtime](https://docs.solo.io/agentregistry/latest/setup/runtime/kagent/)
+
+## Step 12: Catalog the agent and MCP servers, deploy them from the registry
+
+The catalog holds `agent-x` (bring-your-own image, A2A on port 8080), `mcp-a` and `mcp-b` (website fetcher, SSE on port 8000), and `mcp-api` (the Step 8 server, streamable HTTP on port 8000). On KinD, load the local image first:
+
+```bash
+kind load docker-image mcp-api:local --name agw-e2e
+arctl apply -f 07-catalog.yaml
+arctl get agents
+arctl get mcps
+```
+
+Deploy all four to the cluster through the kagent runtime:
+
+```bash
+arctl apply -f 07-deploy.yaml
+arctl get deployments
+kubectl get pods -n kagent
+```
+
+Expected: one pod each for `agent-x`, `mcp-a`, `mcp-b`, and `mcp-api` in namespace `kagent`, created by the kagent controller from the registry deployments, and `kubectl get agents,mcpservers -n kagent` lists the matching kagent resources.
+
+## Step 13: Point the gateway at the registry-deployed workloads
+
+Remove the Part 1 workloads and re-point the routes. The JWT and CEL policies are unchanged.
+
+```bash
+kubectl -n e2e-demo delete deploy agent-x mcp-a mcp-b mcp-api --ignore-not-found
+kubectl -n e2e-demo delete svc agent-x mcp-a mcp-b mcp-api --ignore-not-found
+kubectl apply -f 09-gateway-registry.yaml
+```
+
+Re-run the Step 4, 5, and 8 requests. Expected results are identical: alice 200 and bob 403 on `/agent-x`, mcp-a 200 and mcp-b 403, `mcp-api/mcpcall.sh` returns HTTP 200 with the delegated token and HTTP 401 with the raw user token. The workloads answering now came from the registry.
+
+## Step 14: Govern catalog visibility
+
+Before any policy, `reader` sees nothing:
+
+```bash
+ARCTL_API_TOKEN=$(ar_token reader) arctl get mcps
+ARCTL_API_TOKEN=$(ar_token reader) arctl get agents
+```
+
+```
+No mcps found.
+No agents found.
+```
+
+Grant readers `agent-x` and `mcp-a` only:
+
+```bash
+arctl apply -f 08-access-policy.yaml
+ARCTL_API_TOKEN=$(ar_token reader) arctl get mcps
+ARCTL_API_TOKEN=$(ar_token reader) arctl get agents
+```
+
+Expected: `mcp-a` and `agent-x` listed, `mcp-b` and `mcp-api` absent. The principal is the Keycloak group name from the `Groups` claim.
+
+## Validation checklist, Part 2
+
+1. `arctl get runtimes` lists `kagent` and `virtual-default`
+2. Four pods in namespace `kagent`, one per registry deployment
+3. Part 1 results repeat against the registry-deployed workloads (Step 13)
+4. `reader` sees nothing, then exactly `agent-x` and `mcp-a` (Step 14)
+
+## Cleanup, Part 2
+
+```bash
+arctl delete accesspolicy readers-see-agent-x-stack
+arctl delete deployment agent-x mcp-a mcp-b mcp-api
+arctl delete runtime kagent
+helm uninstall agentregistry-enterprise -n agentregistry-system
+helm uninstall kagent kagent-crds kagent-mgmt -n kagent
+kubectl delete ns agentregistry-system kagent --ignore-not-found
 ```

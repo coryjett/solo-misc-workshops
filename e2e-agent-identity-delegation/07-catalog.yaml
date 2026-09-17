@@ -1,0 +1,64 @@
+# Catalog entries. The agent and MCP servers are deployed to the cluster from these by 07-deploy.yaml.
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: agent-x
+  tag: "1.0.0"
+spec:
+  description: "Demo agent. Users in agent-x-users may call it. Bring-your-own image, serves on port 8080."
+  source:
+    image: mccutchen/go-httpbin:v2.15.0
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: mcp-a
+  tag: latest
+spec:
+  title: mcp-a
+  description: MCP server agent-x is authorized to use.
+  source:
+    package:
+      origin:
+        type: oci
+        identifier: ghcr.io/peterj/mcp-website-fetcher:main
+      transport:
+        type: http
+        port: 8000
+        path: /sse
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: mcp-b
+  tag: latest
+spec:
+  title: mcp-b
+  description: MCP server agent-x is not authorized to use.
+  source:
+    package:
+      origin:
+        type: oci
+        identifier: ghcr.io/peterj/mcp-website-fetcher:main
+      transport:
+        type: http
+        port: 8000
+        path: /sse
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: mcp-api
+  tag: latest
+spec:
+  title: mcp-api
+  description: MCP server whose tool calls the httpbin API through the gateway with the caller's token.
+  source:
+    package:
+      origin:
+        type: oci
+        identifier: mcp-api:local
+      transport:
+        type: http
+        port: 8000
+        path: /mcp
