@@ -1,0 +1,10 @@
+# Sends e2e-gw traces to the Solo UI telemetry collector installed by 01-ui.sh.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: tracing, namespace: e2e-demo }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: e2e-gw } ]
+  frontend:
+    tracing:
+      backendRef: { name: solo-enterprise-telemetry-collector, namespace: kagent, kind: Service, port: 4317 }
+      randomSampling: "true"

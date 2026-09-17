@@ -4,7 +4,7 @@
 # Already running Agentregistry Enterprise? Skip this script and run 06-register-kagent-runtime.sh.
 set -euo pipefail
 : "${LICENSE_KEY:?set LICENSE_KEY to your Solo enterprise license key}"
-ARE_VERSION="${ARE_VERSION:-2026.8.0}"
+ARE_VERSION="${ARE_VERSION:-2026.9.0}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 helm upgrade --install agentregistry-enterprise \
@@ -14,6 +14,8 @@ helm upgrade --install agentregistry-enterprise \
   --set licensing.createSecret=true --set-string licensing.licenseKey="$LICENSE_KEY" \
   --wait --timeout 8m
 kubectl get pods -n agentregistry-system
+# The server restarted; drop a stale port-forward so 06-registry-env.sh opens a fresh one.
+pkill -f "port-forward -n agentregistry-system svc/agentregistry-enterprise-server 12121" 2>/dev/null || true
 
 "$DIR/06-register-kagent-runtime.sh"
 echo REGISTRY-READY
