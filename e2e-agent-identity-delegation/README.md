@@ -336,20 +336,6 @@ The raw user token is a valid Keycloak JWT for the right user, but it is signed 
 3. Delegated token decodes with `sub` = alice and `act.sub` = `system:serviceaccount:wp-a:default` (Demo 3)
 4. `delegated: 200`, `raw user: 401`, `anonymous: 401` on `/api` (Demo 4)
 
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Realm script exits 0 but creates nothing | `kubectl exec` without `-i`, so stdin never reached the pod | Use `kubectl exec -i` |
-| Realm missing after a Keycloak restart | `start-dev` keeps the realm in memory | Re-run the Step 2 realm command |
-| Policy rejected: `jwksPath is required` | `jwks.remote.backendRef` set without `jwksPath` | Add the explicit JWKS path |
-| Keycloak: `Account is not fully set up` | User missing profile fields or has pending required actions | Set `firstName`, `lastName`, `email`, `requiredActions: []` |
-| Keycloak mints no tokens, `unknown_error` | An empty protocol mapper from inline `kcadm -s config...` quoting | Create mappers from a JSON file with `kcadm -f` |
-| STS: `subject token does not contain may_act claim` | `may_act` mapper missing, or its `sub` does not match the actor token's `sub` | Re-check the mapper against the agent's SA identity |
-| STS 400: unsupported token type | `subject_token_type` or `actor_token_type` set to `...access_token` | Use `urn:ietf:params:oauth:token-type:jwt` for both |
-| `mcp: no backends configured` or resets on the MCP route | Service port missing the MCP `appProtocol` | Set `appProtocol: agentgateway.dev/mcp` |
-| 401 `token uses the unknown key "..."` on the API route right after enabling the STS | The gateway cached the STS JWKS from before the controller restart | Wait about 30 seconds for the JWKS refresh and retry |
-
 ## Adapting this to production
 
 - Agent: replace the httpbin stand-in with a real agent, for example a kagent agent. Its ServiceAccount becomes `AGENT_SA` in Step 2 and the `act.sub` in Step 7.
