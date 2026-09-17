@@ -69,4 +69,4 @@ spec:
       action: Require
       policy:
         matchExpressions:
-          - "('groups' in jwt && 'agent-x-users' in jwt.Groups) || ('act' in jwt && jwt.act.sub == 'system:serviceaccount:wp-a:default')"
+          - "('Groups' in jwt && 'agent-x-users' in jwt.Groups) || ('act' in jwt && jwt.act.sub == 'system:serviceaccount:wp-a:default')"
