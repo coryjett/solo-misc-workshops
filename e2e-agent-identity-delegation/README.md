@@ -12,7 +12,7 @@ Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Age
 | `00-platform.sh` | Gateway API CRDs, Enterprise Agentgateway charts, test client, into the current kubeconfig context |
 | `00-client.yaml` | `sleep` test client in ns `wp-a`. Its ServiceAccount is the agent's workload identity |
 | `00-keycloak.yaml` | Keycloak 26.1.3 in ns `keycloak` with the `agentregistry` realm imported at boot. Issuer pinned to the in-cluster Service name so browser and pod tokens match |
-| `realm/` | The realm JSON and the workshop-only additions for an existing Keycloak |
+| `realm/` | The realm JSON, the workshop-only additions for an existing Keycloak, and `merge-additions.sh` to fold them into an existing realm ConfigMap |
 | `01-ui.sh` | Solo UI (management chart, agentgateway product) |
 | `02-workloads.yaml` | The agent stand-in, two MCP servers, and the API. Plain Deployments and Services |
 | `02-mcp-api.yaml`, `mcp-api/` | MCP server whose tool calls the API and forwards the caller's token |
@@ -109,6 +109,27 @@ Already running Keycloak with the `agentregistry` realm? Skip the apply and impo
 ```bash
 kubectl exec -i -n keycloak deploy/keycloak -- bash -c 'cat > /tmp/add.json && /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin && /opt/keycloak/bin/kcadm.sh create partialImport -r agentregistry -s ifResourceExists=SKIP -o -f /tmp/add.json' < realm/workshop-additions.json
 ```
+
+**A docs-quickstart Keycloak will lose this on restart.** The Agentregistry docs deploy Keycloak with
+`args: ["start-dev", "--import-realm"]`, an embedded H2 store, no database and no volume. It re-imports
+only its realm ConfigMap at boot, so anything added with `partialImport` is gone after a restart,
+eviction or node drain, and every token mint fails afterwards with `invalid_grant`. To make the
+additions durable, merge them into that ConfigMap instead:
+
+```bash
+./realm/merge-additions.sh <realm-configmap-name> <namespace> > /tmp/realm-cm.yaml
+kubectl apply -f /tmp/realm-cm.yaml
+kubectl rollout restart deploy/keycloak -n <namespace>
+```
+
+The script is idempotent and only adds what is missing. Check first whether yours is ephemeral:
+
+```bash
+kubectl get deploy keycloak -n keycloak -o jsonpath='{.spec.template.spec.containers[0].args}{"\n"}'
+kubectl get pvc -n keycloak
+```
+
+`start-dev` with no PVC and no `KC_DB` means in-memory.
 
 `kcadm.sh` ships in the Keycloak image, and `partialImport` with `ifResourceExists=SKIP` adds only what is missing. Nothing already in your realm is changed. Adjust three things in that command for your deployment:
 
@@ -274,6 +295,17 @@ Docs: [Virtual runtime](https://docs.solo.io/agentregistry/latest/setup/runtime/
 
 ## Step 8: Govern catalog visibility
 
+If `ar_token` fails, `ARCTL_API_TOKEN` ends up empty and `arctl` silently falls back to your stored
+admin session, so the commands below return the full catalog and look like they worked. Check the
+token is real first:
+
+```bash
+ar_token reader | wc -c        # a few thousand, not 0
+```
+
+A plain `401 Unauthorized` from any `arctl` command usually means that stored session expired rather
+than a misconfiguration. `arctl user login` fixes it.
+
 Before any policy, `reader` sees nothing:
 
 ```bash
@@ -307,14 +339,19 @@ Docs: [Access control](https://docs.solo.io/agentregistry/latest/security/access
 Gateway requests are sent from the in-cluster `sleep` pod, so no LoadBalancer is needed. Define a token helper and mint both users:
 
 ```bash
+: "${KEYCLOAK_URL:=http://keycloak.keycloak.svc.cluster.local:8080}"
+
 TOK() { kubectl exec -n wp-a deploy/sleep -- curl -s -X POST \
-  http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry/protocol/openid-connect/token \
+  "${KEYCLOAK_URL}/realms/agentregistry/protocol/openid-connect/token" \
   -d grant_type=password -d client_id=agw-client -d client_secret=agw-client-secret \
   -d username=$1 -d password=pw | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])"; }
 
 export USER_JWT=$(TOK alice)
 export BOB_JWT=$(TOK bob)
 ```
+
+Bringing your own Keycloak: set `KEYCLOAK_URL` to an address the `sleep` pod can reach before running
+this. If it is not reachable in-cluster, drop the `kubectl exec` and run the `curl` from your shell.
 
 Decode alice's payload:
 
@@ -336,6 +373,35 @@ Expected output:
 ```
 
 bob's token (`$BOB_JWT`) has `may_act` and no `Groups`, because bob is in no group. That missing group is what Step 10 checks. Tokens last one hour; re-run the two exports if a request later returns 401 unexpectedly.
+
+### Point the policies at your issuer
+
+The gateway compares the token's `iss` claim to the `issuer` string in each policy, character for
+character. A mismatch is a 401 for every caller, including ones who should pass, so do this before
+Step 10. Read what your Keycloak actually stamps:
+
+```bash
+ISS=$(python3 -c "
+import os,json,base64
+t=os.environ['USER_JWT']; p=t.split('.')[1]; p+='='*(-len(p)%4)
+print(json.loads(base64.urlsafe_b64decode(p))['iss'])")
+echo "$ISS"
+```
+
+If that is not `http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry`, set it in the
+three policy files:
+
+```bash
+sed -i '' "s|issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry|issuer: $ISS|g" \
+  05-agent-authz.yaml 05-mcp-authz.yaml 05-mcp-api-authz.yaml
+```
+
+Keycloak stamps whatever hostname it is configured with, not the address you called, so re-minting
+against a different URL does not change `iss`. The policies have to match the token.
+
+Leave `jwks.remote.backendRef` alone unless your Keycloak Service is named something other than
+`keycloak` in namespace `keycloak`. That field only says how the gateway fetches the signing keys and
+is independent of the issuer string.
 
 ---
 
@@ -390,6 +456,25 @@ bob: 403
 401 means no or invalid token (authentication). 403 means a valid token with insufficient claims (authorization).
 
 ---
+
+### Using a gateway you already have
+
+Skip `05-gateway.yaml` entirely and attach the routes to your existing agentgateway Gateway. It needs
+`allowedRoutes.namespaces.from: All` (or a selector that includes `e2e-demo`) for a cross-namespace
+attachment.
+
+```bash
+sed -i '' 's/parentRefs: \[ { name: e2e-gw } \]/parentRefs: [ { name: YOUR-GATEWAY, namespace: YOUR-NAMESPACE } ]/' \
+  05-agent-authz.yaml 05-mcp-authz.yaml 05-api-authz.yaml 05-mcp-api-authz.yaml
+
+export GW=YOUR-GATEWAY.YOUR-NAMESPACE.svc.cluster.local:YOUR-PORT
+```
+
+Three things to know. The authorization policies target our HTTPRoutes by name, so they only affect
+`/agent-x`, `/mcp-a`, `/mcp-b`, `/api` and `/mcp-api`, and other traffic on that gateway is untouched.
+The tracing policy in `05-gateway.yaml` is different: it targets the Gateway itself and would turn on
+sampling for everything on that proxy, so leave it out unless you want that. And Step 12 still
+upgrades the agentgateway release, which restarts the shared controller.
 
 ## Step 11: Enforce agent to MCP authorization
 
@@ -449,7 +534,7 @@ Exchange from inside the agent's pod: the mounted SA token is the `actor_token`,
 
 ```bash
 export DELEGATED_TOKEN=$(kubectl exec -n wp-a deploy/sleep -- sh -c "SA=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token); \
-  curl -s -X POST http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/token \
+  curl -s -X POST http://enterprise-agentgateway.${AGW_NAMESPACE:-agentgateway-system}.svc.cluster.local:7777/token \
   -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
   -d subject_token=$USER_JWT -d subject_token_type=urn:ietf:params:oauth:token-type:jwt \
   -d actor_token=\$SA -d actor_token_type=urn:ietf:params:oauth:token-type:jwt" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")

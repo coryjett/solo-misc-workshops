@@ -12,4 +12,5 @@ else
   ar_token() { curl -s -X POST "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" -d grant_type=password -d client_id=ar-cli-password -d username=$1 -d password="${2:-$1}" -d 'scope=openid profile' | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])"; }
 fi
 export ARCTL_API_TOKEN=$(ar_token "${AR_ADMIN_USER:-admin-user}" "${AR_ADMIN_PASSWORD:-password}")
+echo "keycloak: ${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local:8080 (in-cluster, via the sleep pod)}"
 echo "arctl points at $ARCTL_API_BASE_URL as ${AR_ADMIN_USER:-admin-user}. Use ar_token reader reader or ar_token writer writer for other users."
