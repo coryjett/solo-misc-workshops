@@ -4,6 +4,16 @@ kind: Gateway
 metadata: { name: e2e-gw, namespace: e2e-demo }
 spec:
   gatewayClassName: enterprise-agentgateway
+  # WARNING: with no annotations the controller asks the platform for its default
+  # LoadBalancer, which on a cloud provider means a PUBLIC address. On kind it
+  # stays pending and nothing notices, which is why this is easy to miss. Every
+  # request in this lab comes from the in-cluster sleep pod, so the load balancer
+  # is never used. Uncomment for GKE, or use your provider's internal equivalent.
+  # infrastructure:
+  #   annotations:
+  #     networking.gke.io/load-balancer-type: Internal
+  #     networking.gke.io/internal-load-balancer-allow-global-access: "true"
+  #     cloud.google.com/l4-rbs: enabled
   listeners:
     - name: http
       port: 8080
