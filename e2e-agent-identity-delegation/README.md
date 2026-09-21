@@ -4,6 +4,10 @@ Deploy an agent and its MCP servers, register and govern them in Agentregistry E
 
 Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Agentregistry Enterprise 2026.9.0, and Keycloak 26. Every `Expected output` block is an observed result.
 
+Running against your own cluster, Keycloak, gateway or Solo UI rather than a fresh
+KinD one? Read [bring-your-own.md](bring-your-own.md) first. For what changes in
+production and what this lab does not cover, see [production.md](production.md).
+
 ## Contents
 
 - [Files in this folder](#files-in-this-folder)
@@ -33,9 +37,6 @@ Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Age
   - [Read the results](#read-the-results)
 - [Step 16 (optional): Deploy from the registry with Solo Enterprise for kagent](#step-16-optional-deploy-from-the-registry-with-solo-enterprise-for-kagent)
 - [Validation checklist](#validation-checklist)
-- [Adapting this to production](#adapting-this-to-production)
-- [Follow-ups](#follow-ups)
-- [Bring your own components](#bring-your-own-components)
 - [Cleanup](#cleanup)
 
 ## Files in this folder
@@ -907,35 +908,6 @@ Docs: [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/in
 8. `HTTP 200` then `HTTP 401` from `mcp-api/mcpcall.sh` with the delegated and raw tokens, on both gateways (Step 14)
 9. Traces for those requests appear in the Solo UI's Tracing view (Step 15)
 10. Optional: the Step 10, 11, and 14 results repeat against the kagent-deployed workloads (Step 16)
-
-## Adapting this to production
-
-- Agent: replace the httpbin stand-in with a real agent. Its ServiceAccount becomes the `may_act` subject in the realm and the `act.sub` in Step 13.
-- In-agent exchange: agents perform Step 12's token exchange in code (for example with the agentsts-adk package).
-- API leg: Step 13's policy applies unchanged on a Solo Enterprise kgateway route in front of a real API.
-- Identity provider: Keycloak is the stand-in. Okta, Entra ID, Auth0 and others work the same way; only the issuer and JWKS provider config changes. Multiple identity domains means one JWT provider entry per issuer.
-- Users and agents from different providers: the subject token and the actor token are validated independently, so a customer in one IdP and an employee or agent in another is a supported shape rather than a special case. `tokenExchange` takes `subjectValidators` and `actorValidators` as lists, so add an entry per issuer on whichever side it applies to, and list every issuer whose tokens a route must accept as a JWT provider on that route. The one thing that does not move is `may_act`: it has to be stamped by whichever provider issued the user's token, since that is the token the STS reads it from.
-- Registry gateway: attach the Step 10 JWT policy to the `agentregistry-delegate` parent route to require a token on every `/registry` path.
-
-## Follow-ups
-
-- Workload identity without a user: the agent hop already uses the pod's Kubernetes ServiceAccount token as the actor token (Step 12). A further step is to let the MCP and API routes accept a projected ServiceAccount token directly, with a JWT provider pointed at the cluster issuer, for workload-to-workload calls that have no user in the chain. The registry to kagent hop stays on OIDC client credentials; the kagent runtime requires it.
-- Calling an API in a different trust domain: every exchange in this lab happens at one authorization server, so the STS validates the user token and mints the delegated token itself. When the downstream API trusts a *different* authorization server from the one that authenticated the user, that single-leg exchange does not apply. Enterprise Agentgateway covers it with the `crossAppAccess` backend authentication method, which implements the Identity Assertion JWT Authorization Grant (ID-JAG, also called Cross App Access): the gateway performs an RFC 8693 exchange at the user's IdP to obtain an ID-JAG assertion, then presents it to the resource's authorization server as an RFC 7523 JWT-bearer grant, and attaches the resulting access token upstream. It needs an OIDC ID token inbound rather than an arbitrary access token, and a client registration at each of the two token endpoints. This is the shape to reach for when the caller and the resource live in separate identity domains, for example a customer in one IdP and an employee in another. Docs: [Cross App Access (ID-JAG)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backend-authn/cross-app-access/).
-
-## Bring your own components
-
-Each piece is optional if you already run it. Everything the lab creates is confined to its own namespaces (`e2e-demo`, `keycloak`, `wp-a`, `kagent`, `agentregistry-system`) and its own Gateways `e2e-gw` and `agentregistry-gateway`. Existing gateways, routes, and policies are not touched.
-
-| You already have | Skip | Adjust |
-|---|---|---|
-| Kubernetes cluster | `00-kind.sh` | Point `kubectl` at your cluster and run `00-platform.sh`. The lab requires no StorageClass and no LoadBalancer, since the gateways are reached by Service DNS. An internal LoadBalancer is still a fine addition if you want to reach them from outside the cluster. |
-| Enterprise Agentgateway | Step 1, but still `kubectl apply -f 00-client.yaml` (the client's SA is the actor identity) | The chart names the controller Service `enterprise-agentgateway` regardless of release name, so only a different namespace changes the STS address. Update it in `05-sts-values.yaml` (`issuer`), `05-api-authz.yaml` and `05-mcp-api-authz.yaml` (provider `issuer` and JWKS `backendRef` namespace), and Step 12's exchange URL, and export it as `AGW_NAMESPACE` for `01-ui.sh` and `10-kagent-install.sh`. Step 12's `helm upgrade` restarts your controller and must target your release name and namespace; the release must be a version with `tokenExchange` (validated on v2026.9.0). If your GatewayClass is not named `enterprise-agentgateway`, change it in `05-gateway.yaml` and `04-registry-gateway.yaml`. |
-| Keycloak | `00-keycloak.yaml` | Import `realm/workshop-additions.json` into your `agentregistry` realm (Step 2 shows the partial import). Then set the issuer in `01-ui.sh`, `03-registry-values.yaml`, the `05-*` policies, and `05-sts-values.yaml` to your Keycloak URL. A realm built from the Agentregistry Enterprise docs already carries the `Groups` claim these policies use. |
-| Agentregistry Enterprise | `03-registry-install.sh` | Export `ARCTL_API_BASE_URL` and `KEYCLOAK_URL` before sourcing `03-registry-env.sh`. Steps 6 to 8 then run against your registry. For Step 7 the label on `04-registry-gateway.yaml` must match a Virtual runtime in your registry. |
-| A real agent workload | The httpbin stand-in in `02-workloads.yaml` | Route to it and use its ServiceAccount as the `may_act` subject and in Step 13's `jwt.act.sub`. |
-| Solo UI (management chart) | `01-ui.sh` | Export `MGMT_RELEASE` and `MGMT_NAMESPACE` for Step 16, set the tracing `backendRef.namespace` in `05-gateway.yaml`, and enable `products.agentgateway` on the release if it is not already. Validated only with the lab's own release in namespace `kagent`; upgrading a release in another namespace with the kagent product has not been run here. |
-| Solo Enterprise for kagent | `10-kagent-install.sh` | Run `10-register-kagent-runtime.sh` with `KAGENT_URL` pointing at your controller and `AGENTREGISTRY_CLIENT_SECRET` set to your client secret. |
-| Istio or ambient mesh | Nothing | The lab's namespaces are not mesh-enrolled and do not need to be. |
 
 ## Cleanup
 
