@@ -884,7 +884,63 @@ Re-run the Step 10, 11, and 14 requests. Results are identical: alice 200 and bo
 
 Solo UI: the kagent product pages list `agent-x-kagent` (type BYO) and the three MCP servers in namespace `kagent`, all Ready. Registry UI: Runtimes shows `kagent`, Instances shows the four kagent deployments.
 
-Docs: [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/install/install-kagent/), [kagent runtime](https://docs.solo.io/agentregistry/latest/setup/runtime/kagent/)
+### Let the registry write the authorization too
+
+Everything up to Step 15 authors gateway policy by hand, because the workloads
+were attached: already running, registered in the catalog, published through a
+proxy. The registry knows what they are, but it did not put them there, so it
+does not manage what may call them.
+
+Deploying through a runtime changes that. With the workloads created by kagent,
+an `AccessPolicy` applied to the registry is fanned out as a Kubernetes
+`AccessPolicy` CRD in `kagent` and enforced by agentgateway at the waypoint.
+The unit of control is the **tool**, which is finer than anything Step 11 can
+express: there the policy admits or refuses a whole MCP server.
+
+```yaml
+arctl apply -f - <<EOF
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: agent-x-mcp-a-tools
+spec:
+  description: Allow agent-x-kagent to invoke mcp-a-kagent, and nothing else.
+  principals:
+    - kind: Deployment
+      name: agent-x-kagent
+  rules:
+    - actions:
+        - runtime:invoke
+      resources:
+        - kind: server
+          name: mcp-a-kagent
+EOF
+```
+
+The principal is the registry `Deployment` from `10-deploy-kagent.yaml`, not a
+Kubernetes Deployment. `name: "*"` covers every server. To narrow further than
+a whole server, add `subresources` listing individual tools as `tool/<name>`,
+using the names the server reports from an MCP `tools/list` call. Fan-out is asynchronous and names the
+generated object `ar-<policyName>-r<ruleIndex>-res<resourceIndex>`:
+
+```bash
+kubectl -n kagent get accesspolicy ar-agent-x-mcp-a-tools-r0-res0 -o yaml
+```
+
+Two limits decide whether this is available to you at all. It applies to local
+`MCPServer` resources, the kind a runtime deploys; `RemoteMCPServer` targets
+are not supported, which is what the Step 6 catalog registers. And it governs
+the agent to MCP hop only. User to agent (Step 10), the token exchange
+(Step 12), and the delegated-token API policy (Steps 13 and 14) stay
+hand-authored, because those are gateway identity concerns rather than catalog
+ones.
+
+This step's agent is `traefik/whoami`, which echoes requests and never calls a
+tool, so the policy above can be applied and its fan-out observed but the
+resulting denial cannot be demonstrated here. Swap in a real agent to see it
+take effect.
+
+Docs: [Agent to MCP server authorization](https://docs.solo.io/agentregistry/latest/security/runtime-authorization/kagent/agent-to-mcp/), [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/install/install-kagent/), [kagent runtime](https://docs.solo.io/agentregistry/latest/setup/runtime/kagent/)
 
 ---
 
