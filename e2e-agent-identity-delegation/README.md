@@ -172,7 +172,7 @@ kubectl port-forward -n kagent svc/solo-enterprise-ui 4000:80 &
 
 Open http://localhost:4000 and sign in as `admin-user` / `password` (group `admins`, mapped to `global.Admin`). The gateway pages fill in from Step 10 on.
 
-Already running the Solo UI? Skip this script. A cluster holds one management release, because its CRDs are cluster-scoped. Set `MGMT_RELEASE` and `MGMT_NAMESPACE` to your release before Step 16 so that step upgrades it in place, change the tracing policy's `backendRef.namespace` in `05-gateway.yaml` to that namespace, and make sure the release has `products.agentgateway.enabled=true` (the agentgateway UI docs set it). Sign in with any user in a group your release maps to `global.Admin` or `global.Reader`.
+Already running the Solo UI? Skip this script. A cluster holds one management release, because its CRDs are cluster-scoped. Set `MGMT_RELEASE` and `MGMT_NAMESPACE` to your release before Step 16 so that step upgrades it in place, and make sure the release has `products.agentgateway.enabled=true` (the agentgateway UI docs set it). Tracing needs that namespace too; Step 15 covers it. Sign in with any user in a group your release maps to `global.Admin` or `global.Reader`.
 
 Docs: [Set up the UI](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/ui/setup/)
 
@@ -305,7 +305,7 @@ arctl get deployments
 kubectl get httproute -n agentregistry-system
 ```
 
-Expected: three registry deployments on runtime `mcp-gateway`, and three child HTTPRoutes in `agentregistry-system`. On KinD without a LoadBalancer the deployment status reports `NoAcceptedListener` because the Gateway has no external address. The routes still work in-cluster. Call one from the test client. `RGW` is the proxy's Service, named after the Gateway:
+Expected: three registry deployments on runtime `mcp-gateway`, and three child HTTPRoutes in `agentregistry-system`. On KinD, where nothing provisions a LoadBalancer, the deployment status reports `NoAcceptedListener` because the Gateway has no external address, and the routes still work in-cluster. On a cluster that does provision one this status is not cosmetic: the Gateway should reach `Programmed` with an address, and a stuck `NoAcceptedListener` or `NoGatewayBound` points at the runtime label, the parent route, or the Gateway binding. Check `kubectl get gateway -A` for an address before assuming the KinD case. Call one from the test client. `RGW` is the proxy's Service, named after the Gateway:
 
 ```bash
 export RGW=agentregistry-gateway.agentgateway-system.svc.cluster.local:80
@@ -373,7 +373,7 @@ Docs: [Access control](https://docs.solo.io/agentregistry/latest/security/access
 
 ## Step 9: Mint user tokens and inspect claims
 
-Gateway requests are sent from the in-cluster `sleep` pod, so no LoadBalancer is needed. Define a token helper and mint both users:
+Gateway requests are sent from the in-cluster `sleep` pod, so the lab does not require a LoadBalancer. If your cluster provisions them, an internal one is a reasonable choice and gives you a private address to reach the gateway from your own network. Define a token helper and mint both users:
 
 ```bash
 : "${KEYCLOAK_URL:=http://keycloak.keycloak.svc.cluster.local:8080}"
@@ -548,8 +548,9 @@ export GW=YOUR-GATEWAY.YOUR-NAMESPACE.svc.cluster.local:YOUR-PORT
 
 Three things to know. The authorization policies target our HTTPRoutes by name, so they only affect
 `/agent-x`, `/mcp-a`, `/mcp-b`, `/api` and `/mcp-api`, and other traffic on that gateway is untouched.
-The tracing policy in `05-gateway.yaml` is different: it targets the Gateway itself and would turn on
-sampling for everything on that proxy, so leave it out unless you want that. And Step 12 still
+The tracing policy in `05-gateway.yaml` is different: it targets the Gateway itself, so it would turn
+on sampling for everything on that proxy rather than just these routes. Leave it out here, and see
+Step 15 for the version that names your own Gateway and telemetry collector. And Step 12 still
 upgrades the agentgateway release, which restarts the shared controller.
 
 ## Step 11: Enforce agent to MCP authorization
@@ -893,7 +894,7 @@ Each piece is optional if you already run it. Everything the lab creates is conf
 
 | You already have | Skip | Adjust |
 |---|---|---|
-| Kubernetes cluster | `00-kind.sh` | Point `kubectl` at your cluster and run `00-platform.sh`. The lab needs no StorageClass and no LoadBalancer; the gateways are reached by Service DNS. |
+| Kubernetes cluster | `00-kind.sh` | Point `kubectl` at your cluster and run `00-platform.sh`. The lab requires no StorageClass and no LoadBalancer, since the gateways are reached by Service DNS. An internal LoadBalancer is still a fine addition if you want to reach them from outside the cluster. |
 | Enterprise Agentgateway | Step 1, but still `kubectl apply -f 00-client.yaml` (the client's SA is the actor identity) | The chart names the controller Service `enterprise-agentgateway` regardless of release name, so only a different namespace changes the STS address. Update it in `05-sts-values.yaml` (`issuer`), `05-api-authz.yaml` and `05-mcp-api-authz.yaml` (provider `issuer` and JWKS `backendRef` namespace), and Step 12's exchange URL, and export it as `AGW_NAMESPACE` for `01-ui.sh` and `10-kagent-install.sh`. Step 12's `helm upgrade` restarts your controller and must target your release name and namespace; the release must be a version with `tokenExchange` (validated on v2026.9.0). If your GatewayClass is not named `enterprise-agentgateway`, change it in `05-gateway.yaml` and `04-registry-gateway.yaml`. |
 | Keycloak | `00-keycloak.yaml` | Import `realm/workshop-additions.json` into your `agentregistry` realm (Step 2 shows the partial import). Then set the issuer in `01-ui.sh`, `03-registry-values.yaml`, the `05-*` policies, and `05-sts-values.yaml` to your Keycloak URL. A realm built from the Agentregistry Enterprise docs already carries the `Groups` claim these policies use. |
 | Agentregistry Enterprise | `03-registry-install.sh` | Export `ARCTL_API_BASE_URL` and `KEYCLOAK_URL` before sourcing `03-registry-env.sh`. Steps 6 to 8 then run against your registry. For Step 7 the label on `04-registry-gateway.yaml` must match a Virtual runtime in your registry. |
