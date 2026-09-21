@@ -10,7 +10,6 @@ production and what this lab does not cover, see [production.md](production.md).
 
 ## Contents
 
-- [Files in this folder](#files-in-this-folder)
 - [Prerequisites](#prerequisites)
 - [What you will do](#what-you-will-do)
 - [Background](#background)
@@ -38,13 +37,6 @@ production and what this lab does not cover, see [production.md](production.md).
 - [Step 16 (optional): Deploy from the registry with Solo Enterprise for kagent](#step-16-optional-deploy-from-the-registry-with-solo-enterprise-for-kagent)
 - [Validation checklist](#validation-checklist)
 - [Cleanup](#cleanup)
-
-## Files in this folder
-
-Files are numbered in the order they are applied: `00` platform and test client, `01` Solo UI,
-`02` workloads, `03` Agentregistry, `04` catalog and publishing, `05` gateway and policies, `10`
-optional Solo Enterprise for kagent. Each step names the files it uses and explains what they do,
-so this is orientation rather than a reference you need to read first.
 
 ## Prerequisites
 
