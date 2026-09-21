@@ -196,7 +196,14 @@ deployment "solo-enterprise-ui" successfully rolled out
 UI-READY
 ```
 
-The UI, and later the registry UI, sign you in through Keycloak in the browser. The browser is sent to the issuer the servers trust, `http://keycloak.keycloak.svc.cluster.local:8080`, so make that name resolve to your machine and port-forward Keycloak once for the rest of the lab:
+The UI, and later the registry UI, sign you in through Keycloak in the browser. What matters is that
+the address your browser lands on is the same string Keycloak stamps as `iss`, because that is what
+the servers trust. This lab's Keycloak stamps an in-cluster Service name, which a browser cannot
+resolve, so the `/etc/hosts` entry below points that name at a port-forward.
+
+Bringing your own Keycloak? If it is already reachable at the address it stamps as `iss`, browse to
+it directly and skip both the hosts entry and the Keycloak port-forward. You still want the
+`solo-enterprise-ui` port-forward.
 
 ```bash
 echo "127.0.0.1 keycloak.keycloak.svc.cluster.local" | sudo tee -a /etc/hosts
@@ -569,9 +576,18 @@ bob: 403
 
 ### Using a gateway you already have
 
-Skip `05-gateway.yaml` entirely and attach the routes to your existing agentgateway Gateway. It needs
-`allowedRoutes.namespaces.from: All` (or a selector that includes `e2e-demo`) for a cross-namespace
-attachment.
+Skip `05-gateway.yaml` entirely and attach the routes to your existing agentgateway Gateway. The
+listener has to accept routes from `e2e-demo`, which `allowedRoutes.namespaces.from: All` satisfies.
+On a shared gateway prefer a selector, since `All` lets any namespace in the cluster publish a route
+on that listener and that is a fair question from a security reviewer:
+
+```yaml
+  allowedRoutes:
+    namespaces:
+      from: Selector
+      selector:
+        matchLabels: { kubernetes.io/metadata.name: e2e-demo }
+```
 
 ```bash
 sed -i '' 's/parentRefs: \[ { name: e2e-gw } \]/parentRefs: [ { name: YOUR-GATEWAY, namespace: YOUR-NAMESPACE } ]/' \
