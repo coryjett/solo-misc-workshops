@@ -411,7 +411,29 @@ Expected output:
     }
 ```
 
-bob's token (`$BOB_JWT`) has `may_act` and no `Groups`, because bob is in no group. That missing group is what Step 10 checks. Tokens last one hour; re-run the two exports if a request later returns 401 unexpectedly.
+bob's token (`$BOB_JWT`) has `may_act` and no `Groups`, because bob is in no group. That missing group is what Step 10 checks.
+
+Check how long these tokens last before going further, because the rest of the lab reuses them:
+
+```bash
+python3 -c "
+import os,json,base64
+t=os.environ['USER_JWT']; p=t.split('.')[1]; p+='='*(-len(p)%4)
+c=json.loads(base64.urlsafe_b64decode(p))
+print('lifetime:', c['exp']-c['iat'], 'seconds')"
+```
+
+The lab's Keycloak issues one-hour tokens. A Keycloak you brought yourself may be much shorter, and
+five minutes is a common default. That is short enough to expire between minting a token and running
+the next step, which surfaces as `invalid subject token` at Step 12 and as an unexplained 401 at
+Steps 10, 13 and 14. It also quietly weakens Steps 13 and 14, where a 401 is the expected result: an
+expired token returns the same 401 whether the policy works or not, so the test passes without
+proving anything.
+
+If the lifetime is short, raise it for the session in the Keycloak admin console under Realm
+settings, Tokens, Access Token Lifespan. Otherwise re-mint immediately before each step that uses
+`$USER_JWT`, in the same command where possible. The delegated token from Step 12 is unaffected,
+since `tokenExpiration` in `05-sts-values.yaml` governs it.
 
 ### What `may_act` is for
 
@@ -616,6 +638,64 @@ iss: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
 
 Both token types must be `urn:ietf:params:oauth:token-type:jwt`. Claims such as `Groups` do not propagate into the delegated token; downstream authorization keys on `sub` and `act`.
 
+The STS is not a separate workload. It is port 7777 on the existing controller container, alongside
+xDS on 9978, so the chart ships one Deployment in total. Two things follow. Enabling it restarts the
+control plane, which is why the bring-your-own-gateway note warns that Step 12 touches a shared
+controller. And a bad validators file does not merely break token exchange, it stops the controller
+from starting at all.
+
+### When the exchange fails
+
+The command above pipes the response through `python3` to pull out `access_token`, which means a
+failure surfaces as `KeyError: 'access_token'` and hides what the STS actually said. Re-run it
+without that pipe to read the real body:
+
+```bash
+kubectl exec -n wp-a deploy/sleep -- sh -c "SA=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token); \
+  curl -s -X POST http://enterprise-agentgateway.${AGW_NAMESPACE:-agentgateway-system}.svc.cluster.local:7777/token \
+  -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
+  -d subject_token=$USER_JWT -d subject_token_type=urn:ietf:params:oauth:token-type:jwt \
+  -d actor_token=\$SA -d actor_token_type=urn:ietf:params:oauth:token-type:jwt"
+```
+
+`{"error":"invalid_grant","error_description":"invalid subject token"}` means the STS could not
+validate the user JWT. In order of likelihood: `$USER_JWT` is empty because the shell lost the
+export, the token has expired (see the lifetime note in Step 9), or the JWKS the subject validator
+fetches does not hold the key that signed it. Decode the token and compare its `kid` against the
+JWKS to tell the last case from the others:
+
+```bash
+echo "len=${#USER_JWT}"
+
+# the key that signed the token
+python3 -c "
+import os,json,base64
+t=os.environ['USER_JWT']; h=t.split('.')[0]; h+='='*(-len(h)%4)
+print('kid:', json.loads(base64.urlsafe_b64decode(h)).get('kid'))"
+
+# the keys the subject validator will check against, from the url in 05-sts-values.yaml
+kubectl exec -n wp-a deploy/sleep -- curl -s \
+  "${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local:8080}/realms/agentregistry/protocol/openid-connect/certs" \
+  | python3 -c "import json,sys; print('kids:', [k['kid'] for k in json.load(sys.stdin)['keys']])"
+```
+
+A `kid` missing from that list means the validator is pointed at a different Keycloak from the one
+that minted the token, and the fix is the `subjectValidators` url rather than anything about the
+token.
+
+Three different things in this lab are called an issuer, and only one of them is compared against an
+incoming token:
+
+- `tokenExchange.issuer` in `05-sts-values.yaml` is what the STS **stamps** on tokens it mints. It is
+  the `iss` you see on the delegated token, and it is never matched against the user's token.
+- `subjectValidators` has no issuer field at all, only a JWKS URL. It verifies the signature, so it
+  cannot produce an issuer mismatch.
+- The `issuer` in the `05-*` policy files is the one the gateway compares character for character
+  against the token's `iss`, which is the check described in Step 9.
+
+So `invalid subject token` is never an issuer mismatch. It is an empty, expired, or unverifiable
+token.
+
 ---
 
 ## Step 13: Restrict the API to delegated identities
@@ -671,6 +751,11 @@ HTTP 401
 
 With the delegated token every hop (agent, gateway, MCP server, gateway, API) sees the same `sub` and `act`. With the raw user token the MCP hop admits the call but the API route rejects it.
 
+The 401 only proves something if `$USER_JWT` was still valid when it was sent. An expired token
+returns 401 from the gateway's authentication check, before authorization is ever consulted, so the
+step looks like it passed whether or not the policy is doing its job. Re-mint immediately before
+this comparison, and treat a 401 on a token minted a second earlier as the real result.
+
 The same server is published through the second agentgateway proxy (Step 7). It answers the same there, because the API route is what enforces delegation:
 
 ```bash
@@ -681,6 +766,48 @@ mcp-api/mcpcall.sh "$USER_JWT" $RGW /registry/mcp-api
 ---
 
 ## Step 15: Validate in the Solo UI
+
+### Enable tracing
+
+Spans reach the UI only when a tracing policy points the proxy at the management release's telemetry
+collector. `05-gateway.yaml` applied one in Step 10, targeting `e2e-gw` and shipping to a collector in
+namespace `kagent`, which is where this lab's own management release lives.
+
+Both of those are wrong if you brought your own gateway or your own Solo UI, and the symptom is an
+empty Tracing view rather than an error. Find what your cluster actually has:
+
+```bash
+kubectl get httproute -n e2e-demo -o jsonpath='{range .items[*]}{.metadata.name}{" parent="}{.spec.parentRefs[*].name}{" ns="}{.spec.parentRefs[*].namespace}{"\n"}{end}'
+kubectl get svc -A | grep -i telemetry-collector
+```
+
+Then apply a policy naming your Gateway and your collector. The policy has to live in the same
+namespace as the Gateway it targets, so this moves out of `e2e-demo` when your gateway is elsewhere:
+
+```yaml
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: tracing, namespace: YOUR-GATEWAY-NAMESPACE }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: YOUR-GATEWAY } ]
+  frontend:
+    tracing:
+      backendRef: { name: solo-enterprise-telemetry-collector, namespace: YOUR-MGMT-NAMESPACE, kind: Service, port: 4317 }
+      randomSampling: "true"
+```
+
+The management chart names its Services `solo-enterprise-*` whatever you called the release, so the
+collector name is stable and only the namespace changes. Installing the management chart into
+`agentgateway-system` alongside the controller is a common layout and a common reason `kagent` is not
+the right namespace here.
+
+Two things about the result. This policy targets the Gateway rather than a route, so
+`randomSampling: "true"` samples every request on that proxy, not only this lab's routes. On a shared
+gateway that is worth deciding on deliberately. And a span is recorded when a request is served, not
+retrospectively, so re-run a Step 10 or Step 14 request after applying the policy and look at a short
+time window rather than a long one.
+
+### Read the results
 
 Open http://localhost:4000 (port-forward from Step 3) as `admin-user`.
 
