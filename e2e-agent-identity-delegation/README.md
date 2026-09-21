@@ -54,6 +54,10 @@ At every hop the question is the same: who is calling, and are they allowed to c
 
 Why not forward the user's token: it says nothing about which agent is acting, can be replayed against any route the user could reach, and grants the agent everything the user has. The delegated token is signed by the STS, carries both identities, and is only accepted where STS-issued tokens are trusted.
 
+This is delegation, not impersonation. The agent keeps its own identity the whole way through. The delegated token says alice asked for this and agent-x is the one doing it, and both names stay in the token for every remaining hop. An impersonation token would carry alice alone, and nothing downstream could tell whether alice made the request herself or an agent made it for her. That difference is what makes the chain auditable, and it is what the `act` claim in the expected output below is showing you.
+
+Two gateways do two different jobs here, and it helps to separate them early. `agentregistry-gateway` (Step 7) is a proxy you hand to Agentregistry so the registry can write routes onto it, which is how teams publish MCP servers without authoring gateway config themselves. `e2e-gw` (Step 10) is a proxy you author yourself, and it is where this workshop hangs the authorization and delegation policies so you can read them in a file. Both are Enterprise Agentgateway. Neither one puts the registry in the request path.
+
 ---
 
 ## Step 1: Install the platform
@@ -260,7 +264,38 @@ Docs: [Register remote MCP servers](https://docs.solo.io/agentregistry/latest/mc
 
 The registry does not proxy traffic. It writes routes onto an Enterprise Agentgateway proxy you give it, and that proxy serves the MCP traffic. `04-registry-gateway.yaml` creates that proxy: a Gateway named `agentregistry-gateway` (class `enterprise-agentgateway`, port 80, so the controller deploys a proxy and a Service of the same name) and a parent HTTPRoute that delegates `/registry` to child routes the registry will create. Both carry the label `agentregistry.solo.io/runtime: mcp-gateway`, and `04-runtime-virtual.yaml` creates the Virtual runtime of that name. `04-expose.yaml` then publishes each MCP server at `/registry<pathSuffix>`: for each one the registry creates a child HTTPRoute and an agentgateway Backend in `agentregistry-system`, and the agentgateway controller programs the proxy.
 
-Request path: client, the proxy's load balancer or Service, parent route `/registry`, child route `/registry/mcp-a`, Backend, `mcp-a` in `e2e-demo`. The registry is not in it.
+Which plane a thing belongs to is the part worth slowing down on:
+
+```text
+Control plane. Runs once, when you apply 04-expose.yaml.
+
+  arctl expose
+  1. the registry finds the Gateway carrying the label
+     agentregistry.solo.io/runtime: mcp-gateway
+  2. the registry writes a child HTTPRoute and an agentgateway Backend
+     into namespace agentregistry-system
+  3. the agentgateway controller reads those and programs the proxy
+
+  The registry's work is finished at that point.
+
+Data plane. Runs on every request from then on.
+
+  1. client
+  2. agentregistry-gateway Service, namespace agentgateway-system
+  3. parent HTTPRoute /registry, namespace agentgateway-system
+  4. child HTTPRoute /registry/mcp-a, namespace agentregistry-system
+  5. EnterpriseAgentgatewayBackend
+  6. mcp-a Service, namespace e2e-demo
+
+  The registry does not appear in that list. Scale it to zero and these
+  routes keep serving.
+```
+
+Three things are easy to misread here:
+
+- The label is the entire binding. Nothing else connects the registry to the proxy. `agentregistry.solo.io/runtime: mcp-gateway` sits on the Gateway and on the parent route, and it has to match a Virtual runtime of the same name. Get the label wrong and the deployments sit at `pending` with reason `NoGatewayBound`.
+- The generated child routes land in `agentregistry-system`, not alongside the MCP servers in `e2e-demo`. That namespace is where to look when you want to see what `expose` actually wrote.
+- `04-expose.yaml` uses `kind: Deployment`, but that is the registry's own CR and not a Kubernetes Deployment. Nothing is built, deployed, restarted, or moved. It writes routing config for workloads that have been running since Step 4.
 
 ```bash
 kubectl apply -f 04-registry-gateway.yaml
@@ -330,6 +365,8 @@ Expected: `mcp-a` and `agent-x` listed, `mcp-b` and `mcp-api` absent. The princi
 
 Registry UI: Access Policies shows `readers-see-agent-x-stack`. Sign out and sign in as `reader` / `reader`: the catalog shows only `agent-x` and `mcp-a`.
 
+This policy governs discovery, not calls. It decides what `arctl` and the registry UI will show a given user, and it is never consulted when a request reaches a gateway. A user who cannot see `mcp-b` in the catalog can still call `/mcp-b` through a gateway right up until a gateway policy says otherwise, which is what Steps 10 and 11 add. Two policies, two planes, and you want both: registry access control decides who finds out a server exists, gateway authorization decides whose code gets to use it.
+
 Docs: [Access control](https://docs.solo.io/agentregistry/latest/security/access-control/)
 
 ---
@@ -349,6 +386,8 @@ TOK() { kubectl exec -n wp-a deploy/sleep -- curl -s -X POST \
 export USER_JWT=$(TOK alice)
 export BOB_JWT=$(TOK bob)
 ```
+
+Both are ordinary OIDC access tokens. From here on they travel as an `Authorization: Bearer <token>` header on each request, and the gateway policies read their claims straight off that header. Nothing else about the caller is passed anywhere.
 
 Bringing your own Keycloak: set `KEYCLOAK_URL` to an address the `sleep` pod can reach before running
 this. If it is not reachable in-cluster, drop the `kubectl exec` and run the `curl` from your shell.
@@ -374,6 +413,16 @@ Expected output:
 
 bob's token (`$BOB_JWT`) has `may_act` and no `Groups`, because bob is in no group. That missing group is what Step 10 checks. Tokens last one hour; re-run the two exports if a request later returns 401 unexpectedly.
 
+### What `may_act` is for
+
+`may_act` is the claim the rest of the delegation story rests on, so it is worth a minute even though it looks like noise in the decode above.
+
+Keycloak stamps it into alice's token, and it names exactly one actor: `system:serviceaccount:wp-a:default`, the ServiceAccount of the pod that is allowed to act on her behalf. In Step 12 the STS reads the claim and refuses the exchange unless the actor token's subject matches what it names. So the identity provider decides which agent may act for which user. Not the gateway, not the agent, and not anything in this repo.
+
+Two practical consequences. If the mapper is missing from the realm, Step 12 fails even when every gateway policy is correct, and the error points at the grant rather than at the realm, which is not an obvious trail to follow. And carrying `may_act` only makes a user delegatable; it says nothing about what that user is allowed to reach, which is why bob has the claim and still gets a 403 in Step 10.
+
+Docs: [Token exchange overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/overview/)
+
 ### Point the policies at your issuer
 
 The gateway compares the token's `iss` claim to the `issuer` string in each policy, character for
@@ -398,6 +447,11 @@ sed -i '' "s|issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/agen
 
 Keycloak stamps whatever hostname it is configured with, not the address you called, so re-minting
 against a different URL does not change `iss`. The policies have to match the token.
+
+There is also nothing to pass on the client side. The issuer is not a parameter on the token request,
+so a caller cannot ask for one and cannot override it. The realm's configured frontend URL decides it.
+That leaves two real fixes: point the policies at the string Keycloak is already stamping, as above, or
+change Keycloak's frontend URL and re-mint. Trying different token endpoints is not one of them.
 
 Leave `jwks.remote.backendRef` alone unless your Keycloak Service is named something other than
 `keycloak` in namespace `keycloak`. That field only says how the gateway fetches the signing keys and
@@ -478,6 +532,8 @@ upgrades the agentgateway release, which restarts the shared controller.
 
 ## Step 11: Enforce agent to MCP authorization
 
+Step 7 published the MCP servers onto `agentregistry-gateway`, and only those: it did not touch the agent and it wrote none of the policies. Steps 10 and 11 are the hand-authored side, on `e2e-gw`, so the policy sits in a file you can read and change. That leaves `mcp-a` reachable two ways on purpose. Step 14 calls it through both proxies and gets the same answer, because the policy decides, not the path.
+
 `05-mcp-authz.yaml` puts the Step 4 MCP servers behind `EnterpriseAgentgatewayBackend` MCP static targets, routed at `/mcp-a` and `/mcp-b` with opposing authorization policies. `mcp-a` requires alice's group. `mcp-b` requires a group nobody has.
 
 - The backend uses `spec.mcp.targets[].static: {host, port, protocol: SSE}`. The `HTTPRoute` backendRef carries `group: enterpriseagentgateway.solo.io` and `kind: EnterpriseAgentgatewayBackend`.
@@ -510,6 +566,8 @@ mcp-b: 403
 ```
 
 In production this policy's CEL matches the delegated token's `jwt.act.sub` (the agent identity) instead of the user's group. Same policy shape, one expression change.
+
+The other production change is where the policy hangs. Attach it to the route the registry generated instead of hand-writing a parallel one. A policy targets a route by name, and it is a separate object that the registry does not own, so it survives reconciliation. Editing a registry-generated child HTTPRoute directly does not: the registry owns those objects in `agentregistry-system` and reconciles them back to whatever the Deployment CR says, so a hand-edit there lasts only until the next reconcile. One gateway, routes published by the registry, policies attached by you, is the shape you want.
 
 ---
 
@@ -695,6 +753,7 @@ Docs: [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/in
 - In-agent exchange: agents perform Step 12's token exchange in code (for example with the agentsts-adk package).
 - API leg: Step 13's policy applies unchanged on a Solo Enterprise kgateway route in front of a real API.
 - Identity provider: Keycloak is the stand-in. Okta, Entra ID, Auth0 and others work the same way; only the issuer and JWKS provider config changes. Multiple identity domains means one JWT provider entry per issuer.
+- Users and agents from different providers: the subject token and the actor token are validated independently, so a customer in one IdP and an employee or agent in another is a supported shape rather than a special case. `tokenExchange` takes `subjectValidators` and `actorValidators` as lists, so add an entry per issuer on whichever side it applies to, and list every issuer whose tokens a route must accept as a JWT provider on that route. The one thing that does not move is `may_act`: it has to be stamped by whichever provider issued the user's token, since that is the token the STS reads it from.
 - Registry gateway: attach the Step 10 JWT policy to the `agentregistry-delegate` parent route to require a token on every `/registry` path.
 
 ## Follow-ups
