@@ -1,13 +1,19 @@
 # helm upgrade enterprise-agentgateway ... --reuse-values -f 05-sts-values.yaml
+#
+# These three keys are lists, and the plural spelling matters. The singular
+# subjectValidator/actorValidator/apiValidator are accepted by helm without
+# complaint but render no validator config at all, so the controller starts and
+# then crashloops on "error creating authentication validator: at least one
+# validator is required". Verified against chart v2026.8.0 and v2026.9.0.
 tokenExchange:
   enabled: true
   issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
   tokenExpiration: 24h
-  subjectValidator:
-    validatorType: remote
-    remoteConfig:
-      url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry/protocol/openid-connect/certs"
-  actorValidator:
-    validatorType: k8s
-  apiValidator:
-    validatorType: k8s
+  subjectValidators:
+    - validatorType: remote
+      remoteConfig:
+        url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/agentregistry/protocol/openid-connect/certs"
+  actorValidators:
+    - validatorType: k8s
+  apiValidators:
+    - validatorType: k8s
