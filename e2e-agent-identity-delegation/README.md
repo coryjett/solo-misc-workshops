@@ -56,7 +56,7 @@ Why not forward the user's token: it says nothing about which agent is acting, c
 
 This is delegation, not impersonation. The agent keeps its own identity the whole way through. The delegated token says alice asked for this and agent-x is the one doing it, and both names stay in the token for every remaining hop. An impersonation token would carry alice alone, and nothing downstream could tell whether alice made the request herself or an agent made it for her. That difference is what makes the chain auditable, and it is what the `act` claim in the expected output below is showing you.
 
-Two gateways do two different jobs here, and it helps to separate them early. `agentregistry-gateway` (Step 7) is a proxy you hand to Agentregistry so the registry can write routes onto it, which is how teams publish MCP servers without authoring gateway config themselves. `e2e-gw` (Step 10) is a proxy you author yourself, and it is where this workshop hangs the authorization and delegation policies so you can read them in a file. Both are Enterprise Agentgateway. Neither one puts the registry in the request path.
+Two gateways do two different jobs. `agentregistry-gateway` (Step 7) is a proxy you hand to Agentregistry so the registry can write routes onto it, which is how teams publish MCP servers without authoring gateway config themselves. `e2e-gw` (Step 10) is a proxy you author yourself, and it is where this workshop hangs the authorization and delegation policies so you can read them in a file. Both are Enterprise Agentgateway. Neither one puts the registry in the request path.
 
 ---
 
@@ -264,7 +264,7 @@ Docs: [Register remote MCP servers](https://docs.solo.io/agentregistry/latest/mc
 
 The registry does not proxy traffic. It writes routes onto an Enterprise Agentgateway proxy you give it, and that proxy serves the MCP traffic. `04-registry-gateway.yaml` creates that proxy: a Gateway named `agentregistry-gateway` (class `enterprise-agentgateway`, port 80, so the controller deploys a proxy and a Service of the same name) and a parent HTTPRoute that delegates `/registry` to child routes the registry will create. Both carry the label `agentregistry.solo.io/runtime: mcp-gateway`, and `04-runtime-virtual.yaml` creates the Virtual runtime of that name. `04-expose.yaml` then publishes each MCP server at `/registry<pathSuffix>`: for each one the registry creates a child HTTPRoute and an agentgateway Backend in `agentregistry-system`, and the agentgateway controller programs the proxy.
 
-Which plane a thing belongs to is the part worth slowing down on:
+The registry acts on the control plane only. It configures the proxy once, and the proxy serves every request after that:
 
 ```text
 Control plane. Runs once, when you apply 04-expose.yaml.
@@ -291,7 +291,7 @@ Data plane. Runs on every request from then on.
   routes keep serving.
 ```
 
-Three things are easy to misread here:
+Three details of how the pieces bind together:
 
 - The label is the entire binding. Nothing else connects the registry to the proxy. `agentregistry.solo.io/runtime: mcp-gateway` sits on the Gateway and on the parent route, and it has to match a Virtual runtime of the same name. Get the label wrong and the deployments sit at `pending` with reason `NoGatewayBound`.
 - The generated child routes land in `agentregistry-system`, not alongside the MCP servers in `e2e-demo`. That namespace is where to look when you want to see what `expose` actually wrote.
@@ -415,11 +415,11 @@ bob's token (`$BOB_JWT`) has `may_act` and no `Groups`, because bob is in no gro
 
 ### What `may_act` is for
 
-`may_act` is the claim the rest of the delegation story rests on, so it is worth a minute even though it looks like noise in the decode above.
+`may_act` is the claim the delegation in Step 12 depends on.
 
 Keycloak stamps it into alice's token, and it names exactly one actor: `system:serviceaccount:wp-a:default`, the ServiceAccount of the pod that is allowed to act on her behalf. In Step 12 the STS reads the claim and refuses the exchange unless the actor token's subject matches what it names. So the identity provider decides which agent may act for which user. Not the gateway, not the agent, and not anything in this repo.
 
-Two practical consequences. If the mapper is missing from the realm, Step 12 fails even when every gateway policy is correct, and the error points at the grant rather than at the realm, which is not an obvious trail to follow. And carrying `may_act` only makes a user delegatable; it says nothing about what that user is allowed to reach, which is why bob has the claim and still gets a 403 in Step 10.
+Two consequences follow. If the mapper is missing from the realm, Step 12 fails even when every gateway policy is correct, and the error names the grant rather than the realm. And carrying `may_act` only makes a user delegatable: it says nothing about what that user is allowed to reach, which is why bob has the claim and still gets a 403 in Step 10.
 
 Docs: [Token exchange overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/token-exchange/overview/)
 
