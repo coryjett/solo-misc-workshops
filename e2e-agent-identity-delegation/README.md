@@ -4,6 +4,40 @@ Deploy an agent and its MCP servers, register and govern them in Agentregistry E
 
 Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Agentregistry Enterprise 2026.9.0, and Keycloak 26. Every `Expected output` block is an observed result.
 
+## Contents
+
+- [Files in this folder](#files-in-this-folder)
+- [Prerequisites](#prerequisites)
+- [What you will do](#what-you-will-do)
+- [Background](#background)
+- [Step 1: Install the platform](#step-1-install-the-platform)
+- [Step 2: Deploy Keycloak with the agentregistry realm](#step-2-deploy-keycloak-with-the-agentregistry-realm)
+- [Step 3: Install the Solo UI](#step-3-install-the-solo-ui)
+- [Step 4: Deploy the agent, MCP servers, and API](#step-4-deploy-the-agent-mcp-servers-and-api)
+- [Step 5: Install arctl and Agentregistry Enterprise](#step-5-install-arctl-and-agentregistry-enterprise)
+- [Step 6: Register the workloads in the catalog](#step-6-register-the-workloads-in-the-catalog)
+- [Step 7: Publish the MCP servers through agentgateway from the registry](#step-7-publish-the-mcp-servers-through-agentgateway-from-the-registry)
+- [Step 8: Govern catalog visibility](#step-8-govern-catalog-visibility)
+- [Step 9: Mint user tokens and inspect claims](#step-9-mint-user-tokens-and-inspect-claims)
+  - [What `may_act` is for](#what-may_act-is-for)
+  - [Point the policies at your issuer](#point-the-policies-at-your-issuer)
+- [Step 10: Create the gateway and enforce user to agent authorization](#step-10-create-the-gateway-and-enforce-user-to-agent-authorization)
+  - [Using a gateway you already have](#using-a-gateway-you-already-have)
+- [Step 11: Enforce agent to MCP authorization](#step-11-enforce-agent-to-mcp-authorization)
+- [Step 12: Enable the STS and exchange for a delegated token](#step-12-enable-the-sts-and-exchange-for-a-delegated-token)
+  - [When the exchange fails](#when-the-exchange-fails)
+- [Step 13: Restrict the API to delegated identities](#step-13-restrict-the-api-to-delegated-identities)
+- [Step 14: MCP server calls the API through the gateway](#step-14-mcp-server-calls-the-api-through-the-gateway)
+- [Step 15: Validate in the Solo UI](#step-15-validate-in-the-solo-ui)
+  - [Enable tracing](#enable-tracing)
+  - [Read the results](#read-the-results)
+- [Step 16 (optional): Deploy from the registry with Solo Enterprise for kagent](#step-16-optional-deploy-from-the-registry-with-solo-enterprise-for-kagent)
+- [Validation checklist](#validation-checklist)
+- [Adapting this to production](#adapting-this-to-production)
+- [Follow-ups](#follow-ups)
+- [Bring your own components](#bring-your-own-components)
+- [Cleanup](#cleanup)
+
 ## Files in this folder
 
 | File | Purpose |
@@ -873,7 +907,8 @@ Docs: [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/in
 6. Delegated token decodes with `sub` = alice and `act.sub` = `system:serviceaccount:wp-a:default` (Step 12)
 7. `delegated: 200`, `raw user: 401`, `anonymous: 401` on `/api` (Step 13)
 8. `HTTP 200` then `HTTP 401` from `mcp-api/mcpcall.sh` with the delegated and raw tokens, on both gateways (Step 14)
-9. Optional: the Step 10, 11, and 14 results repeat against the kagent-deployed workloads (Step 16)
+9. Traces for those requests appear in the Solo UI's Tracing view (Step 15)
+10. Optional: the Step 10, 11, and 14 results repeat against the kagent-deployed workloads (Step 16)
 
 ## Adapting this to production
 
@@ -887,6 +922,7 @@ Docs: [Solo Enterprise for kagent install](https://docs.solo.io/kagent/latest/in
 ## Follow-ups
 
 - Workload identity without a user: the agent hop already uses the pod's Kubernetes ServiceAccount token as the actor token (Step 12). A further step is to let the MCP and API routes accept a projected ServiceAccount token directly, with a JWT provider pointed at the cluster issuer, for workload-to-workload calls that have no user in the chain. The registry to kagent hop stays on OIDC client credentials; the kagent runtime requires it.
+- Calling an API in a different trust domain: every exchange in this lab happens at one authorization server, so the STS validates the user token and mints the delegated token itself. When the downstream API trusts a *different* authorization server from the one that authenticated the user, that single-leg exchange does not apply. Enterprise Agentgateway covers it with the `crossAppAccess` backend authentication method, which implements the Identity Assertion JWT Authorization Grant (ID-JAG, also called Cross App Access): the gateway performs an RFC 8693 exchange at the user's IdP to obtain an ID-JAG assertion, then presents it to the resource's authorization server as an RFC 7523 JWT-bearer grant, and attaches the resulting access token upstream. It needs an OIDC ID token inbound rather than an arbitrary access token, and a client registration at each of the two token endpoints. This is the shape to reach for when the caller and the resource live in separate identity domains, for example a customer in one IdP and an employee in another. Docs: [Cross App Access (ID-JAG)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backend-authn/cross-app-access/).
 
 ## Bring your own components
 
