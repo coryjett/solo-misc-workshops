@@ -573,7 +573,7 @@ The other production change is where the policy hangs. Attach it to the route th
 
 ## Step 12: Enable the STS and exchange for a delegated token
 
-Upgrade the controller with the `tokenExchange` block from `05-sts-values.yaml`. The subject validator points at the Keycloak JWKS and the actor validator is `k8s`.
+Upgrade the controller with the `tokenExchange` block from `05-sts-values.yaml`. `subjectValidators` points at the Keycloak JWKS, and `actorValidators` and `apiValidators` are `k8s`. All three are lists, and all three have to be present: the chart renders the validators ConfigMap only when they are, and the controller exits with `at least one validator is required` without it.
 
 ```bash
 export ENTERPRISE_AGW_VERSION=$(helm get metadata enterprise-agentgateway -n agentgateway-system | awk '/^VERSION:/ {print $2}')
