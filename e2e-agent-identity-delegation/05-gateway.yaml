@@ -6,14 +6,21 @@ spec:
   gatewayClassName: enterprise-agentgateway
   # WARNING: with no annotations the controller asks the platform for its default
   # LoadBalancer, which on a cloud provider means a PUBLIC address. On kind it
-  # stays pending and nothing notices, which is why this is easy to miss. Every
-  # request in this lab comes from the in-cluster sleep pod, so the load balancer
-  # is never used. Uncomment for GKE, or use your provider's internal equivalent.
+  # stays pending and nothing notices, which is why this is easy to miss.
+  # The lab itself never needs the address, since every request comes from the
+  # in-cluster sleep pod. An INTERNAL LoadBalancer is still worth having if you
+  # want to reach the gateway from your own network: it gives a private address
+  # and no internet exposure. Uncomment the block for your provider.
   # infrastructure:
   #   annotations:
+  #     # GKE
   #     networking.gke.io/load-balancer-type: Internal
   #     networking.gke.io/internal-load-balancer-allow-global-access: "true"
   #     cloud.google.com/l4-rbs: enabled
+  #     # EKS
+  #     # service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+  #     # AKS
+  #     # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
   listeners:
     - name: http
       port: 8080
