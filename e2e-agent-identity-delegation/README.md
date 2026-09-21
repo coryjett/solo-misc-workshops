@@ -40,28 +40,10 @@ Validated from an empty KinD cluster with Enterprise Agentgateway v2026.9.0, Age
 
 ## Files in this folder
 
-| File | Purpose |
-|---|---|
-| `00-kind.sh` | Optional. Creates a local KinD cluster named `agw-e2e` |
-| `00-platform.sh` | Gateway API CRDs, Enterprise Agentgateway charts, test client, into the current kubeconfig context |
-| `00-client.yaml` | `sleep` test client in ns `wp-a`. Its ServiceAccount is the agent's workload identity |
-| `00-keycloak.yaml` | Keycloak 26.1.3 in ns `keycloak` with the `agentregistry` realm imported at boot. Issuer pinned to the in-cluster Service name so browser and pod tokens match |
-| `realm/` | The realm JSON, the workshop-only additions for an existing Keycloak, and `merge-additions.sh` to fold them into an existing realm ConfigMap |
-| `01-ui.sh` | Solo UI (management chart, agentgateway product) |
-| `02-workloads.yaml` | The agent stand-in, two MCP servers, and the API. Plain Deployments and Services |
-| `02-mcp-api.yaml`, `mcp-api/` | MCP server whose tool calls the API and forwards the caller's token |
-| `03-registry-install.sh`, `03-registry-values.yaml` | Agentregistry Enterprise |
-| `03-registry-env.sh` | Port-forward, `arctl` environment, token helper |
-| `04-catalog.yaml` | Catalog entries for the running workloads |
-| `04-registry-gateway.yaml`, `04-runtime-virtual.yaml`, `04-expose.yaml` | Agentgateway proxy the registry publishes to, its Virtual runtime, and the deployments that publish the MCP servers |
-| `04-access-policy.yaml` | Catalog visibility for readers |
-| `05-gateway.yaml` | Gateway `e2e-gw` and its tracing policy |
-| `05-agent-authz.yaml` | Route `/agent-x`, JWT plus group-based authorization |
-| `05-mcp-authz.yaml` | MCP backends and routes for `mcp-a` and `mcp-b`, opposing authorization policies |
-| `05-sts-values.yaml` | Helm values enabling the STS (`tokenExchange` block) |
-| `05-api-authz.yaml` | Route `/api` that trusts only STS-issued delegated tokens |
-| `05-mcp-api-authz.yaml` | Route `/mcp-api` for the MCP server that calls the API |
-| `10-*` | Optional. Solo Enterprise for kagent as a registry runtime that deploys into the cluster |
+Files are numbered in the order they are applied: `00` platform and test client, `01` Solo UI,
+`02` workloads, `03` Agentregistry, `04` catalog and publishing, `05` gateway and policies, `10`
+optional Solo Enterprise for kagent. Each step names the files it uses and explains what they do,
+so this is orientation rather than a reference you need to read first.
 
 ## Prerequisites
 
