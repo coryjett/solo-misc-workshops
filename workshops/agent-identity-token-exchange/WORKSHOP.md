@@ -424,8 +424,10 @@ membership resolved in the service that owns the entitlement.
 Measured on v2026.9.0 with a Keycloak subject token. Dropped by the exchange: `acr`, `azp`,
 `email`, `email_verified`, `family_name`, `given_name`, `groups`, `jti`, `name`,
 `preferred_username`, `realm_access`, `resource_access`, `sid`, `typ`. Added: `act`, `nbf`.
-Carried through: `sub`, `aud`, `scope`, `exp`, `iat`, `iss` and **`may_act`**, which is what
-allows a further delegation hop.
+Carried through: `sub`, `scope`, `exp`, `iat`, `iss` and **`may_act`**, which is what allows a
+further delegation hop. `aud` is **not** carried over by default: the delegated token has an
+audience only when the exchange asks for one with `-d audience=...`, which is what the
+per-server audience binding in Part 4 relies on.
 
 Worth confirming for any deployment: whether an existing service depends on a group claim
 arriving inside the token, and if so what the supported path is.
@@ -472,10 +474,20 @@ proxy plus the JWT policy.
 ```bash
 set -a; . /path/to/.env; set +a
 envsubst < 50-okta-agent-authz.yaml | kubectl apply -f -
-kubectl -n agent-identity delete enterpriseagentgatewaypolicy agent-x-authz --ignore-not-found
+# Only one JWT policy may target a route. Remove whichever one is currently on agent-x:
+# agent-x-authz if you came straight from Part 1, multi-idp-authz if you did Part 4.
+kubectl -n agent-identity delete enterpriseagentgatewaypolicy \
+  agent-x-authz multi-idp-authz --ignore-not-found
 ```
 
-Only one JWT policy may target a route, so the Keycloak one goes.
+> Measured: leaving the other policy attached makes a Keycloak token return **403** and an
+> Okta token **401** on the same route, with both policies reporting `Accepted` and
+> `Attached`. Check what is attached before debugging anything else:
+>
+> ```bash
+> kubectl -n agent-identity get enterpriseagentgatewaypolicy -o json \
+>   | jq -r '.items[] | "\(.metadata.name) -> \(.spec.targetRefs[].name)"'
+> ```
 
 **2. Okta emits no `groups` claim.** The Keycloak rule `'agent-x-users' in jwt.groups` does not
 port. `50-okta-agent-authz.yaml` authorizes on the scope instead: `'mcp.access' in jwt.scp`.
