@@ -253,12 +253,31 @@ The gateway speaks RFC 8693 directly, but it does not authenticate to Okta with 
 secret or add Okta's `audience` and `scope` parameters. A small translator service sits
 between them and supplies those. It is roughly sixty lines and we provide it.
 
+> **Prerequisite, confirm with Step 0a in `PRECONFIG.md` first.** This part only runs on a
+> tenant whose authorization server advertises
+> `urn:ietf:params:oauth:grant-type:token-exchange`. Measured on an Okta tenant that had API
+> Access Management and a working custom authorization server, the grant was absent org-wide
+> and this part could not run at all. Where that is the case, use the appendix instead: Okta
+> issues the subject token and the built-in STS performs the exchange.
+>
+> **This part is not covered by the clean-room validation.** Parts 1, 2, 4, 6 and the appendix
+> were verified end to end; Steps 0 and 3 were not, for the reason above.
+
+The translator is `k8s/10-shim.yaml` in the `okta-token-exchange` workshop, roughly sixty
+lines of Python that adds Basic client authentication plus the `audience` and `scope`
+parameters Okta requires. `WHY-SHIM.md` alongside it documents why the gateway cannot do this
+itself.
+
 ```bash
 kubectl create namespace token-exchange
 kubectl create secret generic okta-client -n token-exchange \
   --from-literal=client_id="${OKTA_CLIENT_ID}" \
   --from-literal=client_secret="${OKTA_CLIENT_SECRET}"
-# deploy the translator, point the gateway's STS_URI at it, restart
+
+# Deploy the translator, then point the gateway's STS_URI at it via
+# EnterpriseAgentgatewayParameters (STS_URI / STS_AUTH_TOKEN) and restart the controller.
+# See k8s/30-agw.yaml in the okta-token-exchange workshop for the parameter shape.
+kubectl apply -n token-exchange -f <okta-token-exchange>/k8s/10-shim.yaml
 ```
 
 Verify by inspecting the token the MCP backend actually received:
