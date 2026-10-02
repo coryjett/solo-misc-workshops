@@ -247,7 +247,13 @@ kubectl -n agent-identity create secret generic okta-client-secret \
 
 set -a; . /path/to/.env; set +a
 envsubst < 52-okta-native-exchange.yaml | kubectl apply -f -
+kubectl -n agent-identity rollout status deploy/okta-jwks-proxy --timeout=180s
+kubectl -n agent-identity rollout status deploy/mcp-echo --timeout=180s
 ```
+
+This is self-contained: it brings its own echo MCP server, its own `/mcp-echo` route, and the
+JWKS passthrough, so nothing here disturbs the `mcp-a` and `mcp-b` policies from Parts 1, 2
+and 4.
 
 > **The secret key must be `clientSecret`.** With any other key the policy still reports
 > `Accepted: True`, and the gateway forwards **the caller's own token** to the backend instead
@@ -268,8 +274,10 @@ OKTA_JWT=$(curl -s -X POST "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/token
   -d "username=${OKTA_TEST_USERNAME}" -d "password=${OKTA_TEST_PASSWORD}" \
   -d "scope=openid ${OKTA_SCOPE}" | jq -r .access_token)
 
-# an MCP server that echoes its inbound Authorization makes the swap visible
-kubectl exec -n wp-a deploy/sleep -- curl -s -X POST http://$GW/mcp-a \
+# 52-okta-native-exchange.yaml ships an MCP server that echoes its inbound Authorization,
+# on its own /mcp-echo route so it cannot collide with the mcp-a policies from Parts 1-4.
+# Initialize first to get a session id, then call the whoami tool.
+kubectl exec -n wp-a deploy/sleep -- curl -s -X POST http://$GW/mcp-echo \
   -H "Authorization: Bearer $OKTA_JWT" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"whoami","arguments":{}}}'
