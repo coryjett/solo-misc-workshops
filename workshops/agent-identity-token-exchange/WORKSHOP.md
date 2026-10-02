@@ -55,19 +55,19 @@ required.
 The built-in STS is the exchange point, and it accepts subject tokens from more than one
 issuer at once: `subjectValidators` is a list.
 
-**Part 3 is a variant of step (3), not a different architecture.** It points the gateway's
-`STS_URI` at a translator that forwards to Okta instead:
+**Part 3 is a variant of step (3), not a different architecture.** The gateway performs the
+exchange at your Okta authorization server instead of its built-in STS:
 
 ```
-   agentgateway STS_URI ──▶ translator ──▶ Okta /v1/token
-                            (adds client auth, audience, scope)
+   agentgateway ──▶ Okta /v1/token
+                    (client auth, audience and scope from entTokenExchange.okta)
 ```
 
 > **It only works where Okta issued the inbound token.** Measured with a control against a
 > live tenant: Okta exchanges a subject token it issued, and refuses one minted by a different
 > IdP with `invalid_request: 'subject_token' is invalid`, before policy evaluation. Routing
-> the request through agentgateway and the translator does not change that. The translator
-> adds client authentication and parameters; it does not re-issue the subject token.
+> the request through the gateway does not change that: the gateway supplies client
+> authentication and parameters, it does not re-issue the subject token.
 >
 > This is what decides the exchange point for §6.1, an employee in Okta acting for a customer
 > in Auth0. That flow crosses identity providers, so the built-in STS performs the exchange,
@@ -93,7 +93,7 @@ agent distinctly regardless of which domain the user came from.
 | Path | Exchange performed by | Status |
 |---|---|---|
 | **A** | agentgateway's built-in STS | Validated end to end on controller v2026.9.0, with Keycloak and Okta as subject issuers |
-| **B** | Your Okta authorization server, via a translator | Exchange verified directly against a live Okta tenant; the full path through the translator was not run |
+| **B** | Your Okta authorization server, natively via `entTokenExchange.okta` | Verified end to end on v2026.9.3 against a live Okta tenant: the MCP backend received an Okta-minted token carrying the exchange client's `cid` and down-scoped scopes |
 
 Path A establishes the delegation model and is the one that spans domains. Path B puts your
 own authorization server at the centre, which security reviews often prefer.
@@ -228,51 +228,62 @@ for and which agent is acting.
 
 ## Part 3 — Exchange at your Okta authorization server
 
-The gateway speaks RFC 8693 directly, but it does not authenticate to Okta with a client
-secret or add Okta's `audience` and `scope` parameters. A small translator service sits
-between them and supplies those. It is roughly sixty lines and is included here.
+The gateway performs the RFC 8693 exchange against your own authorization server, so the
+token reaching the MCP backend is minted by Okta rather than by the built-in STS.
 
-> **Prerequisite, see Step 0a in `PRECONFIG.md`.** This part needs the token-exchange grant
-> enabled on the service app and in the access policy rule. Do not judge this from the
-> authorization server's discovery metadata, which omits the grant even where it works.
->
-> **It also needs Okta to have issued the subject token.** Measured with a control on a live
-> tenant: an Okta-issued subject token is exchanged successfully, while a Keycloak-issued one
-> is refused with `invalid_request: 'subject_token' is invalid`, before policy evaluation.
-> Okta exchanges only tokens it issued. If your users authenticate somewhere other than Okta,
-> use the appendix instead, where the built-in STS performs the exchange.
->
-> **Validation status.** Parts 1, 2, 4, 6 and the appendix were verified end to end clean-room.
-> The Okta exchange itself was verified directly against a live tenant. The full Part 3 path
-> through the translator was not run.
+> **Prerequisite.** The token-exchange grant must be enabled on the service app (A4) and in
+> the access policy rule (A3), and the inbound token must have been issued by Okta. See
+> Step 0a in `PRECONFIG.md`. Do not judge this from the authorization server's discovery
+> metadata, which omits the grant even where it works.
 
-The translator is `k8s/10-shim.yaml` in the `okta-token-exchange` workshop, roughly sixty
-lines of Python that adds Basic client authentication plus the `audience` and `scope`
-parameters Okta requires. `WHY-SHIM.md` alongside it documents why the gateway cannot do this
-itself.
+No translator or shim is involved. Earlier versions of agentgateway could not authenticate to
+Okta's token endpoint or add the `audience` and `scope` parameters, so a small proxy supplied
+them. That gap is closed: `entTokenExchange.okta` carries client authentication, audience and
+scopes directly.
 
 ```bash
-kubectl create namespace token-exchange
-kubectl create secret generic okta-client -n token-exchange \
-  --from-literal=client_id="${OKTA_CLIENT_ID}" \
-  --from-literal=client_secret="${OKTA_CLIENT_SECRET}"
+kubectl -n agent-identity create secret generic okta-client-secret \
+  --from-literal=clientSecret="${OKTA_CLIENT_SECRET}"
 
-# Deploy the translator, then point the gateway's STS_URI at it via
-# EnterpriseAgentgatewayParameters (STS_URI / STS_AUTH_TOKEN) and restart the controller.
-# See k8s/30-agw.yaml in the okta-token-exchange workshop for the parameter shape.
-kubectl apply -n token-exchange -f <okta-token-exchange>/k8s/10-shim.yaml
+set -a; . /path/to/.env; set +a
+envsubst < 52-okta-native-exchange.yaml | kubectl apply -f -
 ```
 
-Verify by inspecting the token the MCP backend actually received:
+> **The secret key must be `clientSecret`.** With any other key the policy still reports
+> `Accepted: True`, and the gateway forwards **the caller's own token** to the backend instead
+> of refusing the request. The only hard error appears in the xDS ACK. Tracked as
+> `solo-io/agentgateway-enterprise` issue 7824. Check before trusting the result:
+>
+> ```bash
+> kubectl -n agent-identity get enterpriseagentgatewaypolicy okta-native-exchange \
+>   -o jsonpath='{.status.ancestors[0].conditions[*].message}'
+> # want: Policy accepted Attached to all targets
+> ```
+
+Verify by inspecting the token the MCP backend actually received, not the HTTP status:
 
 ```bash
-kubectl exec -n wp-a deploy/sleep -- curl -s http://$GW/mcp -H "Authorization: Bearer $USER_JWT" | jq -r .authorization \
-  | cut -d' ' -f2 | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{iss, sub, aud, scp}'
+OKTA_JWT=$(curl -s -X POST "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/token" \
+  -d grant_type=password -d "client_id=${OKTA_TEST_CLIENT_ID}" \
+  -d "username=${OKTA_TEST_USERNAME}" -d "password=${OKTA_TEST_PASSWORD}" \
+  -d "scope=openid ${OKTA_SCOPE}" | jq -r .access_token)
+
+# an MCP server that echoes its inbound Authorization makes the swap visible
+kubectl exec -n wp-a deploy/sleep -- curl -s -X POST http://$GW/mcp-a \
+  -H "Authorization: Bearer $OKTA_JWT" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"whoami","arguments":{}}}'
 ```
 
-What this establishes: `iss` is **your Okta authorization server**, `aud` is
-`api://mcp-demo`, and the token reaching the MCP server is **not** the token the user
-presented. The user's credential never travels past the gateway.
+Measured on v2026.9.3 against a live tenant:
+
+| | `cid` | `scp` |
+|---|---|---|
+| Token the user presented | the test subject client | `openid`, `mcp.access` |
+| Token the backend received | **the exchange client** | **`mcp.access`** |
+
+Same `sub` and `aud`, a new `jti`, and the extra scope dropped. The user's credential stopped
+at the gateway, and the downstream token was minted by your authorization server.
 
 ---
 
