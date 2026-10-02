@@ -1,0 +1,119 @@
+# Two identity providers behind one gateway.
+#
+# `jwtAuthentication.providers` is a list, so accepting more than one issuer needs no extra
+# machinery: add a provider per IdP, each with its own JWKS source. A token is accepted if it
+# validates against any listed provider, and `jwt.iss` then tells the authorization policy
+# which provider minted it.
+#
+# Here two Keycloak realms stand in for two providers. Swap either entry's `issuer` and `jwks`
+# for a real Okta, Auth0 or Entra tenant without changing the policy shape: point `jwks.remote`
+# at a Backend that resolves the provider's host, or use a static JWKS for an issuer outside
+# the cluster.
+#
+# Apply after ./00-setup-realm.sh idp-a and ./00-setup-realm.sh idp-b.
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: multi-idp-authz
+  namespace: agent-identity
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: agent-x
+  traffic:
+    jwtAuthentication:
+      mode: Strict          # no token, no entry. Fail closed.
+      preserveToken: true   # keep the original token available downstream for the exchange.
+                            # Requires v2026.9.0 or later; on v2026.8.2 and earlier the API
+                            # server rejects it as an unknown field. Drop the line if you are
+                            # pinned to an older controller.
+      providers:
+        # ---- Provider A: workforce ----
+        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/idp-a
+          jwks:
+            remote:
+              backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
+              jwksPath: /realms/idp-a/protocol/openid-connect/certs
+        # ---- Provider B: customers ----
+        - issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/idp-b
+          jwks:
+            remote:
+              backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
+              jwksPath: /realms/idp-b/protocol/openid-connect/certs
+    authorization:
+      action: Require
+      policy:
+        matchExpressions:
+          # Entitlement differs per provider, so the rule names the issuer explicitly rather
+          # than trusting a group name that both realms could mint. Two IdPs can both assert
+          # `agent-x-users`; only one of them is your workforce directory.
+          - >-
+            (jwt.iss.endsWith('/realms/idp-a') && 'agent-x-users' in jwt.groups)
+            || (jwt.iss.endsWith('/realms/idp-b') && 'customers' in jwt.groups)
+---
+# Audience binding: a token minted for mcp-a must not open mcp-b.
+#
+# Each MCP route accepts only its own audience. Without this an exchanged token is a bearer
+# credential for everything behind the gateway, which is the failure worth proving absent.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-a-audience
+  namespace: agent-identity
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mcp-a
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        # Only tokens the STS minted, and only those carrying this server's audience.
+        - issuer: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
+          audiences: ["api://mcp-a"]
+          jwks:
+            remote:
+              backendRef:
+                name: enterprise-agentgateway
+                namespace: agentgateway-system
+                port: 7777
+              jwksPath: /.well-known/jwks.json
+    authorization:
+      action: Require
+      policy:
+        matchExpressions:
+          # Delegated tokens only. `act` is present only on an exchanged token, so a raw user
+          # token is rejected here even though the user is otherwise legitimate.
+          - "has(jwt.act)"
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-b-audience
+  namespace: agent-identity
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mcp-b
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
+          audiences: ["api://mcp-b"]
+          jwks:
+            remote:
+              backendRef:
+                name: enterprise-agentgateway
+                namespace: agentgateway-system
+                port: 7777
+              jwksPath: /.well-known/jwks.json
+    authorization:
+      action: Require
+      policy:
+        matchExpressions:
+          - "has(jwt.act)"

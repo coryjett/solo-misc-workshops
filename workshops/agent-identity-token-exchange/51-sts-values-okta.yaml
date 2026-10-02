@@ -1,0 +1,36 @@
+# STS configured for a real external IdP as the subject issuer, alongside Keycloak.
+#
+#   set -a; . /path/to/.env; set +a
+#   envsubst < 51-sts-values-okta.yaml > /tmp/sts-okta.yaml
+#   helm upgrade enterprise-agentgateway <chart> --version $V \
+#     -n agentgateway-system --reuse-values -f /tmp/sts-okta.yaml
+#
+# WARNING on skipMayActClaimValidation:
+#   The STS requires the subject token to carry a may_act claim shaped {"sub": "<actor>"},
+#   naming which actor may act for that user. Keycloak sets it with a hardcoded-claim mapper
+#   (00-setup-realm.sh). Okta custom claims do not emit nested JSON objects, so an Okta
+#   subject token has no may_act and the exchange is refused with
+#   "subject token does not contain may_act claim".
+#
+#   skipMayActClaimValidation bypasses that check for every subject validator. The source
+#   comments say to enable it only in trusted environments: it removes the user's ability to
+#   constrain which agent may act on their behalf. It is set here so the flow can be
+#   demonstrated against an IdP that cannot mint the claim. It is NOT a production posture.
+#   It is also not a documented chart value; it works because the chart serialises unlisted
+#   keys under `tokenExchange` into the token exchange config JSON.
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+  skipMayActClaimValidation: true
+  subjectValidators:
+    - validatorType: remote
+      remoteConfig:
+        url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/demo/protocol/openid-connect/certs"
+    - validatorType: remote
+      remoteConfig:
+        url: "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/keys"
+  actorValidators:
+    - validatorType: k8s
+  apiValidators:
+    - validatorType: k8s
