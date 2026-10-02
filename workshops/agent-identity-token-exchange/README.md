@@ -16,16 +16,16 @@ a signed claim rather than a header.
 
 ## Scope
 
-| Part | Min | |
-|---|---|---|
-| Step 0 | 10 | Will your Okta tenant exchange a token issued by a different IdP |
-| 1 | 20 | The delegation chain |
-| 2 | 20 | Exchange at the built-in STS |
-| 3 | 25 | Exchange at your own Okta authorization server |
-| 4 | 20 | Two identity providers, audience binding |
-| 5 | 15 | Consent across MCP servers (design walkthrough) |
-| 6 | 5 | Which claims survive |
-| Appendix | | A real external IdP as subject issuer |
+| Part | Min | | Manifests |
+|---|---|---|---|
+| [Step 0](WORKSHOP.md#step-0--confirm-the-cross-provider-exchange-10-min) | 10 | Will your Okta tenant exchange a token issued by a different IdP | |
+| [Part 1](WORKSHOP.md#part-1--the-delegation-chain-20-min) | 20 | The delegation chain | [`01-agent-authz.yaml`](01-agent-authz.yaml), [`02-mcp-authz.yaml`](02-mcp-authz.yaml) |
+| [Part 2](WORKSHOP.md#part-2--exchange-for-a-delegated-token-20-min) | 20 | Exchange at the built-in STS | [`sts-values.yaml`](sts-values.yaml) |
+| [Part 3](WORKSHOP.md#part-3--exchange-at-your-okta-authorization-server-25-min) | 25 | Exchange at your own Okta authorization server | |
+| [Part 4](WORKSHOP.md#part-4--multiple-identity-providers-20-min) | 20 | Two identity providers, audience binding | [`00-setup-realm-multi.sh`](00-setup-realm-multi.sh), [`40-multi-idp-policy.yaml`](40-multi-idp-policy.yaml) |
+| [Part 5](WORKSHOP.md#part-5--consent-across-multiple-mcp-servers-15-min) | 15 | Consent across MCP servers (design walkthrough) | |
+| [Part 6](WORKSHOP.md#part-6--which-claims-survive-the-exchange-5-min) | 5 | Which claims survive | |
+| [Appendix](WORKSHOP.md#appendix--running-with-a-real-external-idp-as-the-subject-issuer) | | A real external IdP as subject issuer | [`50-okta-agent-authz.yaml`](50-okta-agent-authz.yaml), [`51-sts-values-okta.yaml`](51-sts-values-okta.yaml) |
 
 Parts 1, 2, 4 and 6 need only a cluster. **Steps 0 and 3 require an Okta tenant whose
 authorization server advertises the token-exchange grant**; where it does not, the appendix
@@ -33,22 +33,22 @@ reaches the same outcome with the IdP issuing and the built-in STS exchanging.
 
 ## Flow
 
-```
-1. PRECONFIG.md, Step 0a      which path your tenant supports
-2. PRECONFIG.md, Part A       Okta setup, if Steps 0 and 3 are in scope
-3. ./00-kind.sh               local cluster
-4. ./00-platform.sh           Gateway API CRDs, Agentgateway, test client   (needs LICENSE_KEY)
-5. 00-keycloak.yaml + 00-setup-realm.sh
-6. 01-agent-authz.yaml, 02-mcp-authz.yaml
-7. WORKSHOP.md from Part 1
-```
+| | Step | File |
+|---|---|---|
+| 1 | Which path your tenant supports | [`PRECONFIG.md` Step 0a](PRECONFIG.md#step-0a--the-ten-second-check-do-this-first) |
+| 2 | Okta setup, if Steps 0 and 3 are in scope | [`PRECONFIG.md` Part A](PRECONFIG.md#part-a--okta-configuration) |
+| 3 | Local cluster | [`00-kind.sh`](00-kind.sh) |
+| 4 | Gateway API CRDs, Agentgateway, test client (needs `LICENSE_KEY`) | [`00-platform.sh`](00-platform.sh), [`00-client.yaml`](00-client.yaml) |
+| 5 | Identity provider and realm | [`00-keycloak.yaml`](00-keycloak.yaml), [`00-setup-realm.sh`](00-setup-realm.sh) |
+| 6 | Per-hop authorization | [`01-agent-authz.yaml`](01-agent-authz.yaml), [`02-mcp-authz.yaml`](02-mcp-authz.yaml) |
+| 7 | Run the workshop | [`WORKSHOP.md`](WORKSHOP.md) from [Part 1](WORKSHOP.md#part-1--the-delegation-chain-20-min) |
 
 ## Prerequisites
 
 - A cluster, or Docker and `kind`
 - `kubectl`, `helm`, `jq`, `envsubst`
 - A Solo enterprise license key
-- For Steps 0 and 3 only: an Okta tenant, configured per `PRECONFIG.md`
+- For Steps 0 and 3 only: an Okta tenant, configured per [`PRECONFIG.md`](PRECONFIG.md)
 
-Written against Enterprise Agentgateway **v2026.9.0**. `WORKSHOP.md` records which parts are
-clean-room verified and which are not.
+Written against Enterprise Agentgateway **v2026.9.0**. [`WORKSHOP.md`](WORKSHOP.md) records
+which parts are clean-room verified and which are not.
