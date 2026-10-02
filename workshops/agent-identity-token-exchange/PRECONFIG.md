@@ -1,4 +1,4 @@
-# Pre-configuration for the token exchange working session
+# Pre-configuration for the token exchange workshop
 
 Solo.io
 
@@ -89,8 +89,8 @@ curl -s -X POST "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/token" \
   -d scope="mcp.access" | jq .
 ```
 
-Send us whatever comes back. If it succeeds, Okta can be the exchange point for cross-IdP
-flows on your tenant and Part 3 widens accordingly.
+If it succeeds, Okta can be the exchange point for cross-IdP flows on your tenant and Part 3
+widens accordingly.
 
 ---
 
@@ -157,7 +157,8 @@ On that authorization server, **Scopes → Add Scope**
 | Grant types | **Client Credentials**, **Token Exchange** (under Advanced) |
 | Require DPoP | **off** — new API Services apps may default to on, and the exchange then fails with `invalid_dpop_proof` |
 
-Assign it to the A3 access policy rule. Please send us the Client ID and Client Secret.
+Assign it to the A3 access policy rule, and keep the Client ID and Client Secret for the
+exchange requests in Part 3.
 
 ### A5. Test subject client and test user
 
@@ -169,7 +170,7 @@ Assign it to the A3 access policy rule. Please send us the Client ID and Client 
 | Grant types | **Authorization Code**, **Resource Owner Password** |
 | Sign-in redirect URI | `http://localhost:8080/callback` (unused, required field) |
 
-Native apps are public, so there is no secret. Please send us the Client ID.
+Native apps are public, so there is no secret. Keep the Client ID.
 
 Then **Directory → People → Add Person**:
 
@@ -189,7 +190,7 @@ that rule to specific users. **Do not use a real employee account.**
 ### A6. Confirm the test user can actually mint a token
 
 Thirty seconds, and it catches the A5 problem up front rather than mid-workshop.
-Uses the values you are about to send us in A7:
+Uses the values collected in A7:
 
 ```bash
 curl -s -X POST "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/token" \
@@ -228,7 +229,7 @@ email.
 Auth0 can stand in for the second IdP instead of a second Keycloak realm. For that you need
 an Auth0 tenant with:
 
-- An **API** registered with identifier `api://mcp-demo` (or tell us yours)
+- An **API** registered with identifier `api://mcp-demo` (or your own)
 - An **Application** (Machine to Machine) authorized against that API, and its client ID and secret
 - A test user with a known password
 - Confirmation of whether your Auth0 tenant has **token exchange** enabled
@@ -245,7 +246,7 @@ Nothing to configure. Listed so you know what is stood up:
 - Keycloak (two realms, to stand in for two IdPs)
 - A small translator service between the gateway and Okta. **Why it exists:** the gateway
   speaks RFC 8693 directly, but it does not authenticate to Okta with a client secret or add
-  Okta's `audience` and `scope` parameters. The translator adds those. It is about sixty lines and we provide it
+  Okta's `audience` and `scope` parameters. The translator adds those. It is about sixty lines and is included here
 - Two MCP servers and a backing API, to prove per-server authorization and audience binding
 
 ### Confirm your Agentgateway version

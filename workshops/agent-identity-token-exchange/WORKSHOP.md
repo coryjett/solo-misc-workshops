@@ -8,8 +8,8 @@ Agent identity, token exchange, claim mapping, and consent across multiple MCP s
 run entirely on in-cluster Keycloak and agentgateway's built-in STS. The appendix covers using
 a real external IdP as the subject issuer when it cannot perform the exchange itself.
 
-Work through **`PRECONFIG.md`** first, starting with Step 0a, which decides whether the Okta
-parts can run at all on your tenant.
+Work through **`PRECONFIG.md`** first. It lists the Okta configuration that needs to be in
+place before the Okta-dependent parts will run.
 
 **Target version: Enterprise Agentgateway `v2026.9.0`**, which is what `00-platform.sh`
 installs. Everything here is written against it. Confirm your version first:
@@ -106,7 +106,7 @@ own authorization server at the centre, which security reviews often prefer.
 
 ---
 
-## Part 1 — The delegation chain (20 min)
+## Part 1 — The delegation chain
 
 Builds on the end-to-end workshop from the previous session. Platform, identity provider,
 and per-hop authorization.
@@ -163,7 +163,7 @@ caller supplied. This addresses the header-spoofing concern at this hop.
 
 ---
 
-## Part 2 — Exchange for a delegated token (20 min)
+## Part 2 — Exchange for a delegated token
 
 Enable the built-in STS and perform an RFC 8693 exchange.
 
@@ -226,11 +226,11 @@ for and which agent is acting.
 
 ---
 
-## Part 3 — Exchange at your Okta authorization server (25 min)
+## Part 3 — Exchange at your Okta authorization server
 
 The gateway speaks RFC 8693 directly, but it does not authenticate to Okta with a client
 secret or add Okta's `audience` and `scope` parameters. A small translator service sits
-between them and supplies those. It is roughly sixty lines and we provide it.
+between them and supplies those. It is roughly sixty lines and is included here.
 
 > **Prerequisite, see Step 0a in `PRECONFIG.md`.** This part needs the token-exchange grant
 > enabled on the service app and in the access policy rule. Do not judge this from the
@@ -276,7 +276,7 @@ presented. The user's credential never travels past the gateway.
 
 ---
 
-## Part 4 — Multiple identity providers (20 min)
+## Part 4 — Multiple identity providers
 
 Two Keycloak realms, `idp-a` and `idp-b`, standing in for two providers. Both accepted by
 the gateway, each mapping to different entitlements.
@@ -371,17 +371,17 @@ token.
 
 ---
 
-## Part 5 — Consent across multiple MCP servers (15 min)
+## Part 5 — Consent across multiple MCP servers
 
 The goal is at most one consent step per new capability grant, rather than one per server.
 
 This uses the eager-OAuth and elicitation patterns. Standing these up requires DNS, a TLS
-listener, and Postgres for OAuth state, so this part is usually a design walkthrough rather
-than a hands-on exercise.
+listener, and Postgres for OAuth state, so depending on how far Parts 0 through 4 have taken
+us this part is usually a design walkthrough rather than a hands-on exercise.
 
 ---
 
-## Part 6 — Which claims survive the exchange (5 min)
+## Part 6 — Which claims survive the exchange
 
 Worth covering explicitly, because it bears on your claim-mapping criterion and because the
 behaviour is deliberate rather than incidental.
@@ -413,7 +413,7 @@ arriving inside the token, and if so what the supported path is.
 
 ---
 
-## What the session produces
+## What this produces
 
 Evidence, not only a working demo:
 
