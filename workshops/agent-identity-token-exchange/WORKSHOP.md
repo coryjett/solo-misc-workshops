@@ -396,14 +396,18 @@ The design reasoning:
   copy of your IdP's token
 - **Simplicity** — downstream services trust one issuer and validate a small claim set
 
-Your criterion reads: *"Claim mapping / identity normalization — no silent dropping or
-renaming of security-relevant claims."* The claims are not dropped silently; which claims the
-STS mints is documented behaviour, and the practical consequence is that **downstream
-authorization keys on `sub` and `act`**, with group membership resolved in the service that
-owns the entitlement.
+Nothing is dropped silently: which claims the STS mints is documented behaviour. The
+practical consequence is that **downstream authorization keys on `sub` and `act`**, with group
+membership resolved in the service that owns the entitlement.
 
-The one thing to confirm together: whether any existing service of yours depends on a group
-claim arriving inside the token, and if so what the supported path is.
+Measured on v2026.9.0 with a Keycloak subject token. Dropped by the exchange: `acr`, `azp`,
+`email`, `email_verified`, `family_name`, `given_name`, `groups`, `jti`, `name`,
+`preferred_username`, `realm_access`, `resource_access`, `sid`, `typ`. Added: `act`, `nbf`.
+Carried through: `sub`, `aud`, `scope`, `exp`, `iat`, `iss` and **`may_act`**, which is what
+allows a further delegation hop.
+
+Worth confirming for any deployment: whether an existing service depends on a group claim
+arriving inside the token, and if so what the supported path is.
 
 ---
 
