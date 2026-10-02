@@ -31,21 +31,16 @@ required.
 
 ```
                       ┌──────────────┐
-  user ──(1) auth────▶│   Keycloak   │   realm idp-a  (identity provider 1)
-                      │   two realms │   realm idp-b  (identity provider 2)
+  user ──(1) auth────▶│  identity    │   Keycloak realms idp-a / idp-b in the lab;
+                      │  provider    │   Okta or Auth0 in production
                       └──────┬───────┘
                              │ user JWT
                              ▼
                    ┌────────────────────┐
                    │   agentgateway     │ (2) validate user JWT, authorize user→agent
                    │                    │ (3) exchange for an on-behalf-of token
-                   │   STS :7777        │─────────────┐
-                   └─────────┬──────────┘             │ RFC 8693
-                             │                        ▼
-                             │                 ┌─────────────┐
-                             │                 │ translator  │──▶ Okta /v1/token
-                             │                 │    STS      │    (adds client auth,
-                             │                 └─────────────┘     audience, scope)
+                   │   STS :7777        │
+                   └─────────┬──────────┘
                              │ OBO token: sub=user, act=agent
                              ▼
                    ┌──────────────────┐
@@ -57,6 +52,27 @@ required.
                       └──────────┘
 ```
 
+The built-in STS is the exchange point, and it accepts subject tokens from more than one
+issuer at once: `subjectValidators` is a list.
+
+**Part 3 is a variant of step (3), not a different architecture.** It points the gateway's
+`STS_URI` at a translator that forwards to Okta instead:
+
+```
+   agentgateway STS_URI ──▶ translator ──▶ Okta /v1/token
+                            (adds client auth, audience, scope)
+```
+
+> **It only works where Okta issued the inbound token.** Measured with a control against a
+> live tenant: Okta exchanges a subject token it issued, and refuses one minted by a different
+> IdP with `invalid_request: 'subject_token' is invalid`, before policy evaluation. Routing
+> the request through agentgateway and the translator does not change that. The translator
+> adds client authentication and parameters; it does not re-issue the subject token.
+>
+> This is what decides the exchange point for §6.1, an employee in Okta acting for a customer
+> in Auth0. That flow crosses identity providers, so the built-in STS performs the exchange,
+> with both providers registered as subject issuers. Verified with Keycloak and Okta.
+
 The flow: the user authenticates at your
 identity provider, the gateway exchanges that token for one carrying **`Subject: User`** and
 **`Actor: Agent`**, and downstream services accept only the exchanged token.
@@ -66,38 +82,36 @@ identity provider, the gateway exchanges that token for one carrying **`Subject:
 | Path | Exchange performed by | Status |
 |---|---|---|
 | **A** | agentgateway's built-in STS | Validated end to end on controller v2026.9.0 with Keycloak 26 |
-| **B** | Your Okta authorization server, via a translator | Validated against a live Okta tenant using an Okta-issued subject token |
+| **B** | Your Okta authorization server, via a translator | Exchange verified directly against a live Okta tenant with an Okta-issued subject token; the full path through the translator was not run |
 
 We build both. Path A establishes the delegation model quickly; Path B puts your own
 authorization server at the centre of it.
 
-### One thing to confirm first
+### Which path applies to you
 
-On the 09-29 call we sketched Keycloak issuing the user token and **Okta** performing the
-exchange. Okta's documentation describes token exchange "within a single authorization server
-or between other authorization servers under the same Okta tenant." A subject token issued by
-a **different** identity provider is not described either way.
+**Traversing identity domains works.** The built-in STS accepted subject tokens from Keycloak
+and from a live Okta tenant in the same configuration, issuing delegated tokens carrying the
+user as `sub` and the agent as `act` in both cases. `subjectValidators` is a list, so Keycloak,
+Okta, Auth0 and Entra can be accepted issuers simultaneously, each validated against its own
+JWKS endpoint. That covers the employee-acting-for-a-customer case directly.
 
-Worth being precise about what this does and does not affect. **It only applies when Okta is
-the exchange point.** If the exchange is performed by agentgateway's own STS, a token issued
-by a different provider is a configuration matter: the STS `subjectValidator` validates
-against any JWKS endpoint it can reach, so Keycloak, Auth0, Okta and Entra are all acceptable
-issuers.
+The only thing the measurement settles is **where** the exchange happens:
 
-So there are two viable architectures, and the choice is yours rather than a constraint:
+| Subject token issued by | Exchanged at Okta | Exchanged at the built-in STS |
+|---|---|---|
+| Okta, same authorization server | yes | yes |
+| A different IdP | `invalid_request: 'subject_token' is invalid` | yes |
 
-- **Exchange at the gateway's STS** — multiple providers is configuration, available today
-- **Exchange at your Okta authorization server** — puts your own authorization server at the
-  centre of it, which security reviews often prefer, though it only exchanges tokens it
-  issued
-  Keycloak-issued token
+Okta refuses at subject validation, before policy evaluation, so it is about who issued the
+token rather than how the request was formed. Okta also accepts only `access_token` and
+`id_token` subject types.
 
-**This is already settled, measured with a control against a live Okta tenant.** An
-Okta-issued subject token is exchanged successfully; a subject token from a different IdP is
-refused with `invalid_request: 'subject_token' is invalid`, before policy evaluation. So Okta
-can be the exchange point only where Okta also issued the inbound token. Anything that crosses
-identity providers has to be exchanged by the built-in STS. `PRECONFIG.md` keeps the one-curl
-confirmation if you want to re-run it on your own tenant.
+- **Same-IdP flows** can use either path. Path B puts your own authorization server at the
+  centre, which security reviews often prefer.
+- **Cross-IdP flows use Path A**, with the gateway as the exchange point and your identity
+  providers as issuers.
+
+`PRECONFIG.md` keeps a one-curl confirmation if you want to re-run this on your own tenant.
 
 ---
 
