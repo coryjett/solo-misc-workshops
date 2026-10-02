@@ -69,10 +69,14 @@ intend to send DPoP proofs; new API Services apps may have it on, and the exchan
 
 With all three in place, Step 0 below is the real test.
 
-## Step 0 — The five-minute test
+## Step 0 — Optional: confirm the cross-IdP result on your tenant
 
-Needs: a user token from Keycloak (or Auth0), and the Okta custom authorization server from
-Part A below.
+**Expected result: refused.** Measured with a control on a live Okta tenant, an Okta-issued
+subject token is exchanged successfully while one issued by a different IdP comes back
+`invalid_request: 'subject_token' is invalid`, rejected before policy evaluation.
+
+Two minutes, and only worth running if you have **inbound federation** configured, which is
+the one condition that might change the answer for you. It needs A3 and A4 in place.
 
 ```bash
 # SUBJECT_TOKEN = a JWT issued by Keycloak/Auth0 for a test user
@@ -85,8 +89,8 @@ curl -s -X POST "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/token" \
   -d scope="mcp.access" | jq .
 ```
 
-Send us whatever comes back, success or error. An `invalid_grant` naming the issuer is a
-perfectly useful answer.
+Send us whatever comes back. If it succeeds, Okta can be the exchange point for cross-IdP
+flows on your tenant and Part 3 widens accordingly.
 
 ---
 
@@ -125,6 +129,9 @@ On that authorization server, **Scopes → Add Scope**
 
 ### A3. Enable the Token Exchange grant
 
+> **Only needed for Part 3**, where Okta performs the exchange. Skip A3 and A4 if the built-in
+> STS is doing the exchange, which is required for any flow crossing identity providers.
+
 **Access Policies → Add Policy** (or edit Default), assigned to all clients, then **Add Rule**:
 
 | Field | Value |
@@ -139,13 +146,16 @@ On that authorization server, **Scopes → Add Scope**
 
 ### A4. Exchange client
 
+> **Only needed for Part 3.** See the note on A3.
+
 **Applications → Create App Integration → OIDC → API Services**
 
 | Field | Value |
 |---|---|
 | App name | `agw-token-exchange-client` |
 | Client authentication | Client secret |
-| Grant types | **Client Credentials**, **Token Exchange** |
+| Grant types | **Client Credentials**, **Token Exchange** (under Advanced) |
+| Require DPoP | **off** — new API Services apps may default to on, and the exchange then fails with `invalid_dpop_proof` |
 
 Assign it to the A3 access policy rule. Please send us the Client ID and Client Secret.
 

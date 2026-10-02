@@ -73,7 +73,8 @@ authorization server at the centre of it.
 
 ### One thing to confirm first
 
-This workshop has Keycloak issuing the user token and **Okta** performing the exchange. Okta's documentation describes token exchange "within a single authorization server
+On the 09-29 call we sketched Keycloak issuing the user token and **Okta** performing the
+exchange. Okta's documentation describes token exchange "within a single authorization server
 or between other authorization servers under the same Okta tenant." A subject token issued by
 a **different** identity provider is not described either way.
 
@@ -87,43 +88,16 @@ So there are two viable architectures, and the choice is yours rather than a con
 
 - **Exchange at the gateway's STS** — multiple providers is configuration, available today
 - **Exchange at your Okta authorization server** — puts your own authorization server at the
-  centre of it, which security reviews often prefer, and Step 0 confirms whether it accepts a
+  centre of it, which security reviews often prefer, though it only exchanges tokens it
+  issued
   Keycloak-issued token
 
-**Step 0 answers it in about ten minutes, before we deploy anything.**
-
----
-
-## Step 0 — Confirm the cross-provider exchange (10 min)
-
-```bash
-# A user token issued by Keycloak. Keycloak is in-cluster, so mint the token from the
-# in-cluster test pod rather than from your laptop — the cluster network is not routable
-# from a Mac. Every other request in this workshop runs the same way.
-SUBJECT_TOKEN=$(kubectl exec -n wp-a deploy/sleep -- curl -s -X POST \
-  "http://keycloak.keycloak.svc.cluster.local:8080/realms/demo/protocol/openid-connect/token" \
-  -d grant_type=password -d client_id=demo-client -d client_secret=demo-secret \
-  -d username=alice -d password=pw \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
-
-# Ask Okta to exchange it
-curl -s -X POST "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/token" \
-  -u "${OKTA_CLIENT_ID}:${OKTA_CLIENT_SECRET}" \
-  -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
-  -d subject_token="${SUBJECT_TOKEN}" \
-  -d subject_token_type=urn:ietf:params:oauth:token-type:access_token \
-  -d audience="${OKTA_AUDIENCE}" \
-  -d scope="${OKTA_SCOPE}" | jq .
-```
-
-**If an access token comes back**, Part 3 runs as sketched: Keycloak authenticates, Okta
-exchanges.
-
-**If Okta rejects it**, Part 3 runs with Okta issuing the subject token instead. The
-delegation proof is identical; only the issuer of the inbound token differs. Part 4 then
-covers the multiple-provider requirement using two Keycloak realms.
-
-Either way, record the exact response. It is the evidence for identity propagation.
+**This is already settled, measured with a control against a live Okta tenant.** An
+Okta-issued subject token is exchanged successfully; a subject token from a different IdP is
+refused with `invalid_request: 'subject_token' is invalid`, before policy evaluation. So Okta
+can be the exchange point only where Okta also issued the inbound token. Anything that crosses
+identity providers has to be exchanged by the built-in STS. `PRECONFIG.md` keeps the one-curl
+confirmation if you want to re-run it on your own tenant.
 
 ---
 
@@ -438,7 +412,6 @@ arriving inside the token, and if so what the supported path is.
 
 Evidence, not only a working demo:
 
-- [ ] The Step 0 response from Okta, verbatim
 - [ ] A decoded delegated token showing `sub` and `act` distinctly
 - [ ] The token received by the MCP backend, showing a different issuer and audience than the
       user's token
@@ -458,7 +431,8 @@ Evidence, not only a working demo:
 ## Appendix — running with a real external IdP as the subject issuer
 
 Verified end to end against a live Okta tenant. Use this when Okta cannot perform the
-exchange itself (see Step 0) but you still want a real external IdP in the chain rather than
+exchange itself, which is the case for any cross-IdP flow, but you still want a real
+external IdP in the chain rather than
 Keycloak. Okta issues the subject token; agentgateway's built-in STS performs the exchange.
 
 **Okta needs only A1, A2 and A5** from `PRECONFIG.md`: a custom authorization server, a scope,
