@@ -1,0 +1,81 @@
+# Okta variant of 01-agent-authz.yaml.
+# The subject token is issued by a real Okta custom authorization server instead of Keycloak;
+# the built-in STS still performs the exchange. Apply with envsubst:
+#
+#   set -a; . /path/to/.env; set +a
+#   envsubst < 50-okta-agent-authz.yaml | kubectl apply -f -
+#
+# AGW's jwks.remote.backendRef must resolve to an in-cluster Service, so a small nginx
+# passthrough fronts Okta's real JWKS endpoint.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okta-jwks-proxy
+  namespace: agent-identity
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: okta-jwks-proxy } }
+  template:
+    metadata: { labels: { app: okta-jwks-proxy } }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports: [{ containerPort: 8080 }]
+          volumeMounts: [{ name: conf, mountPath: /etc/nginx/conf.d }]
+      volumes:
+        - name: conf
+          configMap: { name: okta-jwks-proxy-conf }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: okta-jwks-proxy-conf
+  namespace: agent-identity
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      resolver 8.8.8.8 ipv6=off;
+      location /keys {
+        proxy_ssl_server_name on;
+        proxy_pass https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/v1/keys;
+        proxy_set_header Host ${OKTA_DOMAIN};
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: okta-jwks-proxy
+  namespace: agent-identity
+spec:
+  selector: { app: okta-jwks-proxy }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: agent-x-authz-okta, namespace: agent-identity }
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: agent-x
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      preserveToken: true
+      providers:
+        - issuer: "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}"
+          audiences: ["${OKTA_AUDIENCE}", "api://default"]
+          jwks:
+            remote:
+              backendRef: { name: okta-jwks-proxy, namespace: agent-identity, port: 8080 }
+              jwksPath: /keys
+    authorization:
+      action: Require
+      # Okta tokens carry no `groups` claim by default, so gate on the scope the custom
+      # authorization server issues. Add a groups claim in Okta to mirror the Keycloak rule.
+      policy:
+        matchExpressions:
+          - "'${OKTA_SCOPE}' in jwt.scp"

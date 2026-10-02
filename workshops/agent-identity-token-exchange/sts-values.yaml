@@ -1,0 +1,18 @@
+# helm upgrade enterprise-agentgateway ... --reuse-values -f sts-values.yaml
+#
+# Uses the plural `subjectValidators` / `actorValidators` / `apiValidators` lists. The chart
+# documents these as "tried in order" and states they take precedence over the deprecated
+# singular `subjectValidator` form. The singular also accepts only one subject issuer, which
+# is why the list is used here: add an entry per IdP whose tokens may be exchanged.
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+  subjectValidators:
+    - validatorType: remote
+      remoteConfig:
+        url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/demo/protocol/openid-connect/certs"
+  actorValidators:
+    - validatorType: k8s
+  apiValidators:
+    - validatorType: k8s
