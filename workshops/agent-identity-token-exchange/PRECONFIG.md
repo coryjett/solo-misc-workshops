@@ -24,41 +24,50 @@ user -> agentgateway -> Keycloak (authenticate, get user token)
 same Okta tenant**." A subject token issued by a *different* IdP (Keycloak, or Auth0) is
 neither documented as supported nor documented as prohibited.
 
-It may still work in your tenant if you have inbound federation configured. **Step 0 below is
-a single curl that answers it.** Run it before configuring anything else:
+**Measured on a live Okta tenant, with a control:**
 
-- **If it works** we run the flow exactly as drawn
-- **If it does not** run the same proof with Okta issuing the subject token, per the appendix
-  in `WORKSHOP.md`, and record the cross-IdP limitation as a finding
+| Subject token issued by | Result |
+|---|---|
+| Okta, same authorization server | **Exchanged successfully** |
+| Keycloak | `invalid_request: 'subject_token' is invalid` |
 
-Either way the outcomes are the same. Only the exchange point differs.
+The Okta-issued token passes subject validation and is exchanged; the Keycloak one is refused
+before policy evaluation. The refusal is about who issued the token, not about the request.
+Okta also accepts only `access_token` and `id_token` subject token types: declaring the token
+as `urn:ietf:params:oauth:token-type:jwt` returns `'subject_token_type' is invalid or not
+supported`.
 
----
+So the exchange works, but only for tokens Okta issued. Run Step 0 against your own tenant to
+confirm the same holds there, particularly if you have inbound federation configured, which
+is the one condition that might change the answer.
 
-## Step 0a — The ten-second check (do this first)
-
-Before configuring anything, ask the authorization server what grants it supports. No auth,
-no clicking, and it answers whether the rest of Part A is worth doing:
-
-```bash
-OKTA_DOMAIN=<your-domain>.okta.com
-OKTA_AS_ID=default          # or your custom aus... id once it exists
-
-curl -s "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}/.well-known/oauth-authorization-server" \
-  | jq '.grant_types_supported'
-```
-
-Look for `urn:ietf:params:oauth:grant-type:token-exchange`.
-
-- **Present** — Part 3 can run as drawn, with Okta performing the exchange. Continue with A1
-  through A5.
-- **Absent** — Okta cannot be the exchange point on this tenant, whatever the access policy
-  says. Skip A3 and A4 entirely and use the appendix path in `WORKSHOP.md`: Okta issues the
-  subject token, agentgateway's STS performs the exchange. That needs A1, A2 and A5 only.
-
-Either way the delegation outcomes are the same. Only the exchange point differs.
+- **If it works** run the flow exactly as drawn
+- **If it does not**, which is the expected result, use the appendix in `WORKSHOP.md`: your IdP
+  issues the subject token and agentgateway's built-in STS performs the exchange
 
 ---
+
+## Step 0a — Confirm the grant is enabled (do this first)
+
+**Do not use the authorization server's discovery metadata for this.** Okta does not list
+`urn:ietf:params:oauth:grant-type:token-exchange` in `grant_types_supported` even on a tenant
+where the exchange works. Measured: a tenant that performs the exchange successfully still
+omits it from discovery. The grant is enabled per application and per access policy rule, not
+advertised at the server.
+
+The three real gates, all required:
+
+1. **API Access Management** — Security → API shows an **Authorization Servers** tab
+2. **The grant on the service app** — Applications → your API Services app → General → Edit →
+   Grant type → Advanced → **Token Exchange**
+3. **The grant in the access policy rule** — Security → API → Authorization Servers → your
+   server → Access Policies → rule → Edit → **Grant type is** → Token Exchange
+
+Also untick **Require Demonstrating Proof of Possession (DPoP)** on the service app unless you
+intend to send DPoP proofs; new API Services apps may have it on, and the exchange fails with
+`invalid_dpop_proof`.
+
+With all three in place, Step 0 below is the real test.
 
 ## Step 0 — The five-minute test
 
@@ -100,10 +109,9 @@ You need the `aus<XYZ>` segment.
 > feature. If **Security → API** has no **Authorization Servers** tab, your Okta edition does
 > not include it.
 >
-> **The tab is necessary but not sufficient.** Measured on a live Okta tenant that has API
-> Access Management and a working custom authorization server: the token-exchange grant was
-> still absent org-wide, and did not appear as an option in A3. Run the one-line metadata
-> check below before doing any of the configuration in this document.
+> **The tab is necessary but not sufficient.** It gives you custom authorization servers; the
+> token-exchange grant still has to be enabled on the service app (A4) and in the access
+> policy rule (A3) before any exchange will run. See Step 0a.
 
 ### A2. Scope
 

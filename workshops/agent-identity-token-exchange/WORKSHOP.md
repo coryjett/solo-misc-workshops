@@ -253,15 +253,19 @@ The gateway speaks RFC 8693 directly, but it does not authenticate to Okta with 
 secret or add Okta's `audience` and `scope` parameters. A small translator service sits
 between them and supplies those. It is roughly sixty lines and we provide it.
 
-> **Prerequisite, confirm with Step 0a in `PRECONFIG.md` first.** This part only runs on a
-> tenant whose authorization server advertises
-> `urn:ietf:params:oauth:grant-type:token-exchange`. Measured on an Okta tenant that had API
-> Access Management and a working custom authorization server, the grant was absent org-wide
-> and this part could not run at all. Where that is the case, use the appendix instead: Okta
-> issues the subject token and the built-in STS performs the exchange.
+> **Prerequisite, see Step 0a in `PRECONFIG.md`.** This part needs the token-exchange grant
+> enabled on the service app and in the access policy rule. Do not judge this from the
+> authorization server's discovery metadata, which omits the grant even where it works.
 >
-> **This part is not covered by the clean-room validation.** Parts 1, 2, 4, 6 and the appendix
-> were verified end to end; Steps 0 and 3 were not, for the reason above.
+> **It also needs Okta to have issued the subject token.** Measured with a control on a live
+> tenant: an Okta-issued subject token is exchanged successfully, while a Keycloak-issued one
+> is refused with `invalid_request: 'subject_token' is invalid`, before policy evaluation.
+> Okta exchanges only tokens it issued. If your users authenticate somewhere other than Okta,
+> use the appendix instead, where the built-in STS performs the exchange.
+>
+> **Validation status.** Parts 1, 2, 4, 6 and the appendix were verified end to end clean-room.
+> The Okta exchange itself was verified directly against a live tenant. The full Part 3 path
+> through the translator was not run.
 
 The translator is `k8s/10-shim.yaml` in the `okta-token-exchange` workshop, roughly sixty
 lines of Python that adds Basic client authentication plus the `audience` and `scope`

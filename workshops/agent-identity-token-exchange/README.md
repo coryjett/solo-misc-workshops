@@ -27,15 +27,17 @@ a signed claim rather than a header.
 | [Part 6](WORKSHOP.md#part-6--which-claims-survive-the-exchange-5-min) | 5 | Which claims survive | |
 | [Appendix](WORKSHOP.md#appendix--running-with-a-real-external-idp-as-the-subject-issuer) | | A real external IdP as subject issuer | [`50-okta-agent-authz.yaml`](50-okta-agent-authz.yaml), [`51-sts-values-okta.yaml`](51-sts-values-okta.yaml) |
 
-Parts 1, 2, 4 and 6 need only a cluster. **Steps 0 and 3 require an Okta tenant whose
-authorization server advertises the token-exchange grant**; where it does not, the appendix
-reaches the same outcome with the IdP issuing and the built-in STS exchanging.
+Parts 1, 2, 4 and 6 need only a cluster. **Steps 0 and 3 need Okta to perform the exchange**,
+which requires the token-exchange grant on the service app and in the access policy rule, and
+a subject token Okta itself issued: measured with a control, Okta refuses a subject token
+minted by another IdP. Where users authenticate elsewhere, the appendix reaches the same
+outcome with the built-in STS exchanging.
 
 ## Flow
 
 | | Step | File |
 |---|---|---|
-| 1 | Which path your tenant supports | [`PRECONFIG.md` Step 0a](PRECONFIG.md#step-0a--the-ten-second-check-do-this-first) |
+| 1 | Which path your tenant supports | [`PRECONFIG.md` Step 0a](PRECONFIG.md#step-0a--confirm-the-grant-is-enabled-do-this-first) |
 | 2 | Okta setup, if Steps 0 and 3 are in scope | [`PRECONFIG.md` Part A](PRECONFIG.md#part-a--okta-configuration) |
 | 3 | Local cluster | [`00-kind.sh`](00-kind.sh) |
 | 4 | Gateway API CRDs, Agentgateway, test client (needs `LICENSE_KEY`) | [`00-platform.sh`](00-platform.sh), [`00-client.yaml`](00-client.yaml) |
