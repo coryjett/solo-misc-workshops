@@ -1,0 +1,66 @@
+# Part 3: exchange at your Okta authorization server, performed by agentgateway itself.
+#
+#   set -a; . /path/to/.env; set +a
+#   envsubst < 52-okta-native-exchange.yaml | kubectl apply -f -
+#
+# No translator. The gateway speaks RFC 8693 to Okta directly, supplying client
+# authentication, `audience` and `scope` from the config below. Verified on v2026.9.3 against
+# a live Okta tenant: the MCP backend received a token whose `cid` was the exchange client and
+# whose scopes were down-scoped, not the caller's token.
+#
+# The client secret key MUST be `clientSecret`. With any other key the policy still reports
+# Accepted (reason PartiallyValid) and the gateway forwards the CALLER'S OWN TOKEN to the
+# backend. Tracked as solo-io/agentgateway-enterprise#7824.
+#
+#   kubectl -n agent-identity create secret generic okta-client-secret \
+#     --from-literal=clientSecret="${OKTA_CLIENT_SECRET}"
+---
+# Okta's token endpoint as an upstream. TLS is required; policies.tls with no fields is enough.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata: { name: okta-sts, namespace: agent-identity }
+spec:
+  static: { host: "${OKTA_DOMAIN}", port: 443 }
+  policies:
+    tls: {}
+---
+# Inbound: validate the user's Okta token. preserveToken keeps it available for the exchange.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: inbound-okta-jwt, namespace: agent-identity }
+spec:
+  targetRefs:
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: mcp-a }
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      preserveToken: true
+      providers:
+        - issuer: "https://${OKTA_DOMAIN}/oauth2/${OKTA_AS_ID}"
+          audiences: ["${OKTA_AUDIENCE}"]
+          jwks:
+            remote:
+              backendRef: { name: okta-jwks-proxy, namespace: agent-identity, port: 8080 }
+              jwksPath: /keys
+---
+# The exchange itself, attached to the MCP backend rather than the route.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: okta-native-exchange, namespace: agent-identity }
+spec:
+  targetRefs:
+    - { group: agentgateway.dev, kind: AgentgatewayBackend, name: mcp-a }
+  backend:
+    entTokenExchange:
+      okta:
+        audience: "${OKTA_AUDIENCE}"
+        authServerId: "${OKTA_AS_ID}"
+        scopes: ["${OKTA_SCOPE}"]
+        backendRef:
+          group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: okta-sts
+        clientAuth:
+          clientId: "${OKTA_CLIENT_ID}"
+          secretRef: { name: okta-client-secret }
+          authMethod: ClientSecretPost

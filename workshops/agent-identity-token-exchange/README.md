@@ -20,7 +20,7 @@ a signed claim rather than a header.
 |---|---|---|
 | [Part 1](WORKSHOP.md#part-1--the-delegation-chain) | The delegation chain | [`01-agent-authz.yaml`](01-agent-authz.yaml), [`02-mcp-authz.yaml`](02-mcp-authz.yaml) |
 | [Part 2](WORKSHOP.md#part-2--exchange-for-a-delegated-token) | Exchange at the built-in STS | [`sts-values.yaml`](sts-values.yaml) |
-| [Part 3](WORKSHOP.md#part-3--exchange-at-your-okta-authorization-server) | Exchange at your own Okta authorization server | |
+| [Part 3](WORKSHOP.md#part-3--exchange-at-your-okta-authorization-server) | Exchange at your own Okta authorization server | [`52-okta-native-exchange.yaml`](52-okta-native-exchange.yaml) |
 | [Part 4](WORKSHOP.md#part-4--multiple-identity-providers) | Two identity providers, audience binding | [`00-setup-realm-multi.sh`](00-setup-realm-multi.sh), [`40-multi-idp-policy.yaml`](40-multi-idp-policy.yaml) |
 | [Part 5](WORKSHOP.md#part-5--consent-across-multiple-mcp-servers) | Consent across MCP servers (design walkthrough) | |
 | [Part 6](WORKSHOP.md#part-6--which-claims-survive-the-exchange) | Which claims survive | |
