@@ -77,41 +77,32 @@ The flow: the user authenticates at your
 identity provider, the gateway exchanges that token for one carrying **`Subject: User`** and
 **`Actor: Agent`**, and downstream services accept only the exchanged token.
 
+### Crossing identity domains
+
+**Verified.** The built-in STS accepted subject tokens from a Keycloak domain and from a live
+Okta domain in the same configuration, issuing delegated tokens carrying the user as `sub` and
+the agent as `act` in both cases. `subjectValidators` is a list, so Keycloak, Okta, Auth0 and
+Entra can be accepted issuers simultaneously, each validated against its own JWKS endpoint.
+
+That is the employee-acting-for-a-customer case: the employee's domain and the customer's
+domain are different, the gateway accepts both, and the delegated token names the user and the
+agent distinctly regardless of which domain the user came from.
+
 ### Two exchange paths
 
 | Path | Exchange performed by | Status |
 |---|---|---|
-| **A** | agentgateway's built-in STS | Validated end to end on controller v2026.9.0 with Keycloak 26 |
-| **B** | Your Okta authorization server, via a translator | Exchange verified directly against a live Okta tenant with an Okta-issued subject token; the full path through the translator was not run |
+| **A** | agentgateway's built-in STS | Validated end to end on controller v2026.9.0, with Keycloak and Okta as subject issuers |
+| **B** | Your Okta authorization server, via a translator | Exchange verified directly against a live Okta tenant; the full path through the translator was not run |
 
-We build both. Path A establishes the delegation model quickly; Path B puts your own
-authorization server at the centre of it.
+Path A establishes the delegation model and is the one that spans domains. Path B puts your
+own authorization server at the centre, which security reviews often prefer.
 
-### Which path applies to you
-
-**Traversing identity domains works.** The built-in STS accepted subject tokens from Keycloak
-and from a live Okta tenant in the same configuration, issuing delegated tokens carrying the
-user as `sub` and the agent as `act` in both cases. `subjectValidators` is a list, so Keycloak,
-Okta, Auth0 and Entra can be accepted issuers simultaneously, each validated against its own
-JWKS endpoint. That covers the employee-acting-for-a-customer case directly.
-
-The only thing the measurement settles is **where** the exchange happens:
-
-| Subject token issued by | Exchanged at Okta | Exchanged at the built-in STS |
-|---|---|---|
-| Okta, same authorization server | yes | yes |
-| A different IdP | `invalid_request: 'subject_token' is invalid` | yes |
-
-Okta refuses at subject validation, before policy evaluation, so it is about who issued the
-token rather than how the request was formed. Okta also accepts only `access_token` and
-`id_token` subject types.
-
-- **Same-IdP flows** can use either path. Path B puts your own authorization server at the
-  centre, which security reviews often prefer.
-- **Cross-IdP flows use Path A**, with the gateway as the exchange point and your identity
-  providers as issuers.
-
-`PRECONFIG.md` keeps a one-curl confirmation if you want to re-run this on your own tenant.
+> One constraint on Path B: Okta exchanges only tokens it issued. A subject token from another
+> provider is refused with `invalid_request: 'subject_token' is invalid`, at subject validation
+> rather than policy evaluation. Okta also accepts only `access_token` and `id_token` subject
+> types. So Path B suits same-domain flows, and Path A carries anything that spans domains.
+> `PRECONFIG.md` has a one-curl confirmation if you want to re-run this on your own tenant.
 
 ---
 
