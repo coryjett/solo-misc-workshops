@@ -98,6 +98,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 
 **Docs:** [MCP overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/about/) · [Session routing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/session/)
 
+[Back to contents](#contents)
+
 ---
 
 ## Item 6 · MCP feature coverage
@@ -115,6 +117,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 - Change notifications (`listChanged`) pass through.
 
 **Docs:** [MCP spec compatibility](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/spec-compatibility/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -135,6 +139,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 - **Policies still apply:** outbound credentials (item 22), plus MCP authentication, tool access, rate limits and guardrails on the generated tools.
 
 **Docs:** [OpenAPI to MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/openapi/) · [Composable MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/composable/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -159,6 +165,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 | Logs | ✅ ⚠️ | JSON responses log `a2a.method`, `a2a.task.state` and `a2a.context.id`. **SSE (`message/stream`) logs only the method.** A request denied by authorization logs as plain HTTP |
 
 **Docs:** [A2A](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/agent/a2a/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -188,6 +196,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 - A SPIFFE backend can't also set `mtlsCertificateRef`, `caCertificateRefs` or `insecureSkipVerify`.
 
 **Docs:** [Listener mTLS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/listeners/mtls/) · [Backend TLS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backendtls/) · [JWT setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/setup/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -227,6 +237,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 
 **Docs:** [JWT overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/about/) · [JWT setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/setup/) · [Authorization (CEL)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/authorization/)
 
+[Back to contents](#contents)
+
 ---
 
 ## Item 22 · Outbound credentials
@@ -259,6 +271,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 - 📄 The Kubernetes Secret translation was checked in code only. Confirm it in your environment.
 
 **Docs:** [Backend API key auth](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backend-authn/key/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -297,6 +311,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 
 **Docs:** [Policy merging](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/policies/target-merge/) · [Authorization](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/authorization/) · [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
+[Back to contents](#contents)
+
 ---
 
 ## Item 47 · Fleet-wide management
@@ -312,6 +328,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
   - **Config:** GitOps, one repo with Argo ApplicationSets across clusters.
   - **Observability:** metrics, logs and traces from every cluster to a central backend.
 - **Docs:** [UI install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/ui/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -346,6 +364,8 @@ Three layers (also in OSS):
 
 **Docs:** [Guardrails overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/guardrails/about/) · [Guardrails setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/guardrails/setup/) · [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
+[Back to contents](#contents)
+
 ---
 
 ## Item 69 · End-to-end context propagation
@@ -368,6 +388,8 @@ Three layers (also in OSS):
 - ⚠️ **Your app and agents must forward `traceparent`,** or the trace breaks at the first hop the gateway doesn't see.
 
 **Docs:** [Tracing setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/traces/setup/) · [Trace attribute reference](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/traces/attribute-reference/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -394,6 +416,8 @@ Three layers (also in OSS):
   - Retention and access are set in your own backend.
 
 **Docs:** [Access logs](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/access-logs/view/) · [Log export](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/access-logs/export/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -424,6 +448,8 @@ Three layers (also in OSS):
 **Why the link was unclear:** the "Advanced install" page covers control-plane options. Proxy HA is on the Customize options page.
 
 **Docs:** [Customize options (proxy)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/customize/options/) · [Advanced install (controller)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/advanced/) · [Architecture](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/architecture/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -458,6 +484,8 @@ Three layers (also in OSS):
 
 **Docs:** [Spec compatibility](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/spec-compatibility/)
 
+[Back to contents](#contents)
+
 ---
 
 ## Item 88 · Multi-tenancy and delegated administration
@@ -486,6 +514,8 @@ Three layers (also in OSS):
 
 **Docs:** [Route delegation](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/route-delegation/overview/) · [Delegation inheritance](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/route-delegation/inheritance/) · [Registry access control](https://docs.solo.io/agentregistry/latest/security/access-control/registry/)
 
+[Back to contents](#contents)
+
 ---
 
 ## Items 96, 97, 99 · Catalog, discovery, lifecycle (agentregistry)
@@ -512,6 +542,8 @@ The short version for each item:
 - **Link to the gateway (Enterprise, Kubernetes):** route delegation into agentgateway, where the registry Deployment's tag decides which version is served at the same URL.
 
 **Docs:** [Catalog quickstart](https://docs.solo.io/agentregistry/latest/quickstart/catalog/) · [Registry access control](https://docs.solo.io/agentregistry/latest/security/access-control/registry/) · [Approval](https://docs.solo.io/agentregistry/latest/security/approval/)
+
+[Back to contents](#contents)
 
 ---
 
@@ -547,6 +579,8 @@ The short version for each item:
 
 
 **Ref:** `agentregistry-demo/README.md`
+
+[Back to contents](#contents)
 
 ---
 
@@ -608,6 +642,8 @@ The short version for each item:
 
 **Docs:** [MCP Apps](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/apps/)
 
+[Back to contents](#contents)
+
 ---
 
 ---
@@ -624,6 +660,8 @@ The short version for each item:
 - **Talking point:** "Policy and telemetry work on MCP semantics, not just HTTP paths."
 - **Docs:** [MCP overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/about/)
 
+[Back to contents](#contents)
+
 ### Item 3 · MCP version and compatibility management
 - ✅ **Header check:** an unsupported `MCP-Protocol-Version` header gets HTTP 400 with JSON-RPC `-32022`. On requests after initialize, the error lists the supported versions: `{"supported":["2024-11-05","2025-03-26","2025-06-18","2025-11-25","2026-07-28"],"requested":"..."}`.
 - ⚠️ ✅ **Initialize isn't checked:** a version sent only in the initialize body passes through, and the server negotiates it.
@@ -632,6 +670,8 @@ The short version for each item:
   - A blocked request gets a plain HTTP 403, not a JSON-RPC error.
 - **Talking point:** "Clients on unsupported versions get a clear error; a gateway-wide rule can block any version you retire."
 - **Docs:** [Spec compatibility](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/spec-compatibility/) (doesn't mention -32022)
+
+[Back to contents](#contents)
 
 ### Item 5 · Stateful MCP session handling
 - See item 4.
@@ -643,9 +683,13 @@ The short version for each item:
 - ⚠️ Modern MCP (2026-07-28 spec) has no sessions.
 - **Docs:** [Session routing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/session/) · [Virtual MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/virtual/)
 
+[Back to contents](#contents)
+
 ### Item 7 · MCP App support
 - See POC 22 (tested).
 - **Docs:** [MCP Apps](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/apps/)
+
+[Back to contents](#contents)
 
 ### Item 8 · MCP aggregation and virtualization
 - 📄 **One endpoint fronts many MCP servers.**
@@ -657,9 +701,13 @@ The short version for each item:
 - **Talking point:** "Agents get one governed endpoint; you choose exactly what each identity sees."
 - **Docs:** [Virtual MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/virtual/) · [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
+[Back to contents](#contents)
+
 ### Item 10 · Multiple MCP paths per configuration
 - ✅ One HTTPRoute with several path `matches` to the same MCP backend. Tested with `/p1` and `/p2`: both worked, and a session from `/p1` also worked on `/p2`.
 - **Docs:** [Path matching](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/match/path/)
+
+[Back to contents](#contents)
 
 ### Item 11 · Native A2A interoperability
 - A2A JSON-RPC and SSE pass through with method-aware logs ✅.
@@ -667,9 +715,13 @@ The short version for each item:
 - v0.3 and v1.0 cards are both handled ✅. Caveats are in item 12.
 - **Docs:** [A2A](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/agent/a2a/)
 
+[Back to contents](#contents)
+
 ### Item 13 · Multiple agent paths
 - Same as item 10: several HTTPRoute path matches to one A2A backend.
 - **Docs:** [Path matching](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/match/path/)
+
+[Back to contents](#contents)
 
 ## Identity and access
 
@@ -680,11 +732,15 @@ The short version for each item:
   - ⚠️ With Entra on Kubernetes, only **public PKCE clients** are supported; confidential clients need standalone mode.
 - **Docs:** [MCP auth with Entra](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/auth/entra/) · [JWT setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/setup/)
 
+[Back to contents](#contents)
+
 ### Item 15 · User authentication
 - 📄 **Browser login:** ExtAuth OIDC auth code flow with a session cookie, stored in the ExtAuth Redis.
   - It's generic OIDC, so Entra works. The docs example uses Keycloak.
 - APIs and agents use bearer JWTs (the Entra JWT and OBO page covers JWT validation, not browser login).
 - **Docs:** [Authorization code flow](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/extauth/oauth/authorization-code/) · [Entra JWT and OBO](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/extauth/oauth/entra/)
+
+[Back to contents](#contents)
 
 ### Item 17 · SPIFFE support
 - 📄 SPIFFE SVIDs from SPIRE for listener and backend mTLS (v2026.8.2+). See item 16.
@@ -692,12 +748,16 @@ The short version for each item:
 - ⚠️ CEL `source.identity` fields are parsed only for Istio-format IDs; otherwise use `source.spiffeId`.
 - **Docs:** [Agentic mesh](https://docs.solo.io/agentgateway/kubernetes/latest/integrations/agentic-mesh/about/) · [Waypoint policies](https://docs.solo.io/agentgateway/kubernetes/latest/integrations/agentic-mesh/waypoint/policies/)
 
+[Back to contents](#contents)
+
 ### Item 18 · Legacy inbound Basic auth and API keys
 - 📄 **API keys:** from Secrets, or (recommended) ConfigMaps of SHA-256 hashes. Attach per Gateway or HTTPRoute.
 - 📄 **Basic auth is built into the proxy:** `traffic.basicAuthentication`, with htpasswd hashes (MD5, bcrypt, crypt, SHA-1) inline or from a Secret. No ExtAuth needed.
   - Credentials can be read from a custom header, query parameter or cookie (`location`).
 - (Item 22 is the outbound side.)
 - **Docs:** [API keys](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/apikey/) · [Basic auth](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/extauth/basic/)
+
+[Back to contents](#contents)
 
 ### Item 20 · Delegated user access (OBO)
 - 📄 **Entra OBO:** the gateway exchanges the user's Entra token for one scoped to the downstream audience, so the backend sees the user's permissions, not the agent's.
@@ -708,12 +768,16 @@ The short version for each item:
 - **Talking point:** "The agent never gets more than the user it's acting for."
 - **Docs:** [Token exchange with Entra](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backend-authn/token-exchange/idps/entra/) · [STS delegation](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backend-authn/token-exchange/sts/delegation/) · [Entra OBO lab](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/labs/identity-delegation/msft-entra-obo.md)
 
+[Back to contents](#contents)
+
 ### Item 21 · Token exchange and audience binding
 - 📄 Exchanged tokens are scoped to each backend's audience.
 - **Lifetime:** set by the IdP (Entra), or by `tokenExpiration` for Solo STS (24h in the docs example).
 - ✅ **The inbound token isn't passed through:** after JWT validation the gateway strips it by default, and the backend received no `Authorization` header.
 - ✅ An outbound auth header replaces any client-supplied one (tested in item 22).
 - **Docs:** [Token exchange with Entra](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backend-authn/token-exchange/idps/entra/)
+
+[Back to contents](#contents)
 
 ### Item 23 · Fine-grained authorization
 - **CEL authorization on:** routes, models, MCP servers, tools, prompts and resources.
@@ -723,12 +787,16 @@ The short version for each item:
 - ⚠️ 📄 **No A2A skill-level authorization.** A2A messages don't name a skill, so the gateway can't key on one; it sees only the method and task. Enforce per agent route, or in the agent.
 - **Docs:** [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/) · [Authorization](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/authorization/)
 
+[Back to contents](#contents)
+
 ## Policy and governance
 
 ### Item 24 · Unified inline enforcement pipeline
 - One policy model across LLM, MCP, A2A and HTTP. Policies attach at the Gateway, listener, route or backend.
 - Enforcement points cover request, response and streaming phases.
 - **Docs:** [Policy overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/policies/overview/)
+
+[Back to contents](#contents)
 
 ### Item 26 · Policy as code
 - Every policy is a Kubernetes CRD in Git: reviewed in PRs, promoted by ArgoCD or Flux, rolled back by revert.
@@ -737,6 +805,8 @@ The short version for each item:
   - Check status in a lower environment. Kyverno or Gatekeeper can enforce conventions.
 - **Docs:** [ArgoCD install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/argocd/)
 
+[Back to contents](#contents)
+
 ### Item 27 · Native and external PDP
 - **Built-in:** CEL authorization, evaluated in the proxy.
 - 📄 **OPA:**
@@ -744,6 +814,8 @@ The short version for each item:
   - The proxy talks to it over the standard ext_authz gRPC API, and OPA's input is the Envoy CheckRequest.
   - The docs recommend CEL first.
 - **Docs:** [OPA](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/extauth/opa/)
+
+[Back to contents](#contents)
 
 ### Item 28 · Hierarchy, scope, inheritance
 - Levels: Gateway, listener, route, and delegated child routes. `strategy.inheritance: Override` makes parent fields win.
@@ -755,11 +827,15 @@ The short version for each item:
 - **Talking point:** "Gateway-level guardrails that teams can't weaken, plus team-owned route policies through delegation."
 - **Docs:** [Policy merging](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/policies/target-merge/) · [Delegation inheritance](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/route-delegation/inheritance/)
 
+[Back to contents](#contents)
+
 ### Item 29 · Context-aware per-request evaluation
 - CEL evaluates every request using `jwt.*`, `source.*` (workload identity), request and headers, `mcp.*` and `llm.*`.
 - ✅ **Time:** use `timestamp(request.startTime)` (for example `.getHours()`). There's no `now()`.
 - Risk or classification signals can come from ExtAuth or ExtProc calling your own service.
 - **Docs:** [CEL reference](https://docs.solo.io/agentgateway/kubernetes/latest/reference/cel/)
+
+[Back to contents](#contents)
 
 ### Item 30 · Deterministic enforcement ordering
 - 📄 **Fixed, documented phases:**
@@ -774,6 +850,8 @@ The short version for each item:
   - Budget limits fail open.
 - **Docs:** [Filter order](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/policies/filter-order/)
 
+[Back to contents](#contents)
+
 ### Item 31 · Safe policy change lifecycle
 - GitOps handles validation, approval, staged rollout and rollback; Argo flags drift.
 - The controller writes status conditions (Accepted or Invalid) on each policy.
@@ -782,17 +860,23 @@ The short version for each item:
   - The standalone UI's CEL playground for testing expressions.
 - **Docs:** [ArgoCD install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/argocd/)
 
+[Back to contents](#contents)
+
 ### Item 32 · Immediate revocation and containment
 - **Kill switches:** pull an MCP target, drop a tool from the allowlist, add a CEL deny on an agent or user, or delete a route.
 - 📄 **Speed:** config pushes over xDS are batched (10ms quiet, at most 1s), so changes usually land in well under a second.
 - ✅ **Exception:** JWT keys refresh on the JWKS TTL (5m minimum), not instantly.
 - **Docs:** [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
+[Back to contents](#contents)
+
 ### Item 33 · Gateway governance metadata
 - The gateway has no native risk-level or approval-status input to its policies.
 - agentregistry gates what gets published.
 - Risk tiers can be modeled as labels or tool lists that CEL keys on.
 - **Talking point:** "The registry decides what's approved; the gateway enforces what's deployed."
+
+[Back to contents](#contents)
 
 ### Item 34 · Multi-dimensional rate limiting
 - 📄 **Redis:** a bundled cache is provided, but it isn't persistent, so counters reset when the pod restarts. For production, bring your own Redis (`sharedExtensions.extCache.redis.url`).
@@ -801,6 +885,8 @@ The short version for each item:
 - Local limits are per proxy.
 - **Docs:** [Global rate limit](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/rate-limit-global/) · [MCP rate limit](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/rate-limit/)
 
+[Back to contents](#contents)
+
 ## AI model traffic
 
 ### Item 35 · Model/API protocol mediation
@@ -808,20 +894,28 @@ The short version for each item:
 - ⚠️ **Batch is passthrough to OpenAI only:** no translation to other providers, and guardrails skip passthrough routes.
 - **Docs:** [LLM overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/about/) · [Batches lab](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/labs/routing/configure-openai-batches.md)
 
+[Back to contents](#contents)
+
 ### Item 36 · Provider-neutral endpoint
 - Virtual models: the app asks for a stable name, and the gateway maps it to a provider and model. Switching providers is a config change.
 - ⚠️ 📄 With native Bedrock paths (`/model/{id}/converse`), virtual models don't rewrite the path in v2026.10.1 (known issue, fix in progress). The OpenAI-format path works ✅.
 - **Docs:** [Virtual models](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/models/virtual/)
+
+[Back to contents](#contents)
 
 ### Item 37 · Governed model inventory
 - 📄 **AgentgatewayModel resources** list the approved models: provider, endpoint and region.
 - **Pricing** comes from a model cost catalog (built in, or a ConfigMap) keyed by model name; it isn't a field on the model.
 - **Docs:** [Models](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/models/about/) · [Costs](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/cost-controls/costs/)
 
+[Back to contents](#contents)
+
 ### Item 38 · Deterministic routing rules
 - **Route on:** the requested model and headers, and content (copy a body field into a header, then match on it).
 - 📄 **Tenant or tier routing:** virtual model `conditional` routing with CEL on `jwt.*`. Not tested end to end.
 - **Docs:** [Content routing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/content-routing/) · [Virtual models](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/models/virtual/)
+
+[Back to contents](#contents)
 
 ### Item 39 · Dynamic model selection
 - 📄 **Virtual model routing modes:** weighted, failover by priority, conditional, and callout (an external decision, v2026.10.0+).
@@ -830,9 +924,13 @@ The short version for each item:
 - ⚠️ **Failover isn't a retry:** the request that triggers eviction still fails; only later requests move. Pair it with a retry policy.
 - **Docs:** [Virtual models](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/models/virtual/) · [Failover](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/failover/)
 
+[Back to contents](#contents)
+
 ### Item 40 · Model-aware load distribution
 - 📄 **Gateway API Inference Extension:** the llm-d Router endpoint picker chooses the pod (aware of load, KV cache and LoRA), and agentgateway routes to the pod it picks.
 - **Docs:** [Inference routing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/inference/inference-routing/)
+
+[Back to contents](#contents)
 
 ### Item 41 · Provider fallback and error normalization
 - 📄 **Retries and failover:** priority-group failover, plus retries on chosen status codes or a CEL condition.
@@ -843,17 +941,23 @@ The short version for each item:
 - ⚠️ **Gateway-generated rejections:** guardrail blocks are plain text, unless you set `response.message` and headers.
 - **Docs:** [Failover](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/failover/)
 
+[Back to contents](#contents)
+
 ### Item 42 · Quota and concurrency controls
 - Tokens, requests and tool calls are limited per user, team or tenant (rate limits and budgets).
 - 📄 `maxConcurrentRequests` applies per **gateway or port**, not per user. Over the limit gets an immediate 503.
 - No per-tenant concurrency or agent fan-out limit.
 - **Talking point:** "Per-identity limits on usage; concurrency is a whole-gateway safety valve."
 
+[Back to contents](#contents)
+
 ### Item 43 · AI traffic efficiency
 - ✅ **Streaming isn't buffered:** chunks arrived in real time in testing. The batch API is supported (passthrough).
 - 📄 **Semantic cache** only through vLLM Semantic Router (ExtProc).
 - ⚠️ Response guardrails don't run on streams unless `promptGuard.streaming: Enabled`, and masking never applies to streams.
 - **Docs:** [vLLM Semantic Router](https://docs.solo.io/agentgateway/kubernetes/latest/integrations/llm/routing/vllm-semantic-router/) · [Streaming](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/streaming/)
+
+[Back to contents](#contents)
 
 ## Distributed gateway management
 
@@ -866,19 +970,27 @@ The short version for each item:
 - **Mitigation:** run 2+ controller replicas, and avoid proxy rollouts while the controller is down.
 - **Docs:** [Architecture](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/architecture/) (see the gateway-only subpage's outage table)
 
+[Back to contents](#contents)
+
 ### Item 45 · Flexible control-plane hosting
 - Self-hosted only (Kubernetes, or standalone on VMs and containers); no Solo-managed control plane.
 - Hybrid = a control plane per cluster, managed through GitOps.
 
+[Back to contents](#contents)
+
 ### Item 46 · Portable data-plane placement
 - Kubernetes (AKS, OpenShift), standalone binary or container on VMs, edge.
 - **Docs:** [Standalone install](https://docs.solo.io/agentgateway/standalone/latest/documentation/setup/install/) · [OpenShift](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/openshift/)
+
+[Back to contents](#contents)
 
 ### Items 48, 49 · Central desired state, config distribution
 - Git is the source of truth, and Argo applies and flags drift.
 - The controller validates (status conditions) and pushes over xDS.
 - Inspect a proxy's live config to confirm it applied.
 - **Docs:** [ArgoCD install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/argocd/) · [Inspect config](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/operations/inspect-config/)
+
+[Back to contents](#contents)
 
 ### Item 50 · Control-plane resilience
 - HA controller replicas. The gateway config is CRDs in Git, so it has no database of its own; rollback is Helm or Git revert.
@@ -889,10 +1001,14 @@ The short version for each item:
 - ⚠️ See item 44 for proxy behavior during an outage.
 - **Docs:** [Architecture](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/architecture/) · [Upgrade](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/operations/upgrade/)
 
+[Back to contents](#contents)
+
 ### Item 51 · Local traffic routing
 - 📄 **Locality-aware routing:** same zone, then same region, then elsewhere. It's opt-in per Service (`trafficDistribution`).
 - ⚠️ It ranks endpoints the gateway can see. Endpoints in other clusters need a mesh or ServiceEntry, and the docs list Istio CRDs as a prerequisite.
 - **Docs:** [Locality routing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/locality-aware-routing/)
+
+[Back to contents](#contents)
 
 ## Network security
 
@@ -904,9 +1020,13 @@ The short version for each item:
 - **Backend TLS:** re-origination to backends.
 - **Docs:** [TLS settings](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/listeners/tls-settings/) · [Backend TLS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backendtls/)
 
+[Back to contents](#contents)
+
 ### Item 53 · Bidirectional mTLS
 - See item 16 (tested both directions ✅).
 - **Docs:** [Listener mTLS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/listeners/mtls/) · [Backend TLS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backendtls/)
+
+[Back to contents](#contents)
 
 ### Item 54 · Certificate and trust lifecycle
 - 📄 **Listener certificates:** standard Kubernetes Secrets, through Gateway API `certificateRefs`. cert-manager works here, and Secret updates are pushed without restarts.
@@ -916,11 +1036,15 @@ The short version for each item:
 - **Expiry alerts:** from cert-manager's own metrics. The gateway has no certificate-expiry metric.
 - **Docs:** [TLS settings](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/listeners/tls-settings/) · [CSI secrets](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/external-secrets/file-csi/)
 
+[Back to contents](#contents)
+
 ### Items 55, 59 · Segmentation, tenant isolation
 - Separate Gateways or listeners per trust zone or tenant. Route delegation lets each team own its namespace.
 - 📄 **Admin interface:** listens on localhost:15000 only, and the proxy Service exposes only the Gateway's listener ports.
   - ⚠️ Metrics (15020) and readiness (15021) can be reached on the pod IP inside the cluster; restrict them with NetworkPolicy.
 - **Docs:** [Listeners](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/listeners/overview/) · [Route delegation](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/route-delegation/overview/) · [Gateway setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/gateway/)
+
+[Back to contents](#contents)
 
 ### Item 56 · Egress destination control
 - 📄 **Mesh egress:** the gateway is the egress point, with ServiceEntry destinations and a default-deny allowlist by service account.
@@ -929,10 +1053,14 @@ The short version for each item:
 - **A2A push webhooks:** this is the pattern for item 12 (design suggestion, untested).
 - **Docs:** [Mesh egress](https://docs.solo.io/agentgateway/kubernetes/latest/integrations/agentic-mesh/egress/) · [DFP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/dfp/)
 
+[Back to contents](#contents)
+
 ### Item 57 · Protocol and header hardening
 - The HTTP stack rejects malformed requests.
 - **WAF:** the bundled OWASP CRS v4 includes protocol-enforcement rules (rule groups 920 and 921: request smuggling, header injection, content-type allowlist). The docs page lists only the SQLi, XSS, RCE and scanner groups.
 - **Docs:** [WAF OWASP CRS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/waf/owasp-crs/)
+
+[Back to contents](#contents)
 
 ### Item 58 · Payload protection
 - ✅ ⚠️ **Size limits only apply where bodies are buffered:**
@@ -941,6 +1069,8 @@ The short version for each item:
   - An explicit `traffic.buffer` limit returns 413 when exceeded.
 - ✅ **Plain proxied routes stream with no size cap** unless buffering is set (5MiB passed). Add `traffic.buffer` where you need a cap.
 - **Docs:** [Buffering](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/buffer/)
+
+[Back to contents](#contents)
 
 ## AI security
 
@@ -951,12 +1081,16 @@ The short version for each item:
   - A2A has no dedicated guardrail; use ExtProc.
 - **Docs:** [LLM guardrails](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/guardrails/overview/) · [MCP guardrails](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/guardrails/about/)
 
+[Back to contents](#contents)
+
 ### Item 61 · Prompt attack protection
 - 📄 ⚠️ **No built-in injection or jailbreak classifier.** Use:
   - **Custom regex rules:** the docs give sample injection and jailbreak patterns. Tested: "IGNORE all previous instructions" got a 403 ✅.
   - **External services:** OpenAI moderation, Bedrock Guardrails, Google Model Armor, or a webhook to your own service.
 - **Audit mode:** `action: Audit` on regex, webhook, moderation, Bedrock and Model Armor, so you can measure before enforcing.
 - **Docs:** [Regex guardrails](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/guardrails/regex/) · [Multi-layer](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/guardrails/multi-layer/)
+
+[Back to contents](#contents)
 
 ### Items 63, 64 · Sensitive data detection and protection
 - ✅ **Regex block or mask.** Tested: the upstream received `my ssn is <SSN> and mail <EMAIL_ADDRESS>`.
@@ -965,10 +1099,14 @@ The short version for each item:
 - ✅ MCP responses can be masked (item 62/65 test).
 - **Docs:** [Regex guardrails](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/guardrails/regex/) · [Purview DLP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/guardrails/purview-dlp/)
 
+[Back to contents](#contents)
+
 ### Item 66 · Content and file scanning
 - **No built-in malware scanner.**
 - **Your own scanner:** content goes to your AV, DLP or sandbox through the guardrail webhook (reject or mask) or ExtProc, and the verdict is enforced inline.
 - ⚠️ **WAF limits:** it can restrict URL file extensions and request content types. It can't identify files embedded in LLM JSON payloads, which arrive base64-encoded.
+
+[Back to contents](#contents)
 
 ### Item 67 · Security-plane integration, Prisma AIRS
 - **Use a small adapter:**
@@ -979,6 +1117,8 @@ The short version for each item:
 - **No native AIRS connector yet** (on the roadmap).
 - **Docs:** [Guardrail webhook](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/guardrails/webhook/)
 
+[Back to contents](#contents)
+
 ## Monitoring and audit
 
 ### Item 68 · Native OpenTelemetry
@@ -987,10 +1127,14 @@ The short version for each item:
 - ⚠️ Tracing needs a tracing policy (item 69).
 - **Docs:** [Tracing setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/traces/setup/) · [OTel stack](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/otel-stack/)
 
+[Back to contents](#contents)
+
 ### Item 70 · AI-protocol semantic telemetry
 - ✅ Logs and spans carry `gen_ai.*` (model, provider, tokens, cost), `mcp.*` (method, target, tool) and `a2a.*` (method, task state, context).
 - ⚠️ SSE A2A logs only the method.
 - **Docs:** [Trace attributes](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/traces/attribute-reference/)
+
+[Back to contents](#contents)
 
 ### Item 71 · Service and experience metrics
 - ✅ **Metrics seen live:**
@@ -1001,22 +1145,30 @@ The short version for each item:
   - `retries_total`.
 - **Docs:** [Data plane metrics](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/metrics/dataplane/) · [LLM observability](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/observability/)
 
+[Back to contents](#contents)
+
 ### Item 72 · Security and policy audit trail
 - ✅ **What's logged by default:** `jwt.sub`, and denials as `http.status=403 error="authorization failed" reason=Authorization`.
 - **Adding detail:** claims or the auth method, with `attributes.add`.
 - ⚠️ ✅ **Gap:** a denial doesn't say which rule matched.
 - **Docs:** [Access logs](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/access-logs/view/)
 
+[Back to contents](#contents)
+
 ### Item 73 · Administrative change audit
 - **Gateway:** Git history plus the Kubernetes API audit log.
 - 📄 **agentregistry audit logging:** needs `audit.enabled` (default false) and an OTLP destination endpoint.
 - **Docs:** [ArgoCD install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/argocd/) · [Registry audit logging](https://docs.solo.io/agentregistry/latest/compliance/audit-logging/)
+
+[Back to contents](#contents)
 
 ### Item 75 · Enterprise monitoring integration
 - Export over OTLP and Prometheus.
 - 📄 **Guides exist for:** Datadog, Grafana Cloud, Honeycomb and Jaeger.
 - **Splunk:** through a generic OTel Collector.
 - **Docs:** [External metrics](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/metrics/external/) · [Trace configs](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/traces/configs/)
+
+[Back to contents](#contents)
 
 ## Reliability and scalability
 
@@ -1025,10 +1177,14 @@ The short version for each item:
 - ⚠️ The sizing guide is on mastertheagent.com, not a Solo domain.
 - **Docs:** [k6 lab](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/labs/load-testing/mcp-load-testing-k6.md) · [Sizing](https://www.mastertheagent.com/solo/agentgateway-deployment-sizing/)
 
+[Back to contents](#contents)
+
 ### Item 77 · Automatic scaling
 - HPA on proxy Deployments, configured through gateway parameters.
 - A new pod gets config over xDS before it reports ready.
 - **Docs:** [Customize options](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/customize/options/)
+
+[Back to contents](#contents)
 
 ### Items 79, 80 · Healthy endpoint routing, MCP and agent load balancing
 - 📄 **Load balancing:** one algorithm, power of two choices, scored on health, latency and pending requests. Plus route weights and optional session affinity (consistent hashing on a CEL key). There's no algorithm setting.
@@ -1036,10 +1192,14 @@ The short version for each item:
 - ⚠️ ✅ A stateful MCP session stays pinned to its pod (item 4).
 - **Docs:** [Backend health](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/resiliency/backend-health/) · [Load balancing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/load-balancing/)
 
+[Back to contents](#contents)
+
 ### Item 81 · Overload protection
 - **Limits:** local and global rate limits, plus `maxConcurrentRequests` (unlimited by default; over the limit gets an immediate 503).
 - **Outlier eviction:** only when configured (items 79 and 80).
 - **Docs:** [HTTP rate limit](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/rate-limit-http/)
+
+[Back to contents](#contents)
 
 ### Item 82 · Safe timeouts and retries
 - **Timeouts and retries:** set per route, with retries only on chosen codes.
@@ -1047,17 +1207,23 @@ The short version for each item:
 - Retry policies apply to HTTP and LLM routes.
 - **Docs:** [Retries](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/resiliency/retry/retry/) · [Timeouts](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/resiliency/timeouts/)
 
+[Back to contents](#contents)
+
 ### Item 84 · Regional failover
 - **Setup:** a gateway per region plus GitOps, and LLM failover across regions.
 - ⚠️ 📄 **Locality routing isn't cross-cluster failover.** It ranks endpoints the gateway can see.
 - **Recovery time** depends on your DNS or GSLB.
 - **Docs:** [Failover](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/failover/) · [Locality routing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/locality-aware-routing/)
 
+[Back to contents](#contents)
+
 ### Item 85 · Upgrades without disruption
 - **Rolling upgrades with draining:** the drain window is `shutdown.min` and `shutdown.max` in the gateway parameters. Blue-green by namespace is covered in a workshop lab.
 - ✅ MCP sessions resume on the new pods if the session key stays the same.
 - ⚠️ A tool call that runs longer than `shutdown.max` is cut off during a rollout. Raise it, or use MCP tasks.
 - **Docs:** [Upgrade](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/operations/upgrade/) · [Blue-green lab](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/labs/upgrades/blue-green-namespaces.md)
+
+[Back to contents](#contents)
 
 ## Platform, tenancy, deployment, cost, catalog
 
@@ -1066,17 +1232,25 @@ The short version for each item:
 - Each runs as a separate service, so they're versioned and deployed like any app, and can't crash the proxy.
 - **Docs:** [ExtProc](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/traffic-management/extproc/) · [BYO ExtAuth](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/extauth/byo-ext-auth-service/)
 
+[Back to contents](#contents)
+
 ### Item 87 · Microsoft Agent 365
 - Not supported. Entra identities and OTel export work with Microsoft tooling today.
 - On the roadmap; no committed date.
+
+[Back to contents](#contents)
 
 ### Items 89, 92 · GitOps, automated deploy and maintenance
 - Helm charts and CRDs, deployed with Argo or Flux; upgrades and rollbacks through Helm.
 - **Docs:** [ArgoCD install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/argocd/) · [Helm install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/helm/) · [Upgrade](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/operations/upgrade/)
 
+[Back to contents](#contents)
+
 ### Item 90 · Portable deployment options
 - Helm for Kubernetes, a standalone binary or container, and air-gapped installs; no vendor-hosted dependency.
 - **Docs:** [Helm install](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/helm/) · [Standalone install](https://docs.solo.io/agentgateway/standalone/latest/documentation/setup/install/) · [Air-gapped](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/install/airgap/)
+
+[Back to contents](#contents)
 
 ### Item 91 · Kubernetes Gateway API
 - 📄 **Supported resources:** Gateway, HTTPRoute, GRPCRoute and BackendTLSPolicy. MCP and A2A are backends behind standard routes.
@@ -1084,10 +1258,14 @@ The short version for each item:
 - ⚠️ Inbound mTLS needs Gateway API 1.5+.
 - **Docs:** [Gateway setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/gateway/)
 
+[Back to contents](#contents)
+
 ### Item 93 · Management APIs
 - Gateway management is the Kubernetes API (CRDs); agentregistry has a REST API.
 - ⚠️ No central multi-cluster management API (POC 14).
 - **Docs:** [Gateway API reference](https://docs.solo.io/agentgateway/kubernetes/latest/reference/api/) · [Registry API reference](https://docs.solo.io/agentregistry/latest/reference/api/)
+
+[Back to contents](#contents)
 
 ### Items 94, 95 · Budgets and chargeback
 - 📄 **Budgets:** per user, team or claim; over budget returns a 429.
@@ -1095,8 +1273,12 @@ The short version for each item:
 - ✅ **Cost on log lines:** `agw.ai.usage.cost.total` appears only when the cost catalog prices that model.
 - **Docs:** [Budget limits](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/cost-controls/budget-limits/) · [Attribution](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/cost-controls/attribution/)
 
+[Back to contents](#contents)
+
 ### Item 98 · Consumer access requests
 - Not built in. Access is granted by an admin or a GitOps PR (AccessPolicy), and the registry REST API can feed ServiceNow or another ITSM tool.
+
+[Back to contents](#contents)
 
 ---
 
@@ -1106,6 +1288,8 @@ The short version for each item:
 - No federated control plane across clusters or regions; GitOps is the recommended approach.
 - Answer: a control plane per cluster, with one Git repo driving all clusters; Argo ApplicationSets target clusters and regions.
 - **Validate:** a change in Git lands on the intended clusters only.
+
+[Back to contents](#contents)
 
 ### POC 3 · MCP S2S (Agent, GW, MCP)
 - **Authentication:** Entra client-credentials JWT validated at the gateway.
@@ -1117,10 +1301,14 @@ The short version for each item:
   - Failover across 2 MCP replicas works. ✅ Sessions survive losing a gateway replica; ⚠️ losing an MCP pod gives a 500 for stateful sessions.
 - **Docs:** [JWT setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/setup/) · [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
+[Back to contents](#contents)
+
 ### POC 4 · MCP OBO (User, Agent, GW, MCP)
 - The user's token goes to the agent. The gateway exchanges it through Entra OBO for the MCP's audience, and the MCP enforces the user's permissions.
 - ⚠️ Use `entTokenExchange.entra` (the old field is deprecated) and `preserveToken: true` on the JWT policy (item 20).
 - **Docs:** [Token exchange with Entra](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backend-authn/token-exchange/idps/entra/) · [Entra OBO lab](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/labs/identity-delegation/msft-entra-obo.md)
+
+[Back to contents](#contents)
 
 ### POC 5 · A2A S2S (Agent1, GW, Agent2, GW, MCP)
 - Each hop goes through the gateway with its own JWT check.
@@ -1130,10 +1318,14 @@ The short version for each item:
   - v1.0 `supportedInterfaces` keep their path.
 - One trace end to end needs both agents to forward `traceparent` (item 69).
 
+[Back to contents](#contents)
+
 ### POC 6 · A2A OBO (User, webapp, GW, Agent, GW, MCP)
 - The token is exchanged at each hop (OBO), so the user's permissions reach the MCP.
 - ⚠️ With Entra, each hop's exchange must use the app registration that matches the incoming token's `aud`, so each hop needs its own exchange policy and client.
 - **Should agents be exposed externally?** Yes, but only behind the gateway, with JWT plus authorization, so the gateway is the single front door.
+
+[Back to contents](#contents)
 
 ### POC 7 · Long-running executions with progress
 - ✅ **No blocking:** each call holds its own stream, and progress notifications stream back as they happen.
@@ -1148,6 +1340,8 @@ The short version for each item:
 - For very long work, use MCP tasks (item 83).
 - **Docs:** [Timeouts](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/resiliency/timeouts/)
 
+[Back to contents](#contents)
+
 ### POC 8 · Human in the loop
 - **No built-in approval workflow;** the prompt lives in the agent or client.
 - **What the gateway does:**
@@ -1156,6 +1350,8 @@ The short version for each item:
   - ✅ **Passes MCP elicitation through:** the server's `elicitation/create` reached the client, and the client's answer completed the tool.
 - ⚠️ ✅ **Capability catch:** for 2025-xx clients, the gateway removes the client's `elicitation` capability (and `sampling` and `roots`) from the initialize it sends upstream. A server SDK that checks client capabilities may refuse to elicit, so test with their server's SDK.
 - ⚠️ **Docs gap:** no docs page covers MCP elicitation passthrough. The `mcp/elicitation` page is a different feature ("STS elicitation" for upstream OAuth credentials), so don't send it as "the elicitation docs".
+
+[Back to contents](#contents)
 
 ### POC 9 · Rate limiting
 - **Setup:** a per-client or per-agent limit keyed on a JWT claim (`jwt.sub`, not `claims["sub"]` as the docs table shows).
@@ -1169,10 +1365,14 @@ The short version for each item:
   - The access log shows `reason=RateLimit`. ✅ That line shows `protocol=http` and no tool name.
 - **Docs:** [MCP rate limit](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/rate-limit/)
 
+[Back to contents](#contents)
+
 ### POC 10 · Tool access control
 - CEL on JWT claims plus `mcp.tool.name`: an allowed tool works, and a denied tool is hidden and its calls are refused ✅.
 - ⚠️ ✅ Logs show "authorization failed" but not which rule matched. Add claims with `attributes.add` so the identity appears.
 - **Docs:** [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
+
+[Back to contents](#contents)
 
 ### POC 11 · Sensitive content
 - An MCP guardrail with a CEL `expression` on `mcp.params` (`matches()` or `regexReplaceAll`) rejects the call before it reaches the tool. ✅ Reject and mask both tested.
@@ -1180,30 +1380,44 @@ The short version for each item:
 - ✅ Logs don't contain argument values by default (item 74 test).
 - **Docs:** [Guardrails setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/guardrails/setup/)
 
+[Back to contents](#contents)
+
 ### POC 12 · MS Agent 365
 - Not supported (item 87). On the roadmap.
+
+[Back to contents](#contents)
 
 ### POC 13 · Prisma AIRS
 - Use an adapter (item 67): LLM through the guardrail webhook, MCP tool calls through the remote guardrail. Fails closed if AIRS is down; decisions are logged.
 - **Docs:** [Guardrail webhook](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/llm/guardrails/webhook/) · [MCP guardrails](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/guardrails/about/)
 
+[Back to contents](#contents)
+
 ### POC 14 · Management APIs for automation
 - There's no central management API. Each cluster's Kubernetes API is the management API, plus GitOps; agentregistry has REST.
 - An automation layer would drive Git or each cluster's API.
+
+[Back to contents](#contents)
 
 ### POC 15 · MCP stateful session management
 - ✅ **Tested:** sessions resume on any gateway replica, cancellation fans out, and tasks route to the server that owns them.
 - 📄 Sessions expire after 30 minutes idle.
 - **Caveats:** see item 4 (losing an MCP pod gives a 500; no SSE resume).
 
+[Back to contents](#contents)
+
 ### POC 17 · MCP disablement (kill switch)
 - Remove the target, drop the tool from the allowlist, or add a CEL deny on an agent; takes effect in about a second over xDS.
 - **Validate:** apply the deny mid-session, and the next call is refused.
+
+[Back to contents](#contents)
 
 ### POC 18 · MCP routing and load balancing
 - **Setup:** multiple MCP replicas behind a Service, with health- and latency-aware balancing; eviction once it's configured (items 79 and 80).
 - **Multi-region:** a gateway per region. Locality routing only ranks endpoints the gateway can see.
 - ⚠️ Stateful sessions stay pinned to their pod (item 4).
+
+[Back to contents](#contents)
 
 ### POC 19 · MCP multiplexing
 - One endpoint, many servers, with tool prefixes and access rules (item 8).
@@ -1211,10 +1425,16 @@ The short version for each item:
 - ✅ 📄 **When one target fails:** by default the session's `tools/list` fails. `spec.mcp.failureMode: FailOpen` skips failed targets and serves the healthy ones; it still errors if all of them fail.
 - **Docs:** [Virtual MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/virtual/)
 
+[Back to contents](#contents)
+
 ### POC 20 · MCP catalog
 - agentregistry (items 96-97, POC 16).
+
+[Back to contents](#contents)
 
 ### POC 21 · Multi-tenancy in a central portal
 - The gateway has per-team namespaces and route delegation; agentregistry has AccessPolicy.
 - ⚠️ Tenant RBAC (tenant RBACPolicy) is on agentregistry main and **not yet released**. Say "next release."
 - No central multi-cluster portal (item 47).
+
+[Back to contents](#contents)
