@@ -71,6 +71,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 
 **Short answer:** yes, they're in the spec, and both are supported. Resume after a dropped stream (`Last-Event-ID`) isn't. Details below.
 
+**Talking point:** "Replicas are stateless for sessions. For long-running work, use MCP tasks (cancellable and pollable), not stream resume."
+
 **Context first:** the 2026-07-28 MCP spec dropped sessions; clients use `server/discover` and send no session ID. The session points below apply to older, session-based clients.
 
 **Recovery**
@@ -94,8 +96,6 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
   - A `Last-Event-ID` header is forwarded blindly to every target.
   - Nothing is buffered or replayed.
 
-**Talking point:** "Replicas are stateless for sessions. For long-running work, use MCP tasks (cancellable and pollable), not stream resume."
-
 **Docs:** [MCP overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/about/) · [Session routing](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/session/)
 
 ---
@@ -105,14 +105,14 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 
 **Short answer:** the 2026-07-28 MCP spec adds cache hints, and the gateway deliberately sets them to "don't cache", because tool lists are filtered per user. There's no cache for tool results. Change notifications pass through.
 
+**Talking point:** "We deliberately turn off spec cache hints, because tool lists are per user after policy."
+
 - 📄 **The 2026-07-28 spec added cache hints** (`ttlMs`, `cacheScope`) on `server/discover`, list calls and reads.
 - 📄 **The gateway sets them to `ttlMs: 0`, `cacheScope: private`** on everything it proxies. Lists are filtered per user by policy, so a shared cache would leak one user's tools to another.
 - 📄 **Internal cache:** Enterprise keeps the federated tool list per session for search and code mode. Not configurable.
 - 📄 **No tool result cache.** Results depend on the user and the moment, so caching belongs in the MCP server.
 - 📄 **LLM semantic cache:** available only through an external integration (vLLM Semantic Router via ExtProc).
 - Change notifications (`listChanged`) pass through.
-
-**Talking point:** "We deliberately turn off spec cache hints, because tool lists are per user after policy."
 
 **Docs:** [MCP spec compatibility](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/spec-compatibility/)
 
@@ -123,6 +123,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 
 **Short answer:** yes. REST APIs become MCP tools from an OpenAPI spec, with no new server to run. GraphQL works as a generic POST step, and gRPC through its REST endpoint. The gateway's auth, rate limits and guardrails apply to the generated tools.
 
+**Talking point:** "Existing REST APIs become MCP tools with no new servers. Tool quality depends on the spec, so you need good `operationId`s and descriptions."
+
 - **REST, Enterprise `entMcp` target with `protocol: OpenAPI`** 📄
   - The spec comes from a ConfigMap through `schemaRef` (key `schema`). JSON or YAML.
   - Each operation becomes a tool. ✅ ⚠️ **`operationId` is required on every operation**; one missing ID breaks the whole target.
@@ -132,8 +134,6 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 - **gRPC:** through a REST / grpc-gateway endpoint.
 - **Policies still apply:** outbound credentials (item 22), plus MCP authentication, tool access, rate limits and guardrails on the generated tools.
 
-**Talking point:** "Existing REST APIs become MCP tools with no new servers. Tool quality depends on the spec, so you need good `operationId`s and descriptions."
-
 **Docs:** [OpenAPI to MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/openapi/) · [Composable MCP](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/composable/)
 
 ---
@@ -142,6 +142,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 **Topic:** How are A2A agent cards governed, and are card signatures, extensions, push notifications and the extended card supported?
 
 **Short answer:** discovery, cancellation, polling and streaming work, and extensions pass through. Push notifications are partial: the config calls go through the gateway, but webhook delivery doesn't. Card signatures aren't verified, and the URL rewrite can break them. The extended card isn't rewritten. That's why the status is Limited.
+
+**Talking point:** "Discovery is governed. Signed cards, the extended card and push egress need design work, so the status is Limited."
 
 | Item | Status | Detail |
 |---|---|---|
@@ -156,8 +158,6 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 | Cancel / poll / stream | ✅ | `tasks/cancel`, `tasks/get`, `GetTask`, `CancelTask` and SSE pass through. SSE is streamed, not buffered |
 | Logs | ✅ ⚠️ | JSON responses log `a2a.method`, `a2a.task.state` and `a2a.context.id`. **SSE (`message/stream`) logs only the method.** A request denied by authorization logs as plain HTTP |
 
-**Talking point:** "Discovery is governed. Signed cards, the extended card and push egress need design work, so the status is Limited."
-
 **Docs:** [A2A](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/agent/a2a/)
 
 ---
@@ -166,6 +166,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 **Topic:** Is mTLS supported both inbound (client to gateway) and outbound (gateway to backend), including SPIFFE?
 
 **Short answer:** yes, both directions. Inbound mTLS validates client certs (needs Gateway API 1.5+). Outbound mTLS presents a client cert to backends. SPIFFE/SPIRE certs are supported for both (tested).
+
+**Talking point:** "mTLS proves which workload is calling; the Entra JWT proves who it's for. Use both."
 
 **Inbound (the gateway checks client certs)**
 - 📄 ✅ Gateway `spec.tls.frontend.default.validation` (or `perPort`) with `caCertificateRefs`. Default mode `AllowValidOnly`. Test: no cert or an untrusted CA failed the handshake; a valid cert got 200.
@@ -185,8 +187,6 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 - A listener option `agentgateway.dev/tls-certificate-source: SPIFFE`, and on backends `certificateSource: SPIFFE`.
 - A SPIFFE backend can't also set `mtlsCertificateRef`, `caCertificateRefs` or `insecureSkipVerify`.
 
-**Talking point:** "mTLS proves which workload is calling; the Entra JWT proves who it's for. Use both."
-
 **Docs:** [Listener mTLS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/setup/listeners/mtls/) · [Backend TLS](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/backendtls/) · [JWT setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/setup/)
 
 ---
@@ -197,6 +197,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 **Short answer:**
 - **Algorithms:** yes; the allowed list is enforced and pinned per key (tested).
 - **Revocation status:** not in JWT validation. Introspection is available through ExtAuth for IdPs that support it, and Entra doesn't.
+
+**Talking point:** "Validation is local, with no IdP call per request. Entra doesn't support revoking access tokens or introspection, so the industry answer is short lifetimes plus an emergency deny. If you also use an IdP that supports introspection, our ExtAuth server can check tokens in real time on sensitive routes."
 
 **Algorithms** ✅ (every one tested)
 - ✅ Accepted: RS256/384/512, PS256/384/512, ES256/384, EdDSA (Ed25519 only).
@@ -223,8 +225,6 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
   3. Remove a compromised signing key from the JWKS; takes effect within the cache window.
   4. For an IdP that supports RFC 7662 introspection (Okta, Ping, Keycloak; **not Entra**): the bundled ExtAuth server with an `AuthConfig` using `oauth2.accessTokenValidation.introspection` (`introspectionUrl`, `clientId`, `clientSecretRef`), attached through an `EnterpriseAgentgatewayPolicy`. The field team has used this pattern with agentgateway in a POC (Slack, 04-30). Not tested here, and not on the agentgateway docs pages. It adds an IdP call per request, so put it on sensitive routes only.
 
-**Talking point:** "Validation is local, with no IdP call per request. Entra doesn't support revoking access tokens or introspection, so the industry answer is short lifetimes plus an emergency deny. If you also use an IdP that supports introspection, our ExtAuth server can check tokens in real time on sensitive routes."
-
 **Docs:** [JWT overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/about/) · [JWT setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/jwt/setup/) · [Authorization (CEL)](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/authorization/)
 
 ---
@@ -237,6 +237,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 2. **Outbound:** backend `auth` with `prefix: "Basic "` (below). ✅ The MCP server received exactly `Authorization: Basic ...`, which replaced the client's header.
 - **Combine with tool access** (CEL on JWT claims). Per-user authorization then happens at the gateway, while the MCP server sees one shared service credential.
 - ⚠️ **What the server loses:** it can't tell which user is calling. If it needs to, add a header from a claim (a transformation on `jwt.sub`), or use token exchange instead (item 21).
+
+**Talking point:** "Clients use OIDC; the MCP server keeps its Basic credential. The gateway validates the user, enforces tool access, strips the user's token and adds the Basic header, so the credential never leaves the gateway."
 
 **API keys** 📄
 - Backend `auth.secretRef`, with `location` set to `header` (`name`, optional `prefix`), `queryParameter` or `cookie`.
@@ -265,6 +267,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 
 **Short answer:** yes, per Gateway. One policy targeting the Gateway with `inheritance: Override` enforces JWT on every route, and routes can't weaken it. Put authorization in the same policy too, because route-level Allow rules otherwise add up.
 
+**Talking point:** "There's no cluster-wide object by design. A Gateway-level Override policy is the global control, as long as it sets every field you want locked."
+
 **Yes** 📄
 - One `EnterpriseAgentgatewayPolicy` targeting the Gateway, with `strategy.inheritance: Override` and `traffic.jwtAuthentication` (`mode: Strict`).
 - Gateway-level rules are applied first, and Override locks each field it sets, so routes can't replace the JWT policy.
@@ -291,8 +295,6 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 - Policies are namespace-local. One policy can target up to 16 Gateways in its namespace.
 - Enforce existence with Kyverno or Gatekeeper, and deliver through GitOps.
 
-**Talking point:** "There's no cluster-wide object by design. A Gateway-level Override policy is the global control, as long as it sets every field you want locked."
-
 **Docs:** [Policy merging](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/about/policies/target-merge/) · [Authorization](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/security/authorization/) · [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
 ---
@@ -301,6 +303,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 **Topic:** Can the UI manage gateway instances across multiple clusters?
 
 **Short answer:** no, the UI is single-cluster. The fleet view today is GitOps plus central observability. A multi-cluster UI is a roadmap question.
+
+**Talking point:** "The UI is per cluster today. Across clusters, Git is the single source of truth and telemetry goes to a central backend."
 
 - 📄 **No. The UI is single-cluster:** it reads and edits resources in its own cluster only. The source logs "running in single-cluster mode".
   - The UI API still has leftover cluster fields, and there's an undocumented OTLP receiver for remote clusters. **Don't promise a fleet view.**
@@ -315,6 +319,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 **Topic:** How do MCP guardrails validate tool inputs and stop sensitive data leaving?
 
 **Short answer:** three layers. Guardrails inspect tool arguments and results, and reject or mask them with CEL or their own gRPC policy service. Target conditions hide whole MCP servers. Tool access hides or denies tools by identity. Reject and mask were both tested.
+
+**Talking point:** "Simple rules are CEL in config; complex decisions call your own policy service over gRPC. The same call can be allowed for one role and masked for another."
 
 Three layers (also in OSS):
 1. **Guardrail processors** (`backend.mcp.guardrails`) 📄 ✅
@@ -338,8 +344,6 @@ Three layers (also in OSS):
 
 ⚠️ **Version gate:** CEL guardrails and target conditions need **v2026.10.0+**. The v2026.7.1 LTS has remote processors only.
 
-**Talking point:** "Simple rules are CEL in config; complex decisions call your own policy service over gRPC. The same call can be allowed for one role and masked for another."
-
 **Docs:** [Guardrails overview](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/guardrails/about/) · [Guardrails setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/guardrails/setup/) · [Tool access](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/tool-access/)
 
 ---
@@ -348,6 +352,8 @@ Three layers (also in OSS):
 **Topic:** How are trace IDs propagated end to end across app, agent, gateway, MCP and models?
 
 **Short answer:** standard W3C `traceparent`. The gateway joins the incoming trace and passes it on to MCP servers and models (tested). It needs a tracing policy, and your agents must forward `traceparent` too.
+
+**Talking point:** "Standard OpenTelemetry. Your agents send a trace; we join it and carry it to every MCP server and model."
 
 - ⚠️ **Nothing is traced until a tracing policy points at a collector.**
 - ✅ **Incoming traces:** a request with a sampled W3C `traceparent` (`-01`) is joined at 100% (`clientSampling`, default true). Test: every span carried the client's trace ID and parent.
@@ -361,8 +367,6 @@ Three layers (also in OSS):
 - ✅ **Custom attributes:** CEL `attributes.add` (tested: `my.tool: mcp.tool.name` gave `echo`). The `span.name` key renames a span.
 - ⚠️ **Your app and agents must forward `traceparent`,** or the trace breaks at the first hop the gateway doesn't see.
 
-**Talking point:** "Standard OpenTelemetry. Your agents send a trace; we join it and carry it to every MCP server and model."
-
 **Docs:** [Tracing setup](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/traces/setup/) · [Trace attribute reference](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/traces/attribute-reference/)
 
 ---
@@ -371,6 +375,8 @@ Three layers (also in OSS):
 **Topic:** How are secrets and sensitive payloads kept out of logs and traces?
 
 **Short answer:** metadata only by default. Prompts, tool arguments and bodies aren't logged or traced (tested). You choose which fields to add or drop and which requests to log. Retention and access are set in their own backend.
+
+**Talking point:** "By default we log metadata, never content. You choose what to add, drop or filter."
 
 - ✅ **Prompts, tool arguments and bodies are NOT logged or traced by default.**
   - Test: a prompt containing an SSN and a tool argument containing an email appeared in no log line and no span.
@@ -387,8 +393,6 @@ Three layers (also in OSS):
   - Access logs go there only if you configure OTLP export; otherwise they stay on stdout.
   - Retention and access are set in your own backend.
 
-**Talking point:** "By default we log metadata, never content. You choose what to add, drop or filter."
-
 **Docs:** [Access logs](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/access-logs/view/) · [Log export](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/observability/access-logs/export/)
 
 ---
@@ -397,6 +401,8 @@ Three layers (also in OSS):
 **Topic:** How is high availability achieved, and where does leader election come in?
 
 **Short answer:** proxies run as multiple active replicas, with HPA, PDB and zone spreading, and no leader election. Leader election is only inside the controller, where one replica writes status and fetches JWKS, while all replicas serve config. Clients never use it.
+
+**Talking point:** "The data path has no leader: every proxy replica is active, and sessions survive losing one. Leader election only decides which controller replica writes status, and traffic doesn't depend on it."
 
 **Data plane (the proxies, where traffic flows)** 📄
 - Run multiple replicas through the gateway parameters on the Gateway's `EnterpriseAgentgatewayParameters`. There are overlays for HPA and PodDisruptionBudget.
@@ -425,6 +431,8 @@ Three layers (also in OSS):
 **Topic:** Can a long-running tool call survive a client network drop without running twice?
 
 **Short answer:** yes, through MCP tasks. They've been supported in code since v2026.8.0, but **aren't documented yet**. The tool keeps running on the server, and the client reconnects through any replica and fetches the result by task ID without re-running it. The gateway never retries MCP calls. This needs 2026-07-28 spec clients and servers that support tasks; the gateway removes tasks for older clients. Validate it with your own clients and servers.
+
+**Talking point:** "With MCP tasks, the tool keeps running on the server and the client picks up the result by task ID after reconnecting, through any replica, without running it twice. The docs haven't caught up yet, so validate it with your own client and server."
 
 **How it works, using MCP tasks** (the MCP spec's answer to long-running tools):
 1. The client declares the tasks extension (`io.modelcontextprotocol/tasks`) in its capabilities and sends a normal `tools/call`. **The server decides** whether to run it as a task. If it does, it returns a task ID (`resultType: "task"`) right away and keeps working.
@@ -457,6 +465,8 @@ Three layers (also in OSS):
 
 **Short answer:** achievable with Kubernetes plus GitOps: a namespace per team, route delegation, and central Override policies. Gaps: no self-service UI, and enterprise ExtAuth and rate-limit fields aren't locked. Suggest "Yes, with GitOps".
 
+**Talking point:** "Tenancy is namespaces plus route delegation: the platform team owns the Gateway and central guardrails, and each team owns its routes, backends and policies through GitOps, the same model as items 48 and 49."
+
 **The gateway side can be achieved, with Kubernetes plus GitOps** 📄
 - **Tenant = namespace (or a set of them).** Kubernetes RBAC limits each team to its own namespace.
 - **Route delegation:**
@@ -483,6 +493,8 @@ Three layers (also in OSS):
 
 **Short answer:** agentregistry catalogs MCP servers, agents and skills (96). Access policies filter what each consumer sees (97). An approval workflow plus tag versioning covers lifecycle (99).
 
+**Talking point:** "The registry decides what exists, which version, who can see it and who approved it. The gateway enforces it at runtime."
+
 The short version for each item:
 
 - **Item 96 · Inventory:**
@@ -507,6 +519,8 @@ The short version for each item:
 **Topic:** How is MCP server lifecycle (review, approval, versions, retirement) governed?
 
 **Short answer:** agentregistry, a separate product. Versions are tags. The approval workflow gates publishes. Retiring means deleting the tag. With Enterprise route delegation, the registry decides which version is live at the same URL.
+
+**Talking point:** "Your CI/CD keeps deploying MCP servers. The registry becomes the version catalog, the approval gate, and, with Enterprise, the switch for which version is live at the same URL."
 
 **agentregistry** 📄 (a separate product and license)
 - **Versions:** each version is a tag, and consumers pin versions. Applying without a tag writes the literal tag `latest`.
@@ -540,6 +554,8 @@ The short version for each item:
 **Topic:** Are MCP Apps (interactive UI returned with tool results) supported with policies and observability enforced?
 
 **Short answer:** supported with no config (tested). UI resources are routed, authorization hides denied UIs, and app clicks are normal tool calls with the same policies and traces. Guardrails can inspect the UI HTML if configured.
+
+**Talking point:** "MCP Apps are MCP servers that also ship a UI. To the gateway it's the same traffic, so policies and observability apply unchanged."
 
 ✅ **Supported, no config** (all tested with 2 federated servers)
 - `ui://` resources pass through. With 2+ targets they're rewritten to `ui://{target}+{rest}`, and reads route correctly. A single target is unchanged.
