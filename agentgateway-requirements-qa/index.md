@@ -553,9 +553,40 @@ The short version for each item:
 ## POC 22 · MCP Apps
 **Topic:** Are MCP Apps (interactive UI returned with tool results) supported with policies and observability enforced?
 
-**Short answer:** supported with no config (tested). UI resources are routed, authorization hides denied UIs, and app clicks are normal tool calls with the same policies and traces. Guardrails can inspect the UI HTML if configured.
+**Short answer:** supported with no config (tested). The host fetches the UI (an HTML template) from the MCP server once through the gateway, and renders it locally in a sandbox. Every action in the UI becomes a normal tool call through the gateway, with the same policies and traces. Authorization hides denied UIs, and guardrails can inspect the HTML if configured. The one path outside the gateway is external domains the app declares in its CSP.
 
 **Talking point:** "MCP Apps are MCP servers that also ship a UI. To the gateway it's the same traffic, so policies and observability apply unchanged."
+
+**How an MCP App works** (MCP Apps draft spec, `io.modelcontextprotocol/ui`)
+1. **The tool advertises a UI** in `tools/list`: `_meta.ui.resourceUri: "ui://..."`.
+2. **The host fetches the UI once** with a normal `resources/read`, through the gateway. It gets back an HTML template (`text/html;profile=mcp-app`) and can prefetch and cache it.
+3. **The host renders it locally** in a sandboxed iframe. Nothing UI-related runs on the MCP server.
+4. **Data comes from normal tool calls.** The model calls the tool through the gateway, and the host passes the arguments and result into the iframe.
+5. **The UI can act:** a button or form asks the host for a `tools/call`, which the host sends to the MCP server through the gateway.
+   - The UI talks only to the host (JSON-RPC over `postMessage`), never directly to the MCP server.
+   - Tools marked `visibility: ["app"]` are for the UI only, and the host hides them from the model.
+- **Typical UI:** a dashboard or chart of results, a sortable table, a map, or a form whose submit calls an app-only tool (for example approve, or refine). It's one self-contained HTML page with inline JS and CSS; the template stays the same, and the data changes per call.
+- ⚠️ **What bypasses the gateway:**
+  - The iframe-to-host messages, which are local to the host.
+  - **Any external domains the app declares in its `csp` metadata** (`connect-src`). The UI can call those directly, without going through agentgateway. With no `csp` declared, the host applies a restrictive default.
+  - So review each app's declared `csp` domains, and confirm the host enforces them.
+
+**Hosts that render MCP Apps** (per the official MCP Apps page, October 2026)
+
+| Host | Notes |
+|---|---|
+| Claude | Web and Claude Desktop |
+| VS Code GitHub Copilot | |
+| Microsoft 365 Copilot | |
+| Goose | |
+| Postman | |
+| MCPJam | |
+| Archestra.AI | |
+| ChatGPT | Support announced in January 2026; not on the official list, so confirm before relying on it |
+
+- MCP Inspector does not render apps.
+- Many other MCP clients don't support apps yet. The [client matrix](https://modelcontextprotocol.io/extensions/client-matrix) tracks support per client.
+- Sources: [MCP Apps overview](https://modelcontextprotocol.io/extensions/apps/overview) · [MCP blog announcement](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
 
 ✅ **Supported, no config** (all tested with 2 federated servers)
 - `ui://` resources pass through. With 2+ targets they're rewritten to `ui://{target}+{rest}`, and reads route correctly. A single target is unchanged.
@@ -573,6 +604,7 @@ The short version for each item:
 2. A user without access gets no UI.
 3. A guardrail masks a field in the UI.
 4. The trace shows the `resources/read` and the `tools/call`.
+5. Review the app's declared `csp` domains: anything listed there is reachable from the UI without the gateway.
 
 **Docs:** [MCP Apps](https://docs.solo.io/agentgateway/kubernetes/latest/documentation/mcp/apps/)
 
