@@ -67,6 +67,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 4 · MCP Streamable HTTP transport
+**Topic:** Does the gateway support MCP Streamable HTTP recovery (reconnect, resume) and cancellation?
+
 **Short answer:** yes, they're in the spec, and both are supported. Resume after a dropped stream (`Last-Event-ID`) isn't. Details below.
 
 **Context first:** the 2026-07-28 MCP spec dropped sessions; clients use `server/discover` and send no session ID. The session points below apply to older, session-based clients.
@@ -99,6 +101,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 6 · MCP feature coverage
+**Topic:** Does the gateway handle MCP caching (for example caching `tools/list`)?
+
 **Short answer:** the 2026-07-28 MCP spec adds cache hints, and the gateway deliberately sets them to "don't cache", because tool lists are filtered per user. There's no cache for tool results. Change notifications pass through.
 
 - 📄 **The 2026-07-28 spec added cache hints** (`ttlMs`, `cacheScope`) on `server/discover`, list calls and reads.
@@ -115,6 +119,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 9 · API-to-MCP (MCP Bridge)
+**Topic:** Can existing REST, GraphQL and gRPC APIs be exposed as MCP tools, keeping their auth and policies?
+
 **Short answer:** yes. REST APIs become MCP tools from an OpenAPI spec, with no new server to run. GraphQL works as a generic POST step, and gRPC through its REST endpoint. The gateway's auth, rate limits and guardrails apply to the generated tools.
 
 - **REST, Enterprise `entMcp` target with `protocol: OpenAPI`** 📄
@@ -133,6 +139,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 12 · A2A discovery and task semantics
+**Topic:** How are A2A agent cards governed, and are card signatures, extensions, push notifications and the extended card supported?
+
 **Short answer:** discovery, cancellation, polling and streaming work, and extensions pass through. Push notifications are partial: the config calls go through the gateway, but webhook delivery doesn't. Card signatures aren't verified, and the URL rewrite can break them. The extended card isn't rewritten. That's why the status is Limited.
 
 | Item | Status | Detail |
@@ -155,6 +163,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 16 · Service-to-service authentication
+**Topic:** Is mTLS supported both inbound (client to gateway) and outbound (gateway to backend), including SPIFFE?
+
 **Short answer:** yes, both directions. Inbound mTLS validates client certs (needs Gateway API 1.5+). Outbound mTLS presents a client cert to backends. SPIFFE/SPIRE certs are supported for both (tested).
 
 **Inbound (the gateway checks client certs)**
@@ -182,6 +192,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 19 · Token validation
+**Topic:** Does token validation check algorithms and revocation status?
+
 **Short answer:**
 - **Algorithms:** yes; the allowed list is enforced and pinned per key (tested).
 - **Revocation status:** not in JWT validation. Introspection is available through ExtAuth for IdPs that support it, and Entra doesn't.
@@ -218,6 +230,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 22 · Outbound credentials
+**Topic:** Can clients use OIDC to the gateway while the gateway uses Basic auth to the MCP server?
+
 **Short answer: yes.** Clients authenticate to the gateway with OIDC (an Entra JWT), and the gateway calls the MCP server with Basic auth. Both halves were tested:
 1. **Inbound:** `jwtAuthentication` validates the Entra token. ✅ After validation the gateway **strips** the client's token, so the MCP server never sees it.
 2. **Outbound:** backend `auth` with `prefix: "Basic "` (below). ✅ The MCP server received exactly `Authorization: Basic ...`, which replaced the client's header.
@@ -247,6 +261,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 25 · Default-deny, global JWT policy
+**Topic:** Can one global policy enforce JWT auth on all MCP servers and routes?
+
 **Short answer:** yes, per Gateway. One policy targeting the Gateway with `inheritance: Override` enforces JWT on every route, and routes can't weaken it. Put authorization in the same policy too, because route-level Allow rules otherwise add up.
 
 **Yes** 📄
@@ -282,6 +298,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Item 47 · Fleet-wide management
+**Topic:** Can the UI manage gateway instances across multiple clusters?
+
 **Short answer:** no, the UI is single-cluster. The fleet view today is GitOps plus central observability. A multi-cluster UI is a roadmap question.
 
 - 📄 **No. The UI is single-cluster:** it reads and edits resources in its own cluster only. The source logs "running in single-cluster mode".
@@ -294,6 +312,8 @@ Answers to a common set of enterprise AI gateway requirements (MCP, A2A, identit
 ---
 
 ## Items 62 and 65 · Tool input validation, data exfiltration
+**Topic:** How do MCP guardrails validate tool inputs and stop sensitive data leaving?
+
 **Short answer:** three layers. Guardrails inspect tool arguments and results, and reject or mask them with CEL or their own gRPC policy service. Target conditions hide whole MCP servers. Tool access hides or denies tools by identity. Reject and mask were both tested.
 
 Three layers (also in OSS):
@@ -325,6 +345,8 @@ Three layers (also in OSS):
 ---
 
 ## Item 69 · End-to-end context propagation
+**Topic:** How are trace IDs propagated end to end across app, agent, gateway, MCP and models?
+
 **Short answer:** standard W3C `traceparent`. The gateway joins the incoming trace and passes it on to MCP servers and models (tested). It needs a tracing policy, and your agents must forward `traceparent` too.
 
 - ⚠️ **Nothing is traced until a tracing policy points at a collector.**
@@ -346,6 +368,8 @@ Three layers (also in OSS):
 ---
 
 ## Item 74 · Telemetry privacy and governance
+**Topic:** How are secrets and sensitive payloads kept out of logs and traces?
+
 **Short answer:** metadata only by default. Prompts, tool arguments and bodies aren't logged or traced (tested). You choose which fields to add or drop and which requests to log. Retention and access are set in their own backend.
 
 - ✅ **Prompts, tool arguments and bodies are NOT logged or traced by default.**
@@ -370,6 +394,8 @@ Three layers (also in OSS):
 ---
 
 ## Item 78 · High availability
+**Topic:** How is high availability achieved, and where does leader election come in?
+
 **Short answer:** proxies run as multiple active replicas, with HPA, PDB and zone spreading, and no leader election. Leader election is only inside the controller, where one replica writes status and fetches JWKS, while all replicas serve config. Clients never use it.
 
 **Data plane (the proxies, where traffic flows)** 📄
@@ -396,6 +422,8 @@ Three layers (also in OSS):
 ---
 
 ## Item 83 · Long-running tool execution continuity
+**Topic:** Can a long-running tool call survive a client network drop without running twice?
+
 **Short answer:** yes, through MCP tasks. They've been supported in code since v2026.8.0, but **aren't documented yet**. The tool keeps running on the server, and the client reconnects through any replica and fetches the result by task ID without re-running it. The gateway never retries MCP calls. This needs 2026-07-28 spec clients and servers that support tasks; the gateway removes tasks for older clients. Validate it with your own clients and servers.
 
 **How it works, using MCP tasks** (the MCP spec's answer to long-running tools):
@@ -425,6 +453,8 @@ Three layers (also in OSS):
 ---
 
 ## Item 88 · Multi-tenancy and delegated administration
+**Topic:** Can teams self-manage their own MCPs, agents, routes and policies in isolated tenants, for example through GitOps?
+
 **Short answer:** achievable with Kubernetes plus GitOps: a namespace per team, route delegation, and central Override policies. Gaps: no self-service UI, and enterprise ExtAuth and rate-limit fields aren't locked. Suggest "Yes, with GitOps".
 
 **The gateway side can be achieved, with Kubernetes plus GitOps** 📄
@@ -449,6 +479,8 @@ Three layers (also in OSS):
 ---
 
 ## Items 96, 97, 99 · Catalog, discovery, lifecycle (agentregistry)
+**Topic:** How does agentregistry provide the catalog, authorized discovery and lifecycle approval?
+
 **Short answer:** agentregistry catalogs MCP servers, agents and skills (96). Access policies filter what each consumer sees (97). An approval workflow plus tag versioning covers lifecycle (99).
 
 The short version for each item:
@@ -472,6 +504,8 @@ The short version for each item:
 ---
 
 ## POC 16 · MCP lifecycle governance
+**Topic:** How is MCP server lifecycle (review, approval, versions, retirement) governed?
+
 **Short answer:** agentregistry, a separate product. Versions are tags. The approval workflow gates publishes. Retiring means deleting the tag. With Enterprise route delegation, the registry decides which version is live at the same URL.
 
 **agentregistry** 📄 (a separate product and license)
@@ -503,6 +537,8 @@ The short version for each item:
 ---
 
 ## POC 22 · MCP Apps
+**Topic:** Are MCP Apps (interactive UI returned with tool results) supported with policies and observability enforced?
+
 **Short answer:** supported with no config (tested). UI resources are routed, authorization hides denied UIs, and app clicks are normal tool calls with the same policies and traces. Guardrails can inspect the UI HTML if configured.
 
 ✅ **Supported, no config** (all tested with 2 federated servers)
