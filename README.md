@@ -4,6 +4,12 @@ Workshops, walkthroughs, and reference materials for Solo.io products.
 
 ## Contents
 
+### Agent Gateway: AI Gateway Requirements Q&A
+
+Row-by-row answers to a common set of enterprise AI gateway requirements (MCP, A2A, identity, policy, LLM traffic, security, observability, reliability, operations), verified against Solo Enterprise for agentgateway v2026.10.1 source and docs, with tests where possible.
+
+- **[Requirements Q&A](agentgateway-requirements-qa/)** ([web page](https://coryjett.github.io/solo-misc-workshops/agentgateway-requirements-qa/))
+
 ### Agent Gateway — Authentication Patterns
 
 Comprehensive audit of all authentication patterns supported by [Solo Enterprise for Agent Gateway](https://docs.solo.io/agentgateway/2.2.x/) — OIDC, OBO delegation/impersonation, elicitation, passthrough, static secrets, claim-based mapping, API key, basic auth, ext auth, MCP OAuth + DCR, mTLS, and gateway-mediated token exchange.
