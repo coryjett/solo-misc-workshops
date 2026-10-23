@@ -1,0 +1,15 @@
+title: solo-misc-workshops
+description: Workshops, walkthroughs, and reference materials for Solo.io products.
+theme: jekyll-theme-primer
+# Only the requirements Q&A page is published as a site; everything else stays repo-only.
+exclude:
+  - .claude
+  - .env
+  - Agentgateway-AuthN-Patterns
+  - e2e-agent-identity-delegation
+  - flow13-token-exchange
+  - images
+  - kagent-otel-troubleshooting
+  - solo-enterprise-istio-ambient
+  - workshops
+  - README.md
