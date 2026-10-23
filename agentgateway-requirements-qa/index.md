@@ -520,7 +520,7 @@ The short version for each item:
 
 **Short answer:** agentregistry, a separate product. Versions are tags. The approval workflow gates publishes. Retiring means deleting the tag. With Enterprise route delegation, the registry decides which version is live at the same URL.
 
-**Talking point:** "Your CI/CD keeps deploying MCP servers. The registry becomes the version catalog, the approval gate, and, with Enterprise, the switch for which version is live at the same URL."
+**Talking point:** "Your CI/CD keeps deploying MCP servers. The registry becomes the version catalog and the approval gate for what enters it (only approved versions can be deployed), and, with Enterprise, the switch for which version is live at the same URL."
 
 **agentregistry** 📄 (a separate product and license)
 - **Versions:** each version is a tag, and consumers pin versions. Applying without a tag writes the literal tag `latest`.
