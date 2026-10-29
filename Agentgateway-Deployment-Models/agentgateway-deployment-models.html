@@ -1,0 +1,64 @@
+<!doctype html><html><head><meta charset="utf-8"><title>agentgateway deployment models</title>
+<style>
+@page{size:Letter;margin:16mm 17mm}
+body{font:11px/1.45 "Inter",system-ui,-apple-system,sans-serif;color:#111;margin:0}
+h1{font-size:20px;margin:0 0 8px;font-weight:650}
+h2{font-size:12px;margin:16px 0 6px;color:#0b5fa5;text-transform:uppercase;letter-spacing:.05em}
+p{margin:0 0 7px}
+ul{margin:0;padding-left:16px}li{margin:0 0 4px}
+table{border-collapse:collapse;width:100%;font-size:10.3px;line-height:1.4}
+th,td{text-align:left;vertical-align:top;padding:6px 7px;border-top:1px solid #d6d3ca}
+th{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#555;border-top:0;padding-top:0}
+td.n{font-weight:650;width:18%}
+tr{break-inside:avoid}
+.pro{color:#1f6f43}.con{color:#9a3b1e}
+code{font:9.8px ui-monospace,Menlo,monospace;background:#efede6;padding:0 3px;border-radius:3px}
+.rec{border-left:3px solid #0b5fa5;padding:8px 12px;margin-top:6px;background:#f7f6f2}
+.rec ol{margin:0;padding-left:18px}.rec li{margin:0 0 6px}
+.foot{color:#555;font-size:9.6px;margin-top:10px}
+.pb{break-before:page}
+</style></head><body>
+<h1>Solo Enterprise for agentgateway: deployment models on shared Kubernetes</h1>
+<p>Where to place agentgateway when a platform team owns shared clusters and application teams are confined to their own namespaces. Three in-cluster models, then the multi-cluster question without a Solo mesh. The right answer depends on who should own routing and policy, how many clusters share a region, and how much the platform team wants to review; use this as the starting point for that discussion.</p>
+
+<h2>Fixed in every model</h2>
+<ul>
+<li><b>One controller per cluster, cluster-scoped by design.</b> Controller, CRDs, the <code>GatewayClass</code> (fixed name <code>enterprise-agentgateway</code>) and the controller's ClusterRoles are installed once per cluster by the platform owner; one reviewable <code>helm template</code>. There is no multi-cluster control plane; clusters stay identical through GitOps (Argo CD is documented).</li>
+<li><b>One proxy per <code>Gateway</code> object</b>, deployed in that object's namespace. Routes (<code>HTTPRoute</code>), backends and policies attach from the same or other namespaces under Gateway API rules (<code>allowedRoutes</code>, <code>ReferenceGrant</code>).</li>
+<li><b>Permissions today:</b> the controller reads Secrets and ConfigMaps cluster-wide and manages extension RBAC at runtime; <code>rbac.gatewayNamespaces</code> and <code>discoveryNamespaceSelectors</code> limit what it watches and where it deploys, not what it may read. Namespace-scoped reads and a formal same-cluster multi-tenancy model are on the engineering roadmap. Unused extensions (ext-auth, WAF, rate limit, ext-cache) can be disabled today, which removes their roles.</li>
+<li><b>Hosted model providers are external hostnames from every cluster</b>; only in-cluster MCP servers and self-hosted models are local to a gateway.</li>
+</ul>
+
+<h2>Three in-cluster models</h2>
+<table>
+<tr><th>Model</th><th class="pro">Pros</th><th class="con">Cons</th></tr>
+<tr><td class="n">A. Gateway in a dedicated platform namespace; the gateway team owns gateway, routes and policies; routes to application namespaces</td>
+<td>Smallest review surface (one namespace, one team, one proxy fleet). Policy, quotas, provider secrets and audit in one place. Application teams stay decoupled from the gateway APIs; the platform stays opinionated. Simplest fit with namespace-scoped controller permissions.</td>
+<td>Every route or policy change goes through the gateway team (a ticket queue as adoption grows). A <code>ReferenceGrant</code> in each application namespace whose Services the gateway routes to (Gateway API rule for cross-namespace backends). One fleet: a bad policy affects all teams.</td></tr>
+<tr><td class="n">B. Gateway in each application namespace</td>
+<td>Strongest isolation; fits a one-namespace-per-team rule exactly; no cross-namespace references; teams move at their own pace.</td>
+<td>N proxy fleets to size, upgrade and monitor; N copies of provider secrets; central policy (PII masking, budgets, audit shape) re-applied per namespace and prone to drift; the controller needs reach into every namespace with a <code>Gateway</code>; the weakest story for a security reviewer.</td></tr>
+<tr><td class="n">C. Centralized gateway, configuration owned by application namespaces (route delegation)</td>
+<td>One fleet and one platform-policy point with no ticket queue: the platform owns the <code>Gateway</code> and parent routes, teams own child routes, backends and policies in their namespaces, platform policies are inherited. Matches the Gateway API ownership model; the shape Solo's agentregistry integration uses; scales with teams.</td>
+<td>Two-level ownership to document (inherited vs team-settable). The controller watches the application namespaces, so it reads their routes, backends and referenced Secrets. Teams are coupled to the gateway APIs and need to learn them.</td></tr>
+</table>
+
+<h2 class="pb">Across clusters, without a Solo mesh</h2>
+<p>Existing Istio east-west gateways are fine for connectivity between clusters. What is missing without Solo's Istio multi-cluster is service discovery that makes a remote Service look local, so a gateway that serves several clusters routes to a declared inventory. Two shapes:</p>
+<table>
+<tr><th></th><th>Regional routing tier (one gateway per region, a few workload clusters behind it)</th><th>Gateway per cluster</th></tr>
+<tr><td class="n">Backends</td><td>Hosted providers as external hostnames; workload-cluster MCP servers and models as declared backends (static hostname backends) over the east-west gateways. No discovery: the inventory lives in GitOps.</td><td>Local Services and external hostnames.</td></tr>
+<tr><td class="n">Pros</td><td>One entry point and one audit location per region; fewer controllers to review and upgrade; the workload clusters' core platform is untouched; a documented Solo gateway deployment pattern (central ingress tier plus a second tier).</td><td>Smallest permission footprint per cluster; failures contained to one cluster; no hairpin.</td></tr>
+<tr><td class="n">Cons</td><td>The hairpin through the east-west path is fine at low latency inside a region and gets harder as clusters, zones and regions multiply; static backend list; one controller's read scope spans several clusters' teams; region-wide blast radius.</td><td>N installs and N RBAC reviews; a gateway inside every workload cluster touches the core platform; per-team quota is per cluster unless a shared rate-limit or budget store is used.</td></tr>
+<tr><td class="n">Later</td><td colspan="2">Solo's Istio ambient multi-cluster turns the declared list into <code>*.mesh.internal</code> global services and allows a workload-cluster waypoint for service-to-service L7 policy without the hairpin. Failover is the same in both shapes: LLM priority groups and health eviction prefer the same-region provider deployment and spill to the next; global DNS picks the regional entry point at the client edge.</td></tr>
+</table>
+
+<h2>Recommendation</h2>
+<div class="rec"><ol>
+<li><b>In-cluster: start with A, grow into C.</b> A gives the smallest review surface and keeps application teams off the gateway APIs while the platform team learns the product. When the ticket queue becomes the bottleneck, add a parent route and delegate (C): it is additive, nothing is thrown away, and it is the shape Solo's own agentregistry gateway integration uses. B suits only organizations without a central policy requirement.</li>
+<li><b>Across clusters: a regional routing tier when a region is a few clusters on a low-latency network and one entry point matters; a gateway per cluster when permission footprint and failure containment matter more, or clusters are far apart.</b> Mixing is normal: a routing tier for ingress and egress, plus a gateway inside a workload cluster only where service-to-service policy must not hairpin.</li>
+<li><b>Discovery</b> is a mesh feature, not a gateway feature. Add Solo's Istio multi-cluster when the declared inventory stops scaling.</li>
+<li><b>Do now, in any model:</b> enumerate <code>rbac.gatewayNamespaces</code>, set <code>discoveryNamespaceSelectors</code> to the team namespaces, disable unused extensions, and audit and alert on the controller's Secret reads.</li>
+</ol></div>
+<div class="foot">Questions that change the answer: clusters per region and the latency between them; any air-gapped boundary (a regional tier cannot cross it); whether application teams should author their own routes and policies, and when. Docs: docs.solo.io/agentgateway/kubernetes/latest/documentation/ (traffic-management/route-delegation, security/rbac-hardening, llm/rbac, llm/failover).</div>
+</body></html>
