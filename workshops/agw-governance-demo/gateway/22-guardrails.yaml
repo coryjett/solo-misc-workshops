@@ -12,7 +12,7 @@ spec:
         processors:
           - methods: { tools/call: Request }
             expression:
-              condition: "mcp.params.name.startsWith('delete_')"
+              condition: "mcp.params.name.contains('delete_')"
               reject: "Blocked by policy: destructive tools are not available to AI clients"
           - methods: { tools/call: Response }
             expression:

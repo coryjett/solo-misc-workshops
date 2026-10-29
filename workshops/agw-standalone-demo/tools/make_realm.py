@@ -35,7 +35,9 @@ print(json.dumps({
               user(3, "security-analyst", "Alex", "Security", "security")],
     "clients": [
         {"clientId": "mcp-inspector", "name": "Demo CLI / MCP client", "enabled": True, "publicClient": True,
-         "directAccessGrantsEnabled": True, "standardFlowEnabled": True, "redirectUris": ["*"], "webOrigins": ["*"], "protocolMappers": mappers},
+         "directAccessGrantsEnabled": True, "standardFlowEnabled": True,
+         "redirectUris": ["http://localhost:6274/*", "http://127.0.0.1:6274/*"], "webOrigins": ["http://localhost:6274", "http://127.0.0.1:6274"],
+         "attributes": {"pkce.code.challenge.method": "S256"}, "protocolMappers": mappers},
         {"clientId": "open-webui", "name": "Open WebUI", "enabled": True, "publicClient": False, "secret": open(sec).read().strip(),
          "standardFlowEnabled": True, "directAccessGrantsEnabled": False, "redirectUris": [f"{owui}/oauth/oidc/callback"],
          "webOrigins": [owui], "attributes": {"post.logout.redirect.uris": f"{owui}/*"}, "protocolMappers": mappers},
