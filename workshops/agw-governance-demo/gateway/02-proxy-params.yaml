@@ -1,0 +1,8 @@
+# Tells the gateway proxy where the token service (STS) lives, for On-Behalf-Of exchange.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata: { name: mcp-gateway-params, namespace: agentgateway-system }
+spec:
+  env:
+    - { name: STS_URI, value: "http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/oauth2/token" }
+    - { name: STS_AUTH_TOKEN, value: /var/run/secrets/xds-tokens/xds-token }

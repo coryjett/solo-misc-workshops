@@ -1,0 +1,126 @@
+# LLM routing: one OpenAI-compatible endpoint (localhost:8081/v1/chat/completions), several models behind it.
+#   local-model   -> self-hosted model (any OpenAI-compatible server: Ollama, vLLM, a GPU box)
+#   gpt-4.1-mini   -> OpenAI
+#   cloud-fallback   -> OpenAI, Internal: only reachable as auto's failover (premium stays locked)
+#   auto -> virtual model: local first, fails over to cloud-fallback. What users get unless they ask otherwise.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayModel
+metadata: { name: local-model, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  match: { model: local-model }
+  visibility: Public
+  provider: OpenAI
+  baseURL: ${LOCAL_LLM_BASE_URL}
+  policies:
+    auth: { secretRef: { name: local-llm-key } }
+    # Prompt guards, before any model sees the request: block injection attempts, mask PII.
+    promptGuard:
+      request:
+        - regex:
+            action: Reject
+            matches:
+              - '(?i)ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)'
+              - '(?i)disregard\s+(all\s+|any\s+|the\s+)?(previous|prior|above|system)\s+(instructions|rules|prompts?)'
+              - '(?i)(reveal|print|show|repeat)\s+(me\s+)?(your|the)\s+(system\s+prompt|hidden\s+instructions)'
+              - '(?i)you\s+are\s+now\s+(DAN|in\s+developer\s+mode|unrestricted|jailbroken)'
+          response:
+            statusCode: 403
+            message: "Blocked by policy: this request looks like a prompt-injection attempt."
+        - webhook:
+            action: Reject
+            failureMode: FailOpen
+            backendRef: { kind: Service, name: injection-guard, namespace: ${TOOLS_NS}, port: 8000 }
+        - regex:
+            action: Mask
+            builtins: [ Ssn, CreditCard, PhoneNumber, Email ]
+    headers:
+      request:
+        set: [ { name: User-Agent, value: agentgateway-demo } ]
+    # If the local model errors or is overloaded, take it out of rotation for 30s (virtual model fails over).
+    health:
+      unhealthyCondition: "response.code >= 500 || response.code == 429"
+      eviction: { consecutiveFailures: 1, duration: 30s }
+    transformations:
+      - { field: model, expression: '"${LOCAL_LLM_MODEL}"' }
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayModel
+metadata: { name: gpt-4-1-mini, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  match: { model: gpt-4.1-mini }
+  visibility: Public
+  provider: OpenAI
+  policies:
+    auth: { secretRef: { name: openai-key } }
+    # Prompt guards, before any model sees the request: block injection attempts, mask PII.
+    promptGuard:
+      request:
+        - regex:
+            action: Reject
+            matches:
+              - '(?i)ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)'
+              - '(?i)disregard\s+(all\s+|any\s+|the\s+)?(previous|prior|above|system)\s+(instructions|rules|prompts?)'
+              - '(?i)(reveal|print|show|repeat)\s+(me\s+)?(your|the)\s+(system\s+prompt|hidden\s+instructions)'
+              - '(?i)you\s+are\s+now\s+(DAN|in\s+developer\s+mode|unrestricted|jailbroken)'
+          response:
+            statusCode: 403
+            message: "Blocked by policy: this request looks like a prompt-injection attempt."
+        - webhook:
+            action: Reject
+            failureMode: FailOpen
+            backendRef: { kind: Service, name: injection-guard, namespace: ${TOOLS_NS}, port: 8000 }
+        - regex:
+            action: Mask
+            builtins: [ Ssn, CreditCard, PhoneNumber, Email ]
+    # Premium cloud model: the security team only.
+    authorization:
+      action: Allow
+      policy: { matchExpressions: [ "'security' in jwt.groups" ] }
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayModel
+metadata: { name: cloud-fallback, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  match: { model: cloud-fallback }
+  visibility: Internal   # not requestable by name; only reachable as auto's failover target
+  provider: OpenAI
+  policies:
+    auth: { secretRef: { name: openai-key } }
+    # Prompt guards, before any model sees the request: block injection attempts, mask PII.
+    promptGuard:
+      request:
+        - regex:
+            action: Reject
+            matches:
+              - '(?i)ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)'
+              - '(?i)disregard\s+(all\s+|any\s+|the\s+)?(previous|prior|above|system)\s+(instructions|rules|prompts?)'
+              - '(?i)(reveal|print|show|repeat)\s+(me\s+)?(your|the)\s+(system\s+prompt|hidden\s+instructions)'
+              - '(?i)you\s+are\s+now\s+(DAN|in\s+developer\s+mode|unrestricted|jailbroken)'
+          response:
+            statusCode: 403
+            message: "Blocked by policy: this request looks like a prompt-injection attempt."
+        - webhook:
+            action: Reject
+            failureMode: FailOpen
+            backendRef: { kind: Service, name: injection-guard, namespace: ${TOOLS_NS}, port: 8000 }
+        - regex:
+            action: Mask
+            builtins: [ Ssn, CreditCard, PhoneNumber, Email ]
+    transformations:
+      - { field: model, expression: '"gpt-4.1-mini"' }
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayModel
+metadata: { name: auto, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  match: { model: auto }
+  visibility: Public
+  virtualModel:
+    failover:
+      targets:
+        - { modelRef: { name: local-model }, priority: 1 }
+        - { modelRef: { name: cloud-fallback }, priority: 2 }

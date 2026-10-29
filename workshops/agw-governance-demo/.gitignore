@@ -1,0 +1,5 @@
+.license-source
+.secrets/
+demo.env
+*.log
+__pycache__/

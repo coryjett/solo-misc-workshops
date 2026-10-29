@@ -1,0 +1,207 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+# Solo Enterprise agentgateway, standalone. One file is the whole gateway: identity, models, tools, policy, logs.
+# Rendered to config.yaml by gateway.sh (ports and the IdP issuer substituted); secrets stay environment-variable references.
+# The UI at http://localhost:${ADMIN_PORT}/ui edits this same file (config.storage.mode: file).
+
+config:
+  database: { url: ${DEMO_DIR}/.run/agentgateway.db }   # budgets, cost analytics, UI request history (SQLite)
+  storage: { mode: file }                                  # UI edits are written back into this file
+  # Price list. Cloud models come from the built-in catalog; the self-hosted model gets an amortized rate
+  # (USD per million tokens) so every request has a cost and budgets apply to it too.
+  modelCatalog:
+    - inline:
+        providers:
+          selfhosted:
+            models:
+              ${LOCAL_LLM_MODEL}: { rates: { input: "0.10", output: "0.40" } }
+  # Named request attributes (CEL). Budgets, logs and the UI's analytics are keyed on these.
+  standardAttributes:
+    user: jwt.preferred_username
+    group: jwt.groups[0]
+
+# Every request through the gateway is logged with who, what model or tool, tokens, cost and outcome.
+frontendPolicies:
+  accessLog:
+    add:
+      user: jwt.preferred_username
+      group: jwt.groups[0]
+    database: { llm: metadata }   # metadata (usage, cost, timing) only: prompts are not stored
+
+# ------------------------------------------------------------------------------------------------------------
+# One port for everything: /v1/* (LLM), /mcp (tools), /api/* (plain REST), /ui (admin UI).
+gateways:
+  default: { port: ${GW_PORT} }
+
+ui: {}   # serve the UI on the default gateway too (it is always on the admin port ${ADMIN_PORT})
+
+# ------------------------------------------------------------------------------------------------------------
+# LLM: one OpenAI-compatible endpoint, several models behind it.
+llm:
+  policies:
+    # Identity at the door: a JWT from the IdP. Swap issuer/jwks for Entra:
+    #   issuer: https://login.microsoftonline.com/<tenant>/v2.0   jwks.url: https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys
+    jwtAuth:
+      mode: strict
+      issuer: ${OIDC_ISSUER}
+      audiences: [agentgateway]
+      jwks: { url: ${OIDC_ISSUER}/protocol/openid-connect/certs }
+    # Per-user request rate limit and a per-team hourly token allowance (token buckets, no database needed).
+    localRateLimit:
+      - { type: requests, maxTokens: 30, tokensPerFill: 30, fillInterval: 60s, key: jwt.preferred_username }
+      - { type: tokens, maxTokens: 200000, tokensPerFill: 200000, fillInterval: 1h, key: "jwt.groups[0]" }
+    # Prompt guards for every model: block obvious injection, ask the AI judge, mask PII before any model sees it.
+    guardrails:
+      request:
+        - regex:
+            action: reject
+            rules:
+              - pattern: '(?i)ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)'
+              - pattern: '(?i)disregard\s+(all\s+|any\s+|the\s+)?(previous|prior|above|system)\s+(instructions|rules|prompts?)'
+              - pattern: '(?i)(reveal|print|show|repeat)\s+(me\s+)?(your|the)\s+(system\s+prompt|hidden\s+instructions)'
+              - pattern: '(?i)you\s+are\s+now\s+(DAN|in\s+developer\s+mode|unrestricted|jailbroken)'
+          rejection:
+            status: 403
+            headers: { set: { content-type: application/json } }
+            body: '{"error":{"message":"Blocked by policy: this request looks like a prompt-injection attempt.","type":"policy_violation"}}'
+        - webhook:
+            target: { host: 127.0.0.1:${GUARD_PORT} }
+            failureMode: failOpen
+            action: reject
+        - regex:
+            action: mask
+            rules: [ { builtin: ssn }, { builtin: creditCard }, { builtin: phoneNumber }, { builtin: email } ]
+      response:
+        - regex:
+            action: mask
+            rules: [ { builtin: ssn }, { builtin: creditCard } ]
+
+  # Spend limits by identity (USD, from the model catalog's prices), enforced after each response.
+  budgets:
+    - name: per-user-daily
+      subject: { user: "*" }
+      window: { rolling: 24h }
+      limit: { unit: USD, amount: 2 }
+      onBudgetExceeded: Block
+    - name: support-team-monthly
+      subject: { group: support }
+      window: { rolling: 30d }
+      limit: { unit: USD, amount: 25 }
+      onBudgetExceeded: Block
+
+  models:
+    # Self-hosted model (any OpenAI-compatible server). The gateway holds the credential, callers never see it.
+    - name: local-model
+      visibility: public
+      provider: { custom: { formats: [ { type: completions } ], providerOverride: selfhosted } }
+      params: { baseUrl: ${LOCAL_LLM_BASE_URL}, model: ${LOCAL_LLM_MODEL}, apiKey: $LOCAL_LLM_KEY }
+      requestHeaders: { set: { User-Agent: agentgateway-demo } }
+      defaults: { reasoning_effort: none }
+      # If it errors or is overloaded, take it out of rotation for 30s (the auto virtual model fails over).
+      health:
+        unhealthyExpression: "response.code >= 500 || response.code == 429"
+        eviction: { consecutiveFailures: 1, duration: 30s }
+    # Premium cloud model: only the security group may ask for it by name.
+    - name: gpt-4.1-mini
+      visibility: public
+      provider: openai
+      params: { apiKey: $OPENAI_API_KEY }
+      authorization:
+        rules: [ { allow: "'security' in jwt.groups" } ]
+    # Cloud fallback: internal, reachable only as auto's second choice (premium stays locked for everyone else).
+    - name: cloud-fallback
+      visibility: internal
+      provider: openai
+      params: { model: gpt-4.1-mini, apiKey: $OPENAI_API_KEY }
+
+  virtualModels:
+    # What users get unless they ask otherwise: self-hosted first, cloud only when it fails.
+    - name: auto
+      routing:
+        failover:
+          targets:
+            - { model: local-model, priority: 1 }
+            - { model: cloud-fallback, priority: 2 }
+
+# ------------------------------------------------------------------------------------------------------------
+# MCP: one governed endpoint (/mcp) federating three systems. Tools are prefixed by target: records_*, inventory_*, opsapi_*.
+mcp:
+  prefixMode: always
+  targets:
+    - name: records
+      mcp: { host: http://127.0.0.1:${RECORDS_PORT}/mcp }
+    - name: inventory
+      mcp: { host: http://127.0.0.1:${INVENTORY_PORT}/mcp }
+    - name: opsapi            # a plain REST API; the gateway turns its OpenAPI spec into MCP tools
+      openapi:
+        host: 127.0.0.1:${OPSAPI_PORT}
+        schema: { file: ${DEMO_DIR}/gateway/opsapi-openapi.json }
+  policies:
+    cors:
+      allowOrigins: ["*"]
+      allowHeaders: ["*"]
+      exposeHeaders: ["Mcp-Session-Id", "mcp-protocol-version"]
+    jwtAuth:
+      mode: strict
+      issuer: ${OIDC_ISSUER}
+      audiences: [agentgateway]
+      jwks: { url: ${OIDC_ISSUER}/protocol/openid-connect/certs }
+    # The caller's identity travels with the call: the backend sees the real user's token, not a shared service key.
+    backendAuth: { passthrough: {} }
+    # What may you use? Tool-level authorization from IdP groups. Filters tools/list (users never see tools
+    # they can't use) AND rejects tools/call (the real security boundary). The agent gets what POLICY grants,
+    # not what the developer running it holds.
+    mcpAuthorization:
+      rules:
+        - allow: "'support' in jwt.groups && (mcp.tool.target == 'records' || mcp.tool.target == 'opsapi')"
+        - allow: "'operations' in jwt.groups && (mcp.tool.target == 'inventory' || mcp.tool.target == 'opsapi')"
+        - allow: "'security' in jwt.groups"
+    # Data guardrails, applied to everyone (even authorized users).
+    mcpGuardrails:
+      processors:
+        # 1. destructive tools never reach the backend
+        - kind: expression
+          methods: { "tools/call": request }
+          condition: "mcp.params.name.contains('delete_')"
+          reject: "Blocked by policy: destructive tools are not available to AI clients"
+        # 2. tool ARGUMENTS are inspected before the call: no customer-id wildcards / bulk pulls
+        - kind: expression
+          methods: { "tools/call": request }
+          condition: "has(mcp.params.arguments) && has(mcp.params.arguments.customer_id) && mcp.params.arguments.customer_id.contains('*')"
+          reject: "Blocked by policy: wildcard customer lookups are not allowed"
+        # 3. PII (dates of birth, phone numbers) is masked in tool RESULTS before they reach the AI client,
+        #    in both result channels (text content and structuredContent).
+        - kind: expression
+          methods: { "tools/call": response }
+          condition: has(mcp.result.content)
+          transform: >-
+            mcp.result.with(r, r.merge({
+              'content': r.content.map(item,
+                item.type == 'text'
+                  ? item.merge({'text': item.text
+                      .regexReplaceAll('\\b\\d{4}-\\d{2}-\\d{2}\\b', '[DOB REDACTED]')
+                      .regexReplaceAll('\\b\\d{3}-\\d{3}-\\d{4}\\b', '[PHONE REDACTED]')})
+                  : item)
+            }).merge(
+              has(r.structuredContent) && has(r.structuredContent.result)
+                ? {'structuredContent': {'result': string(r.structuredContent.result)
+                      .regexReplaceAll('\\b\\d{4}-\\d{2}-\\d{2}\\b', '[DOB REDACTED]')
+                      .regexReplaceAll('\\b\\d{3}-\\d{3}-\\d{4}\\b', '[PHONE REDACTED]')}}
+                : {}))
+
+# ------------------------------------------------------------------------------------------------------------
+# Plain API traffic through the same gateway, same identity policy. Nothing AI about it.
+routes:
+  - name: ops-api
+    gateways: default
+    matches: [ { path: { pathPrefix: /api/ops/ } } ]
+    policies:
+      jwtAuth:
+        mode: strict
+        issuer: ${OIDC_ISSUER}
+        audiences: [agentgateway]
+        jwks: { url: ${OIDC_ISSUER}/protocol/openid-connect/certs }
+      authorization:
+        rules: [ { allow: "'operations' in jwt.groups || 'security' in jwt.groups" } ]
+      urlRewrite: { path: { prefix: / } }
+    backends:
+      - host: 127.0.0.1:${OPSAPI_PORT}

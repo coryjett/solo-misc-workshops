@@ -1,0 +1,17 @@
+# Every request through the gateway (MCP and LLM) must carry a valid IdP token.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: gateway-jwt, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway } ]
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: ${OIDC_ISSUER}
+          audiences: [ agentgateway ]
+          jwks:
+            remote:
+              backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
+              jwksPath: /realms/${KC_REALM}/protocol/openid-connect/certs
+              cacheDuration: 5m

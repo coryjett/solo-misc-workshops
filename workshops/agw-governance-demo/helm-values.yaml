@@ -1,0 +1,15 @@
+ui:
+  enabled: true
+# On-Behalf-Of: the gateway swaps the user's IdP token for a short-lived token minted by the built-in STS.
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 1h
+  subjectValidators:
+    - validatorType: remote
+      remoteConfig:
+        url: "http://keycloak.keycloak.svc.cluster.local:8080/realms/${KC_REALM}/protocol/openid-connect/certs"
+  actorValidators:
+    - validatorType: k8s
+  apiValidators:
+    - validatorType: k8s

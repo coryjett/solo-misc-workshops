@@ -1,0 +1,25 @@
+# The one governed MCP endpoint: a Gateway in agentgateway-system, exposed on the Mac at localhost:8081.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: mcp-gateway, namespace: agentgateway-system }
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef: { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayParameters, name: mcp-gateway-params }
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces: { from: All }
+        kinds:
+          - { group: gateway.networking.k8s.io, kind: HTTPRoute }
+          - { group: agentgateway.dev, kind: AgentgatewayModel }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mcp-gateway-nodeport, namespace: agentgateway-system }
+spec:
+  type: NodePort
+  selector: { gateway.networking.k8s.io/gateway-name: mcp-gateway }
+  ports: [ { name: http, port: 8080, targetPort: 8080, nodePort: ${GW_NODE_PORT} } ]

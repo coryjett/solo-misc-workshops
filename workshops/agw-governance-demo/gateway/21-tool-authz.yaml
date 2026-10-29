@@ -1,0 +1,16 @@
+# What may you use? Tool-level authorization from IdP groups. Filters tools/list (users never see tools
+# they can't use) AND rejects tools/call (the real security boundary).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: mcp-tool-authz, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend, name: governed-mcp } ]
+  backend:
+    mcp:
+      authorization:
+        action: Allow
+        policy:
+          matchExpressions:
+            - "'support' in jwt.groups && (mcp.tool.target == 'records' || mcp.tool.target == 'opsapi')"
+            - "'operations' in jwt.groups && (mcp.tool.target == 'inventory' || mcp.tool.target == 'opsapi')"
+            - "'security' in jwt.groups"

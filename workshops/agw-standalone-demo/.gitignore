@@ -1,0 +1,9 @@
+.license-source
+.secrets/
+demo.env
+*.log
+.venv/
+.run/
+__pycache__/
+gateway/config.yaml
+gateway/opsapi-openapi.json
