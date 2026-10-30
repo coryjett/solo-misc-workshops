@@ -56,11 +56,18 @@ curl -s localhost:4000/v1/models -H "Authorization: Bearer $(token security-anal
 - Claude Code through the gateway, the org's API keys never on the laptop:
 
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:4000 ANTHROPIC_AUTH_TOKEN=$(token support-agent) claude -p "Say OK" --model auto
+CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ANTHROPIC_BASE_URL=http://localhost:4000 \
+  ANTHROPIC_AUTH_TOKEN=$(token support-agent) claude -p "Say OK" --model auto
 ```
 
+Expect `OK` plus two yellow warnings (connectors disabled because an auth token is set; `auto` unknown to Claude
+Code's catalog). Both are cosmetic; the first env var silences the second. Say: no Anthropic key on this laptop,
+the gateway holds the provider credentials and picked the model.
+
 In production the token comes from `apiKeyHelper` (a one-line script that prints a fresh JWT); Cursor and the other
-IDE agents take the same base URL + bearer header. Point at the log line: user, group, model asked and answered.
+IDE agents take the same base URL + bearer header. Point at the log line: `support-agent/support LLM asked=auto
+answered=<self-hosted model>` with tokens and cost (Claude Code sends ~38k input tokens of system prompt, which is
+a nice "this is why you want budgets" aside).
 
 ## 3. Cost and usage (6 min)
 
