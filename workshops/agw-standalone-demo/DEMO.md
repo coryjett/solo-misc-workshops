@@ -83,7 +83,7 @@ CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ANTHROPIC_BASE_URL=http:/
 ./mcpcli.py ops-manager call opsapi_get_site_hours '{"path":{"site_id":"site-112"}}'       # REST API as a tool
 ```
 
-- Run the lookup in Inspector too so they see it in a client.
+- Inspector: Tools > `records_lookup_customer`, `customer_id` = `C-1001` > Run: `[DOB REDACTED]`, `[PHONE REDACTED]`. Then `records_delete_customer_record`, same id: blocked by policy.
 - UI > **MCP > Policies**: the guardrail processors. Say: arguments inspected before the server; results rewritten before the client.
 
 ## 5. Prompt inspection (5 min)
