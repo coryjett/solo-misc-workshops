@@ -22,10 +22,10 @@ Runbook for presenting: **`DEMO.md`** (chapters plus two run orders).
 - macOS or Linux, `curl`, `python3` (3.11+), `node`/`npx` (MCP Inspector), `envsubst`, `lsof`, Docker (Keycloak only)
 - A Solo license key: `export SOLO_LICENSE_KEY=...` or `LICENSE_SOURCE=<file with the key>` (also read from `./.license-source`)
 - An OpenAI key (premium model, cloud fallback, AI judge): `export OPENAI_API_KEY=...` or `OPENAI_ENV_FILE=<.env>`
-- A self-hosted, OpenAI-compatible model. Default: `https://llm.cjett.net/v1`, key from the macOS Keychain item
-  `llm-cjett-net`. Any server works: `export LOCAL_LLM_BASE_URL=http://host:port/v1 LOCAL_LLM_MODEL=<name> LOCAL_LLM_KEY=<optional>`
+- A self-hosted, OpenAI-compatible model (vLLM, Ollama, LM Studio, a GPU box, a gateway): `LOCAL_LLM_BASE_URL`,
+  `LOCAL_LLM_MODEL`, and `LOCAL_LLM_KEY` if it needs one. Required; there is no default.
 
-Settings can go in a `demo.env` next to `env.sh` (gitignored). See `env.sh` for every option (ports, realm, versions).
+Copy `demo.env.example` to `demo.env` (gitignored) and fill it in; `env.sh` lists every other option (ports, realm, versions).
 The enterprise binary is installed to `~/.agentgateway/bin` on first run (`curl run.solo.io/agentgateway/install`).
 
 ## Run

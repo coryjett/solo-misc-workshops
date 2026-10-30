@@ -25,11 +25,12 @@ export MCP_URL="${GW_URL}/mcp"
 export LLM_URL="${GW_URL}/v1/chat/completions"
 export UI_URL="http://localhost:${ADMIN_PORT}/ui"
 
-# Self-hosted model: any OpenAI-compatible server. Key optional (LOCAL_LLM_KEY, or LOCAL_LLM_KEYCHAIN=<service>
-# to read it from the macOS Keychain). Defaults to the home box through its gateway.
-export LOCAL_LLM_BASE_URL="${LOCAL_LLM_BASE_URL:-https://llm.cjett.net/v1}"
-export LOCAL_LLM_MODEL="${LOCAL_LLM_MODEL:-default}"
-export LOCAL_LLM_KEYCHAIN="${LOCAL_LLM_KEYCHAIN:-llm-cjett-net}"
+# Self-hosted model: ANY OpenAI-compatible server (vLLM, Ollama, LM Studio, a GPU box, a gateway). Required.
+# Set in demo.env: LOCAL_LLM_BASE_URL, LOCAL_LLM_MODEL, and LOCAL_LLM_KEY if the server wants one
+# (or LOCAL_LLM_KEYCHAIN=<service> to read the key from the macOS Keychain). See demo.env.example.
+export LOCAL_LLM_BASE_URL="${LOCAL_LLM_BASE_URL:-}"
+export LOCAL_LLM_MODEL="${LOCAL_LLM_MODEL:-}"
+export LOCAL_LLM_KEYCHAIN="${LOCAL_LLM_KEYCHAIN:-}"
 #   Secrets come from files/env, never from this file:
 #   OPENAI_API_KEY (or OPENAI_ENV_FILE=<.env containing OPENAI_API_KEY=>)
 #   LICENSE_SOURCE (path to a file holding the Solo license key, or a .env with SOLO_LICENSE_KEY=)
@@ -59,8 +60,11 @@ load_openai_key() {
 }
 
 load_local_llm_key() {
+  [ -n "$LOCAL_LLM_BASE_URL" ] && [ -n "$LOCAL_LLM_MODEL" ] || { echo "no self-hosted model: set LOCAL_LLM_BASE_URL and LOCAL_LLM_MODEL in demo.env (see demo.env.example)" >&2; return 1; }
   [ -n "${LOCAL_LLM_KEY:-}" ] && return 0
-  LOCAL_LLM_KEY="$(security find-generic-password -s "$LOCAL_LLM_KEYCHAIN" -w 2>/dev/null || true)"
+  if [ -n "$LOCAL_LLM_KEYCHAIN" ] && command -v security >/dev/null 2>&1; then   # macOS Keychain, optional
+    LOCAL_LLM_KEY="$(security find-generic-password -s "$LOCAL_LLM_KEYCHAIN" -w 2>/dev/null || true)"
+  fi
   export LOCAL_LLM_KEY   # may be empty: fine for servers that take no key
 }
 
