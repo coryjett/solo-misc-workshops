@@ -60,14 +60,10 @@ CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ANTHROPIC_BASE_URL=http:/
   ANTHROPIC_AUTH_TOKEN=$(token support-agent) claude -p "Say OK" --model auto
 ```
 
-Expect `OK` plus two yellow warnings (connectors disabled because an auth token is set; `auto` unknown to Claude
-Code's catalog). Both are cosmetic; the first env var silences the second. Say: no Anthropic key on this laptop,
-the gateway holds the provider credentials and picked the model.
-
-In production the token comes from `apiKeyHelper` (a one-line script that prints a fresh JWT); Cursor and the other
-IDE agents take the same base URL + bearer header. Point at the log line: `support-agent/support LLM asked=auto
-answered=<self-hosted model>` with tokens and cost (Claude Code sends ~38k input tokens of system prompt, which is
-a nice "this is why you want budgets" aside).
+- Expect `OK`. Two yellow warnings are cosmetic.
+- Say: no Anthropic key on this laptop; the gateway holds the credentials and picked the model.
+- Prod: `apiKeyHelper` prints a fresh JWT; Cursor and other IDE agents use the same base URL + bearer.
+- Log line: `support-agent/support LLM asked=auto answered=<model>`, tokens, cost. ~38k input tokens from Claude Code's system prompt: "this is why you want budgets."
 
 ## 3. Cost and usage (6 min)
 
