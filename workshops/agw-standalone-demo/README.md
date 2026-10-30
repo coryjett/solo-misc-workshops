@@ -31,6 +31,12 @@ The enterprise binary is installed to `~/.agentgateway/bin` on first run (`curl 
 ## Run
 
 ```bash
+# 1. keys and model, in this shell (or put the same lines in demo.env, see demo.env.example)
+export OPENAI_API_KEY=sk-...
+export SOLO_LICENSE_KEY=...
+export LOCAL_LLM_BASE_URL=http://localhost:11434/v1 LOCAL_LLM_MODEL=llama3.2   # any OpenAI-compatible server
+
+# 2. bring it up
 ./up.sh                         # Keycloak, tool servers, gateway (idempotent)
 ./verify.sh                     # every demo claim, PASS/FAIL; must end ALL-PASS
 ./inspector.sh support-agent    # MCP Inspector at http://127.0.0.1:6274 (re-run with another user to switch)

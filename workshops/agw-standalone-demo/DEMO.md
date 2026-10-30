@@ -6,6 +6,7 @@ order for the audience (two run orders at the bottom). About 45 minutes for all 
 ## Before the call
 
 ```bash
+export OPENAI_API_KEY=sk-...    # plus SOLO_LICENSE_KEY and LOCAL_LLM_BASE_URL/LOCAL_LLM_MODEL, unless they are in demo.env
 ./up.sh && ./verify.sh          # must end ALL-PASS; ./down.sh --purge && ./up.sh for a clean DB
 ./inspector.sh support-agent    # window 1: MCP Inspector (http://127.0.0.1:6274), click Connect
 open http://localhost:15000/ui  # window 2: gateway UI
