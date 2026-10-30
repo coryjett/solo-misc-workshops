@@ -1,6 +1,6 @@
 # Source me:  . ./env.sh    Settings for the agentgateway governance demo. Every value can be overridden
 # by exporting it first (or putting it in ./demo.env). Never echoes secrets.
-DEMO_DIR="${DEMO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)}"; export DEMO_DIR
+DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"; export DEMO_DIR   # always this file's directory, never an inherited value
 [ -f "$DEMO_DIR/demo.env" ] && set -a && . "$DEMO_DIR/demo.env" && set +a
 
 export COMPANY="${COMPANY:-Acme}"                       # shown in Open WebUI and the realm display name
