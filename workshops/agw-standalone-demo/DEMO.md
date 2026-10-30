@@ -12,6 +12,8 @@ export OPENAI_API_KEY=sk-...    # plus SOLO_LICENSE_KEY and LOCAL_LLM_BASE_URL/L
 ./logs.sh                       # Terminal 3 (logs): leave visible the whole call
 ```
 
+Diagram to screen-share in the Opening: `architecture.html` (open in Chrome).
+
 Windows: **Terminal 1 (commands)** is where you type everything below · **Terminal 2 (inspector)** · **Terminal 3 (logs)** ·
 **Chrome tab UI** http://localhost:15000/ui · **Chrome tab Inspector** http://127.0.0.1:6274. Click through the UI pages named
 below once before the call. Users (password = username): `support-agent` (support), `ops-manager` (operations), `security-analyst` (security).

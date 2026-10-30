@@ -1,0 +1,134 @@
+<title>Standalone Gateway Demo</title>
+<style>
+:root{--bg:#f7f6f2;--fg:#1d1f22;--muted:#5b6068;--accent:#0b5fa5;--gw:#e8f0f9;--gwb:#0b5fa5;--idp:#f3e9d9;--idpb:#a0661a;--up:#e9f2ea;--upb:#2f7a46;--cl:#efede6;--clb:#6b6f76;--rule:#d9d6cd}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#14161a;--fg:#e8e6e0;--muted:#a3a7ae;--accent:#6fb1ec;--gw:#1b2a3d;--gwb:#6fb1ec;--idp:#352a18;--idpb:#e0a85a;--up:#1b2f22;--upb:#7fcf9c;--cl:#23262c;--clb:#9aa0a8;--rule:#2d3138;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14161a;--fg:#e8e6e0;--muted:#a3a7ae;--accent:#6fb1ec;--gw:#1b2a3d;--gwb:#6fb1ec;--idp:#352a18;--idpb:#e0a85a;--up:#1b2f22;--upb:#7fcf9c;--cl:#23262c;--clb:#9aa0a8;--rule:#2d3138;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 "Inter",system-ui,sans-serif;margin:0}
+main{max-width:1100px;margin:0 auto;padding-block:28px;padding-inline:16px}
+h1{font-size:22px;margin:0 0 4px;font-weight:650}
+p.sub{color:var(--muted);margin:0 0 18px;max-width:80ch}
+figure{margin:0}
+svg{width:100%;height:auto;max-width:100%;display:block}
+figcaption{color:var(--muted);font-size:13px;margin-top:10px;max-width:90ch}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:3px;border:1.5px solid}
+</style>
+<main>
+<h1>Standalone agentgateway: what is running in this demo</h1>
+<p class="sub">One enterprise agentgateway process on this machine, reading one configuration file. Everything an AI client touches goes through it: identity, authorization, guardrails, budgets and logging are applied once, at the door.</p>
+<figure>
+<svg viewBox="0 0 1100 620" role="img" aria-label="Clients send requests with an IdP-issued JWT to a single standalone agentgateway process, which validates the token, applies policy, and routes to models, MCP servers and a REST API behind it. The gateway also hosts a UI and writes a request log.">
+<defs>
+<marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+</defs>
+<g font-family="Inter, system-ui, sans-serif" font-size="13" fill="currentColor" color="var(--fg)">
+
+<!-- Clients column -->
+<text x="110" y="40" text-anchor="middle" font-size="12" fill="var(--muted)" letter-spacing="1">CLIENTS</text>
+<rect x="20" y="60" width="180" height="56" rx="8" fill="var(--cl)" stroke="var(--clb)" stroke-width="1.5"/>
+<text x="110" y="84" text-anchor="middle" font-weight="600">MCP Inspector</text>
+<text x="110" y="103" text-anchor="middle" font-size="12" fill="var(--muted)">stand-in for Cursor, Claude</text>
+
+<rect x="20" y="136" width="180" height="56" rx="8" fill="var(--cl)" stroke="var(--clb)" stroke-width="1.5"/>
+<text x="110" y="160" text-anchor="middle" font-weight="600">Claude Code</text>
+<text x="110" y="179" text-anchor="middle" font-size="12" fill="var(--muted)">Anthropic API, user JWT</text>
+
+<rect x="20" y="212" width="180" height="56" rx="8" fill="var(--cl)" stroke="var(--clb)" stroke-width="1.5"/>
+<text x="110" y="236" text-anchor="middle" font-weight="600">Apps and scripts</text>
+<text x="110" y="255" text-anchor="middle" font-size="12" fill="var(--muted)">OpenAI-compatible, REST</text>
+
+<!-- IdP -->
+<rect x="20" y="400" width="180" height="76" rx="8" fill="var(--idp)" stroke="var(--idpb)" stroke-width="1.5"/>
+<text x="110" y="426" text-anchor="middle" font-weight="600">Identity provider</text>
+<text x="110" y="445" text-anchor="middle" font-size="12" fill="var(--muted)">Keycloak (demo)</text>
+<text x="110" y="462" text-anchor="middle" font-size="12" fill="var(--muted)">Entra / Okta / Ping in prod</text>
+
+<!-- IdP to clients: login -->
+<path d="M110,400 V280" stroke="var(--idpb)" stroke-width="1.5" fill="none" marker-end="url(#arr)" color="var(--idpb)"/>
+<text x="118" y="345" font-size="12" fill="var(--idpb)">login, JWT with groups</text>
+
+<!-- Clients to gateway -->
+<path d="M200,88 H330" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<path d="M200,164 H330" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<path d="M200,240 H330" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<text x="265" y="78" text-anchor="middle" font-size="12" fill="var(--muted)">/mcp</text>
+<text x="265" y="154" text-anchor="middle" font-size="12" fill="var(--muted)">/v1/messages</text>
+<text x="265" y="230" text-anchor="middle" font-size="12" fill="var(--muted)">/v1/chat, /api/*</text>
+<text x="265" y="300" text-anchor="middle" font-size="12" fill="var(--muted)">Authorization: Bearer &lt;JWT&gt;</text>
+
+<!-- IdP to gateway: JWKS -->
+<path d="M200,438 H420 V352" stroke="var(--idpb)" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#arr)" color="var(--idpb)"/>
+<text x="300" y="430" text-anchor="middle" font-size="12" fill="var(--idpb)">JWKS (verify signatures)</text>
+
+<!-- Gateway -->
+<rect x="330" y="50" width="350" height="300" rx="10" fill="var(--gw)" stroke="var(--gwb)" stroke-width="2"/>
+<text x="505" y="78" text-anchor="middle" font-weight="650" font-size="15">Enterprise agentgateway</text>
+<text x="505" y="97" text-anchor="middle" font-size="12" fill="var(--muted)">one binary, one config.yaml, port 4000</text>
+<line x1="350" y1="110" x2="660" y2="110" stroke="var(--rule)"/>
+<text x="350" y="134" font-size="12" fill="var(--muted)" letter-spacing="1">AT THE DOOR</text>
+<text x="350" y="155">JWT validation (issuer, audience, JWKS)</text>
+<text x="350" y="175">Authorization by group: models, tools, routes</text>
+<text x="350" y="195">Prompt guards: regex, AI judge, PII masking</text>
+<text x="350" y="215">MCP guardrails: block tools, inspect args, mask results</text>
+<text x="350" y="235">Budgets (USD per user, per group), rate limits</text>
+<text x="350" y="255">Backend auth: passthrough or per-target token</text>
+<line x1="350" y1="270" x2="660" y2="270" stroke="var(--rule)"/>
+<text x="350" y="293">UI :15000  (edits config.yaml)</text>
+<text x="350" y="313">SQLite: budgets, analytics, request log</text>
+<text x="350" y="333" fill="var(--muted)" font-size="12">Access log: user, group, model, tool, tokens, cost, decision</text>
+
+<!-- Upstreams column -->
+<text x="930" y="40" text-anchor="middle" font-size="12" fill="var(--muted)" letter-spacing="1">BEHIND THE GATEWAY</text>
+
+<rect x="810" y="60" width="240" height="52" rx="8" fill="var(--up)" stroke="var(--upb)" stroke-width="1.5"/>
+<text x="930" y="82" text-anchor="middle" font-weight="600">Self-hosted model</text>
+<text x="930" y="100" text-anchor="middle" font-size="12" fill="var(--muted)">OpenAI-compatible, first choice</text>
+
+<rect x="810" y="126" width="240" height="52" rx="8" fill="var(--up)" stroke="var(--upb)" stroke-width="1.5"/>
+<text x="930" y="148" text-anchor="middle" font-weight="600">OpenAI</text>
+<text x="930" y="166" text-anchor="middle" font-size="12" fill="var(--muted)">premium model, gated; also failover</text>
+
+<rect x="810" y="206" width="240" height="52" rx="8" fill="var(--up)" stroke="var(--upb)" stroke-width="1.5"/>
+<text x="930" y="228" text-anchor="middle" font-weight="600">Customer Records MCP</text>
+<text x="930" y="246" text-anchor="middle" font-size="12" fill="var(--muted)">returns PII, has a delete tool</text>
+
+<rect x="810" y="272" width="240" height="52" rx="8" fill="var(--up)" stroke="var(--upb)" stroke-width="1.5"/>
+<text x="930" y="294" text-anchor="middle" font-weight="600">Inventory MCP</text>
+<text x="930" y="312" text-anchor="middle" font-size="12" fill="var(--muted)">operations team only</text>
+
+<rect x="810" y="338" width="240" height="52" rx="8" fill="var(--up)" stroke="var(--upb)" stroke-width="1.5"/>
+<text x="930" y="360" text-anchor="middle" font-weight="600">Operations REST API</text>
+<text x="930" y="378" text-anchor="middle" font-size="12" fill="var(--muted)">OpenAPI spec exposed as MCP tools</text>
+
+<rect x="810" y="420" width="240" height="52" rx="8" fill="var(--up)" stroke="var(--upb)" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="930" y="442" text-anchor="middle" font-weight="600">AI injection judge</text>
+<text x="930" y="460" text-anchor="middle" font-size="12" fill="var(--muted)">webhook guardrail, any detector</text>
+
+<!-- Gateway to upstreams -->
+<path d="M680,120 H810 V86" stroke="var(--upb)" stroke-width="1.5" fill="none" marker-end="url(#arr)" color="var(--upb)"/>
+<path d="M680,150 H810 V152" stroke="var(--upb)" stroke-width="1.5" fill="none" marker-end="url(#arr)" color="var(--upb)"/>
+<path d="M680,200 H760 V232 H810" stroke="var(--upb)" stroke-width="1.5" fill="none" marker-end="url(#arr)" color="var(--upb)"/>
+<path d="M680,230 H745 V298 H810" stroke="var(--upb)" stroke-width="1.5" fill="none" marker-end="url(#arr)" color="var(--upb)"/>
+<path d="M680,260 H730 V364 H810" stroke="var(--upb)" stroke-width="1.5" fill="none" marker-end="url(#arr)" color="var(--upb)"/>
+<path d="M505,350 V446 H810" stroke="var(--upb)" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#arr)" color="var(--upb)"/>
+<text x="745" y="110" text-anchor="middle" font-size="12" fill="var(--upb)">"auto" virtual model</text>
+<text x="700" y="190" font-size="12" fill="var(--upb)">one federated /mcp</text>
+<text x="560" y="470" font-size="12" fill="var(--upb)">prompt to judge, verdict back</text>
+
+<!-- bottom note -->
+<rect x="330" y="520" width="720" height="70" rx="8" fill="none" stroke="var(--rule)"/>
+<text x="350" y="545" font-weight="600">Same picture on a VM</text>
+<text x="350" y="566" font-size="12" fill="var(--muted)">Swap Keycloak for Entra: three values in the JWT policy. Swap the laptop for a VM, ECS task or bare metal: same binary, same file.</text>
+<text x="350" y="582" font-size="12" fill="var(--muted)">Kubernetes is one more place it runs, not a prerequisite.</text>
+</g>
+</svg>
+<figcaption>Clients authenticate with the identity provider and present the JWT to the gateway; the gateway verifies it against the IdP's JWKS, applies identity-based policy, and routes to models, MCP servers and a REST API. Nothing behind the gateway is reachable except through it.</figcaption>
+</figure>
+<div class="legend">
+<span><i class="sw" style="background:var(--cl);border-color:var(--clb)"></i>clients</span>
+<span><i class="sw" style="background:var(--idp);border-color:var(--idpb)"></i>identity provider</span>
+<span><i class="sw" style="background:var(--gw);border-color:var(--gwb)"></i>gateway (this demo: one process on this machine)</span>
+<span><i class="sw" style="background:var(--up);border-color:var(--upb)"></i>upstreams behind the gateway</span>
+</div>
+</main>
