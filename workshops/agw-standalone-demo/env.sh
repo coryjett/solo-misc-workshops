@@ -1,22 +1,34 @@
-# Source me:  . ./env.sh    Settings for the standalone agentgateway governance demo. Every value can be
-# overridden by exporting it first (or putting it in ./demo.env). Never echoes secrets.
-DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"; export DEMO_DIR   # always this file's directory, never an inherited value
-[ -f "$DEMO_DIR/demo.env" ] && set -a && . "$DEMO_DIR/demo.env" && set +a
+# Source me:  . ./env.sh    Settings for the standalone agentgateway governance demo. Never echoes secrets.
+# Settings come from the defaults below, then ./demo.env (gitignored; see demo.env.example). Values already
+# exported in the shell are deliberately IGNORED for settings (another demo's env.sh may have set them);
+# secrets (OPENAI_API_KEY, SOLO_LICENSE_KEY, LICENSE_SOURCE, OPENAI_ENV_FILE, LOCAL_LLM_KEY) are read from the shell.
+DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"; export DEMO_DIR
 
-export COMPANY="${COMPANY:-Acme}"                 # realm display name, user emails
-export AGW_VERSION="${AGW_VERSION:-v2026.10.1}"
-export AGW_BIN="${AGW_BIN:-$HOME/.agentgateway/bin/agentgateway}"
-export KC_CONTAINER="${KC_CONTAINER:-agw-demo-keycloak}"
-export KC_REALM="${KC_REALM:-demo}"
+export COMPANY="Acme"                 # realm display name, user emails
+export AGW_VERSION="v2026.10.1"
+export AGW_BIN="$HOME/.agentgateway/bin/agentgateway"
+export KC_CONTAINER="agw-demo-keycloak"
+export KC_REALM="demo"
 
 # Ports (all bound to 127.0.0.1). Change if they clash.
-export KC_PORT="${KC_PORT:-8080}"                 # Keycloak (the Entra stand-in)
-export GW_PORT="${GW_PORT:-4000}"                 # agentgateway: MCP (/mcp), LLM (/v1/*), REST (/api/*), UI (/ui)
-export ADMIN_PORT="${ADMIN_PORT:-15000}"          # agentgateway admin + UI (local only)
-export RECORDS_PORT="${RECORDS_PORT:-8101}"       # tool servers
-export INVENTORY_PORT="${INVENTORY_PORT:-8102}"
-export OPSAPI_PORT="${OPSAPI_PORT:-8103}"
-export GUARD_PORT="${GUARD_PORT:-8104}"           # AI prompt-injection judge (webhook guardrail)
+export KC_PORT="8080"                 # Keycloak (the Entra stand-in)
+export GW_PORT="4000"                 # agentgateway: MCP (/mcp), LLM (/v1/*), REST (/api/*), UI (/ui)
+export ADMIN_PORT="15000"          # agentgateway admin + UI (local only)
+export RECORDS_PORT="8101"       # tool servers
+export INVENTORY_PORT="8102"
+export OPSAPI_PORT="8103"
+export GUARD_PORT="8104"           # AI prompt-injection judge (webhook guardrail)
+
+
+# Self-hosted model: ANY OpenAI-compatible server (vLLM, Ollama, LM Studio, a GPU box, a gateway). Required.
+# Set in demo.env: LOCAL_LLM_BASE_URL, LOCAL_LLM_MODEL, and LOCAL_LLM_KEY if the server wants one
+# (or LOCAL_LLM_KEYCHAIN=<service> to read the key from the macOS Keychain). See demo.env.example.
+export LOCAL_LLM_BASE_URL=""
+export LOCAL_LLM_MODEL=""
+export LOCAL_LLM_KEYCHAIN=""
+
+# demo.env overrides the defaults above (and may hold the secrets listed at the top).
+[ -f "$DEMO_DIR/demo.env" ] && set -a && . "$DEMO_DIR/demo.env" && set +a
 
 export KC_URL="http://localhost:${KC_PORT}"
 export OIDC_ISSUER="${KC_URL}/realms/${KC_REALM}"
@@ -24,13 +36,6 @@ export GW_URL="http://localhost:${GW_PORT}"
 export MCP_URL="${GW_URL}/mcp"
 export LLM_URL="${GW_URL}/v1/chat/completions"
 export UI_URL="http://localhost:${ADMIN_PORT}/ui"
-
-# Self-hosted model: ANY OpenAI-compatible server (vLLM, Ollama, LM Studio, a GPU box, a gateway). Required.
-# Set in demo.env: LOCAL_LLM_BASE_URL, LOCAL_LLM_MODEL, and LOCAL_LLM_KEY if the server wants one
-# (or LOCAL_LLM_KEYCHAIN=<service> to read the key from the macOS Keychain). See demo.env.example.
-export LOCAL_LLM_BASE_URL="${LOCAL_LLM_BASE_URL:-}"
-export LOCAL_LLM_MODEL="${LOCAL_LLM_MODEL:-}"
-export LOCAL_LLM_KEYCHAIN="${LOCAL_LLM_KEYCHAIN:-}"
 #   Secrets come from files/env, never from this file:
 #   OPENAI_API_KEY (or OPENAI_ENV_FILE=<.env containing OPENAI_API_KEY=>)
 #   LICENSE_SOURCE (path to a file holding the Solo license key, or a .env with SOLO_LICENSE_KEY=)
