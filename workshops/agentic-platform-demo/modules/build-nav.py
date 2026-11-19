@@ -51,6 +51,15 @@ def parse_readme_table(text, header_pat):
     return rows
 
 
+def safe_path(root, rel):
+    """Resolve rel under root; refuse anything outside root or any symlink."""
+    path = os.path.join(root, rel)
+    real, base = os.path.realpath(path), os.path.realpath(root)
+    if os.path.commonpath([real, base]) != base or os.path.islink(path):
+        raise SystemExit("refusing unsafe path: " + rel)
+    return path
+
+
 def parse_link_cell(cell):
     # Parse a cell like "[G2](G2-mcp-down-scoped-saas.md)" -> ("G2", "G2-mcp-down-scoped-saas.md")
     m = re.match(r'^\[([^\]]*)\]\(([^)]*)\)$', cell)
@@ -194,7 +203,7 @@ def link_needs_ids(text, table_map, own_id):
 def main():
     modules_dir = sys.argv[1]
 
-    readme_path = os.path.join(modules_dir, 'README.md')
+    readme_path = safe_path(modules_dir, 'README.md')
     with open(readme_path, encoding='utf-8') as f:
         readme_text = f.read()
     readme_original = readme_text
@@ -209,6 +218,8 @@ def main():
             continue
         id_cell, area_cell, module_cell, min_cell = row[0], row[1], row[2], row[3]
         mid, mfile = parse_link_cell(id_cell)
+        if not mfile or not re.fullmatch(r'[A-Za-z0-9._-]+\.md', mfile):
+            continue
         # Title may be plain or have parentheses; keep as is.
         modules.append({
             'id': mid,
@@ -223,7 +234,7 @@ def main():
     changed_files = []
     n = len(modules)
     for idx, mod in enumerate(modules):
-        fpath = os.path.join(modules_dir, mod['file'])
+        fpath = safe_path(modules_dir, mod['file'])
         if not os.path.isfile(fpath):
             continue
         with open(fpath, encoding='utf-8') as f:
@@ -386,7 +397,7 @@ def main():
 
         slug = slugify_audience(audience_text)
         track_file = os.path.join('tracks', slug + '.md')
-        track_path = os.path.join(modules_dir, track_file)
+        track_path = safe_path(modules_dir, track_file)
 
         # Build track content
         nav_line = "[All modules](../README.md) · [All tracks](../README.md#suggested-chains)"
