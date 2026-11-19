@@ -1,10 +1,14 @@
 # R3 · A change request and its approval
 
+<!-- nav:start -->
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R2](R2-registry-team-scoping.md) · Next: [R4](R4-registry-publish-to-gateway.md)
+<!-- nav:end -->
+
 **Area:** Registry · **Time:** 6 min
 
 **Proves:** Developers request, they do not publish; an approver sees the diff and approves.
 
-**Needs:** S0 (reset stages the pending item). Two windows: eng-dev (Incognito) and admin.
+**Needs:** [S0](S0-preflight.md) (reset stages the pending item). Two windows: eng-dev (Incognito) and admin.
 
 **Changes state:** approves the staged item. Once per reset.
 
@@ -27,3 +31,7 @@ Pending for eng-dev; approved by admin; 1.0.0 was served until approval.
 as_user admin; arctl delete agent release-readiness-checker --tag 2.0.0
 as_user eng-dev; arctl apply -f catalog/pending/release-readiness-checker-2.0.0.yaml   # re-stage the request
 ```
+
+<!-- nav:start -->
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R2](R2-registry-team-scoping.md) · Next: [R4](R4-registry-publish-to-gateway.md)
+<!-- nav:end -->

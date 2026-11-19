@@ -1,10 +1,14 @@
 # L3 · Prompt-injection guard and prompt masking
 
+<!-- nav:start -->
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [L2](L2-llm-access-by-identity.md) · Next: [X1](X1-extension-points.md)
+<!-- nav:end -->
+
 **Area:** LLM · **Time:** 3 min
 
 **Proves:** Prompts are checked before they reach the model: injections blocked, personal data masked.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -28,3 +32,7 @@ Solo UI **Policies** lists the guardrail objects; show the block itself in Termi
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [L2](L2-llm-access-by-identity.md) · Next: [X1](X1-extension-points.md)
+<!-- nav:end -->

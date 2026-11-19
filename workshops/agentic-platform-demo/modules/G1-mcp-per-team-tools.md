@@ -1,10 +1,14 @@
 # G1 · One MCP endpoint, tools filtered per team
 
+<!-- nav:start -->
+[All modules](README.md) · [MCP](README.md#mcp) · Previous: [P2](P2-observability.md) · Next: [G2](G2-mcp-down-scoped-saas.md)
+<!-- nav:end -->
+
 **Area:** MCP · **Time:** 5 min
 
 **Proves:** Several MCP servers (including a REST API exposed as tools) behind one URL; each caller sees only the tools their group allows.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -37,3 +41,7 @@ eng-dev sees `records_*` and `opsapi_*`; sales-dev sees no records tools; no tok
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [MCP](README.md#mcp) · Previous: [P2](P2-observability.md) · Next: [G2](G2-mcp-down-scoped-saas.md)
+<!-- nav:end -->

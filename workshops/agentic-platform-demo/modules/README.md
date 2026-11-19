@@ -2,6 +2,26 @@
 
 Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentgateway Enterprise, kagent, Keycloak as the IdP). Pick the modules that match the audience and chain them. Every command in a module was tested on this lab.
 
+## Contents
+
+<!-- toc:start -->
+- [Modules](#modules)
+  - [Setup](#setup)
+  - [Platform](#platform)
+  - [MCP](#mcp)
+  - [Identity](#identity)
+  - [A2A](#a2a)
+  - [LLM](#llm)
+  - [Registry](#registry)
+- [Rehearse or step through a module](#rehearse-or-step-through-a-module)
+- [Chaining rules](#chaining-rules)
+- [Suggested chains](#suggested-chains)
+- [Recovery](#recovery)
+- [Related modules elsewhere in this repo](#related-modules-elsewhere-in-this-repo)
+- [Building a customer walkthrough](#building-a-customer-walkthrough)
+- [Lab setup](#lab-setup)
+<!-- toc:end -->
+
 **Personas** (password = username): `admin` platform team · `approver` approves registry changes · `eng-dev` engineering developer · `sales-dev` sales developer (also stands in for a partner or restricted user) · `auditor` read-only.
 
 ## Modules
@@ -27,6 +47,40 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 | [R5](R5-registry-deploy-to-runtime.md) | Registry | Deploy to an agent runtime (kagent) | 5 |
 | [R6](R6-audit-trail.md) | Registry | The audit trail | 4 |
 
+<!-- areas:start -->
+### Setup
+- [S0 · Pre-flight (do before every demo)](S0-preflight.md)
+
+### Platform
+- [P1 · What it looks like on Kubernetes (containers, control plane, data plane)](P1-platform-on-kubernetes.md) _(5 min)_
+- [P2 · Observability: one view of MCP, A2A and LLM traffic](P2-observability.md) _(5 min)_
+- [X1 · Extension points: plug your own logic into routing and policy](X1-extension-points.md) _(5 min)_
+
+### MCP
+- [G1 · One MCP endpoint, tools filtered per team](G1-mcp-per-team-tools.md) _(5 min)_
+- [G2 · Down-scoped SaaS tools (mail and code-hosting stand-ins)](G2-mcp-down-scoped-saas.md) _(8 min)_
+- [G3 · Guardrails on tool calls: block destructive tools, mask PII](G3-mcp-guardrails.md) _(4 min)_
+
+### Identity
+- [G4 · Token flow: on-behalf-of, the backend never sees the user's token](G4-token-flow-obo.md) _(4 min)_
+
+### A2A
+- [A1 · A2A: who can call whom](A1-a2a-who-calls-whom.md) _(8 min)_
+
+### LLM
+- [L1 · LLM routing and failover (virtual models)](L1-llm-routing-failover.md) _(5 min)_
+- [L2 · Model access by identity](L2-llm-access-by-identity.md) _(3 min)_
+- [L3 · Prompt-injection guard and prompt masking](L3-llm-prompt-guard.md) _(3 min)_
+
+### Registry
+- [R1 · What exists: catalog and shadow-IT discovery](R1-registry-catalog.md) _(6 min)_
+- [R2 · Who sees what in the catalog](R2-registry-team-scoping.md) _(3 min)_
+- [R3 · A change request and its approval](R3-registry-approval.md) _(6 min)_
+- [R4 · Publish an MCP server to the gateway, self-service](R4-registry-publish-to-gateway.md) _(6 min)_
+- [R5 · Deploy to an agent runtime (kagent)](R5-registry-deploy-to-runtime.md) _(5 min)_
+- [R6 · The audit trail](R6-audit-trail.md) _(4 min)_
+<!-- areas:end -->
+
 ## Rehearse or step through a module
 
 ```bash
@@ -49,13 +103,13 @@ Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 
 | Audience | Chain | Min |
 |---|---|---|
-| First look, gateway (any industry) | S0 > P1 > G1 > G2 > A1 > L1 > P2 | 40 |
-| Security-led | S0 > G1 > G3 > G4 > A1 > L2 > L3 > P2 | 37 |
-| Platform / Kubernetes team | S0 > P1 > G1 > G2 > X1 > P2 | 32 |
-| AI/agent developers | S0 > G2 > A1 > L1 > L2 > X1 > P2 | 37 |
-| Governance and catalog (registry) | S0 > R1 > R2 > R3 > R4 > R5 > R6 | 30 |
-| Full platform (gateway + registry) | S0 > R1 > R3 > R4 > G2 > A1 > P2 > R6 | 41 |
-| 20-minute executive | S0 > G2 > A1 > P2 | 21 |
+| [First look, gateway (any industry)](tracks/first-look-gateway-any-industry.md) | [S0](S0-preflight.md) > [P1](P1-platform-on-kubernetes.md) > [G1](G1-mcp-per-team-tools.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [L1](L1-llm-routing-failover.md) > [P2](P2-observability.md) | 40 |
+| [Security-led](tracks/security-led.md) | [S0](S0-preflight.md) > [G1](G1-mcp-per-team-tools.md) > [G3](G3-mcp-guardrails.md) > [G4](G4-token-flow-obo.md) > [A1](A1-a2a-who-calls-whom.md) > [L2](L2-llm-access-by-identity.md) > [L3](L3-llm-prompt-guard.md) > [P2](P2-observability.md) | 37 |
+| [Platform / Kubernetes team](tracks/platform-kubernetes-team.md) | [S0](S0-preflight.md) > [P1](P1-platform-on-kubernetes.md) > [G1](G1-mcp-per-team-tools.md) > [G2](G2-mcp-down-scoped-saas.md) > [X1](X1-extension-points.md) > [P2](P2-observability.md) | 32 |
+| [AI/agent developers](tracks/ai-agent-developers.md) | [S0](S0-preflight.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [L1](L1-llm-routing-failover.md) > [L2](L2-llm-access-by-identity.md) > [X1](X1-extension-points.md) > [P2](P2-observability.md) | 37 |
+| [Governance and catalog (registry)](tracks/governance-and-catalog-registry.md) | [S0](S0-preflight.md) > [R1](R1-registry-catalog.md) > [R2](R2-registry-team-scoping.md) > [R3](R3-registry-approval.md) > [R4](R4-registry-publish-to-gateway.md) > [R5](R5-registry-deploy-to-runtime.md) > [R6](R6-audit-trail.md) | 30 |
+| [Full platform (gateway + registry)](tracks/full-platform-gateway-registry.md) | [S0](S0-preflight.md) > [R1](R1-registry-catalog.md) > [R3](R3-registry-approval.md) > [R4](R4-registry-publish-to-gateway.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [P2](P2-observability.md) > [R6](R6-audit-trail.md) | 41 |
+| [20-minute executive](tracks/20-minute-executive.md) | [S0](S0-preflight.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [P2](P2-observability.md) | 21 |
 
 ## Recovery
 
@@ -98,6 +152,6 @@ These agentic workshops run on their own environments. Reach for one when the au
 
 A demo is a walkthrough doc: the chain of modules plus one line of framing per module in the customer's words. Copy [WALKTHROUGH-TEMPLATE.md](WALKTHROUGH-TEMPLATE.md), keep it with the customer's notes, and never commit it here (no customer names in this repo).
 
-## Setup
+## Lab setup
 
 Copy `local.env.example` to `local.env` (gitignored) and fill in the license path and model endpoints, then `./up.sh` (about 15 minutes). `./down.sh` removes the cluster.

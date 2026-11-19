@@ -1,10 +1,14 @@
 # X1 · Extension points: plug your own logic into routing and policy
 
+<!-- nav:start -->
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [L3](L3-llm-prompt-guard.md) · Next: [R1](R1-registry-catalog.md)
+<!-- nav:end -->
+
 **Area:** Platform · **Time:** 5 min
 
 **Proves:** When a decision depends on business data (bandwidth, entitlements, budgets), the gateway calls your service instead of you forking the gateway.
 
-**Needs:** Talk track plus config; L3 shows one live callout (the injection-guard webhook).
+**Needs:** Talk track plus config; [L3](L3-llm-prompt-guard.md) shows one live callout (the injection-guard webhook).
 
 ## Steps
 
@@ -40,3 +44,7 @@ n/a (config walkthrough).
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [L3](L3-llm-prompt-guard.md) · Next: [R1](R1-registry-catalog.md)
+<!-- nav:end -->

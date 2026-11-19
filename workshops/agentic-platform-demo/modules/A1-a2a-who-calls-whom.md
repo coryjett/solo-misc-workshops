@@ -1,10 +1,14 @@
 # A1 · A2A: who can call whom
 
+<!-- nav:start -->
+[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G4](G4-token-flow-obo.md) · Next: [L1](L1-llm-routing-failover.md)
+<!-- nav:end -->
+
 **Area:** A2A · **Time:** 8 min
 
 **Proves:** A front agent delegates to specialist agents; users can only reach the front agent, and specialists only accept the front agent. Enforced at the gateway, not in the agents.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -44,3 +48,7 @@ agent-a was called by: are-cli (sales-dev)
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G4](G4-token-flow-obo.md) · Next: [L1](L1-llm-routing-failover.md)
+<!-- nav:end -->

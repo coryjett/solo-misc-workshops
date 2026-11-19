@@ -1,10 +1,14 @@
 # P2 · Observability: one view of MCP, A2A and LLM traffic
 
+<!-- nav:start -->
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [P1](P1-platform-on-kubernetes.md) · Next: [G1](G1-mcp-per-team-tools.md)
+<!-- nav:end -->
+
 **Area:** Platform · **Time:** 5 min
 
 **Proves:** Every hop is logged and traced with the caller, the tool or agent, and the outcome.
 
-**Needs:** S0. Works anywhere in a chain: the first step sends its own traffic.
+**Needs:** [S0](S0-preflight.md). Works anywhere in a chain: the first step sends its own traffic.
 
 ## Steps
 
@@ -34,3 +38,7 @@ Rows for the traffic you just generated.
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [P1](P1-platform-on-kubernetes.md) · Next: [G1](G1-mcp-per-team-tools.md)
+<!-- nav:end -->

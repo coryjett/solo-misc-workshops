@@ -1,10 +1,14 @@
 # R6 · The audit trail
 
+<!-- nav:start -->
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md)
+<!-- nav:end -->
+
 **Area:** Registry · **Time:** 4 min
 
 **Proves:** Every decision and every call has a name on it.
 
-**Needs:** S0. Works anywhere in a chain: reset seeds the registry events, and the first step sends a fresh tool call. If R3 or R4 ran earlier, their approve and deploy rows show too.
+**Needs:** [S0](S0-preflight.md). Works anywhere in a chain: reset seeds the registry events, and the first step sends a fresh tool call. If [R3](R3-registry-approval.md) or [R4](R4-registry-publish-to-gateway.md) ran earlier, their approve and deploy rows show too.
 
 ## Steps
 
@@ -31,3 +35,7 @@ Span with the end user; audit rows for submit and approve.
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md)
+<!-- nav:end -->

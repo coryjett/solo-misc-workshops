@@ -1,10 +1,14 @@
 # L2 · Model access by identity
 
+<!-- nav:start -->
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [L1](L1-llm-routing-failover.md) · Next: [L3](L3-llm-prompt-guard.md)
+<!-- nav:end -->
+
 **Area:** LLM · **Time:** 3 min
 
 **Proves:** Premium models are locked per group; the same client gets different models depending on who calls.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -29,3 +33,7 @@ eng-dev gets `model_authorization_denied`; admin gets an answer.
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [L1](L1-llm-routing-failover.md) · Next: [L3](L3-llm-prompt-guard.md)
+<!-- nav:end -->

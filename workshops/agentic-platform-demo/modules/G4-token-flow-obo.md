@@ -1,10 +1,14 @@
 # G4 · Token flow: on-behalf-of, the backend never sees the user's token
 
+<!-- nav:start -->
+[All modules](README.md) · [Identity](README.md#identity) · Previous: [G3](G3-mcp-guardrails.md) · Next: [A1](A1-a2a-who-calls-whom.md)
+<!-- nav:end -->
+
 **Area:** Identity · **Time:** 4 min
 
 **Proves:** The user's identity reaches the backend, but as a short-lived token the gateway issued, not the raw sign-in token.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -32,3 +36,7 @@ MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`. Solo UI **P
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [Identity](README.md#identity) · Previous: [G3](G3-mcp-guardrails.md) · Next: [A1](A1-a2a-who-calls-whom.md)
+<!-- nav:end -->

@@ -1,10 +1,14 @@
 # G3 · Guardrails on tool calls: block destructive tools, mask PII
 
+<!-- nav:start -->
+[All modules](README.md) · [MCP](README.md#mcp) · Previous: [G2](G2-mcp-down-scoped-saas.md) · Next: [G4](G4-token-flow-obo.md)
+<!-- nav:end -->
+
 **Area:** MCP · **Time:** 4 min
 
 **Proves:** Platform rules no tool may break: destructive tools blocked for everyone, personal data masked in results.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -30,3 +34,7 @@ MCP Inspector as eng-dev on `/mcp`: run `records_lookup_customer` with `C-1001` 
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [MCP](README.md#mcp) · Previous: [G2](G2-mcp-down-scoped-saas.md) · Next: [G4](G4-token-flow-obo.md)
+<!-- nav:end -->

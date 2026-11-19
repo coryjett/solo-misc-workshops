@@ -1,10 +1,14 @@
 # L1 · LLM routing and failover (virtual models)
 
+<!-- nav:start -->
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [A1](A1-a2a-who-calls-whom.md) · Next: [L2](L2-llm-access-by-identity.md)
+<!-- nav:end -->
+
 **Area:** LLM · **Time:** 5 min
 
 **Proves:** Clients call one model name; the gateway picks the real backend and fails over when one is unhealthy.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -33,3 +37,7 @@ An answer, with "answered by" naming the model.
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [A1](A1-a2a-who-calls-whom.md) · Next: [L2](L2-llm-access-by-identity.md)
+<!-- nav:end -->

@@ -1,10 +1,14 @@
 # P1 · What it looks like on Kubernetes (containers, control plane, data plane)
 
+<!-- nav:start -->
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [S0](S0-preflight.md) · Next: [P2](P2-observability.md)
+<!-- nav:end -->
+
 **Area:** Platform · **Time:** 5 min
 
 **Proves:** agentgateway is just Kubernetes: a controller, a proxy Deployment, and Gateway API objects you manage like any other config.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -32,3 +36,7 @@ Pods Running; routes for `/mcp`, `/frontdoor/mcp`, `/a2a/agent-*`, `/registry`; 
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [S0](S0-preflight.md) · Next: [P2](P2-observability.md)
+<!-- nav:end -->

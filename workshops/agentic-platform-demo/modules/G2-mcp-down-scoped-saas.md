@@ -1,10 +1,14 @@
 # G2 · Down-scoped SaaS tools (mail and code-hosting stand-ins)
 
+<!-- nav:start -->
+[All modules](README.md) · [MCP](README.md#mcp) · Previous: [G1](G1-mcp-per-team-tools.md) · Next: [G3](G3-mcp-guardrails.md)
+<!-- nav:end -->
+
 **Area:** MCP · **Time:** 8 min
 
 **Proves:** One mail/files/meetings server and one code-hosting server, each user gets a different slice: mail off for some, read-only for others.
 
-**Needs:** S0.
+**Needs:** [S0](S0-preflight.md).
 
 ## Steps
 
@@ -40,3 +44,7 @@ MCP Inspector: `./inspector.sh sales-dev http://localhost:8081/frontdoor/mcp` (9
 ## Cleanup
 
 None: this module only reads or calls things; it leaves no state behind.
+
+<!-- nav:start -->
+[All modules](README.md) · [MCP](README.md#mcp) · Previous: [G1](G1-mcp-per-team-tools.md) · Next: [G3](G3-mcp-guardrails.md)
+<!-- nav:end -->

@@ -1,5 +1,9 @@
 # S0 · Pre-flight (do before every demo)
 
+<!-- nav:start -->
+[All modules](README.md) · [Setup](README.md#setup) · Next: [P1](P1-platform-on-kubernetes.md)
+<!-- nav:end -->
+
 **Area:** Setup
 
 **Proves:** The environment is healthy and in its starting state.
@@ -31,3 +35,7 @@ kubectl --context kind-agentic-demo -n agentgateway-system logs deploy/mcp-gatew
 ## Cleanup
 
 None. To return everything to the starting state at any time: `./reset.sh` (about 40 seconds).
+
+<!-- nav:start -->
+[All modules](README.md) · [Setup](README.md#setup) · Next: [P1](P1-platform-on-kubernetes.md)
+<!-- nav:end -->

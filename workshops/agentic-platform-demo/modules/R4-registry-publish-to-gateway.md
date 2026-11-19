@@ -1,10 +1,14 @@
 # R4 · Publish an MCP server to the gateway, self-service
 
+<!-- nav:start -->
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R3](R3-registry-approval.md) · Next: [R5](R5-registry-deploy-to-runtime.md)
+<!-- nav:end -->
+
 **Area:** Registry · **Time:** 6 min
 
 **Proves:** An approved server gets a governed endpoint without a platform ticket; the platform policy attaches itself.
 
-**Needs:** S0. Admin window.
+**Needs:** [S0](S0-preflight.md). Admin window.
 
 **Changes state:** publishes customer-records-mcp. Once per reset.
 
@@ -32,3 +36,7 @@ New route and backend; eng-dev 3 tools, sales-dev 0.
 ```bash
 as_user admin; arctl delete deployment default/customer-records-mcp   # removes the route, backend and policy it created
 ```
+
+<!-- nav:start -->
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R3](R3-registry-approval.md) · Next: [R5](R5-registry-deploy-to-runtime.md)
+<!-- nav:end -->
