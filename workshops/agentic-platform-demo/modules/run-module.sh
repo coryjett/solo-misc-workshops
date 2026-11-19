@@ -54,7 +54,7 @@ extract_bash_blocks() {
     fi
   done < "$file"
   # Output blocks separated by a delimiter that won't appear in bash code
-  for b in "${blocks[@]}"; do
+  for b in ${blocks[@]+"${blocks[@]}"}; do
     printf '%s\n' "$b"
     printf '\x1eDELIM\x1e\n'
   done
