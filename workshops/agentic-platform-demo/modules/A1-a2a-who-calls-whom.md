@@ -40,3 +40,7 @@ agent-a was called by: are-cli (sales-dev)
 ## Don't claim
 
 - Authorization is per agent route, not per A2A method or skill. No native A2A content guardrails yet (use ext_proc). A2A rate limits count requests, not tokens.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

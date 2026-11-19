@@ -4,9 +4,13 @@
 
 **Proves:** Every hop is logged and traced with the caller, the tool or agent, and the outcome.
 
-**Needs:** Run after any traffic modules (G*, A1, L*) so data is fresh.
+**Needs:** S0. Works anywhere in a chain: the first step sends its own traffic.
 
 ## Steps
+
+```bash
+./modules/traffic.sh     # fresh MCP, A2A and LLM traffic (skip if you just ran other modules)
+```
 
 Terminal 2 (from S0) shows one line per hop: `protocol=a2a|mcp|llm`, method, outcome, user, groups, trace id.
 
@@ -26,3 +30,7 @@ Rows for the traffic you just generated.
 ## Don't claim
 
 - Refusals (403s) show in the terminal log, not as errors in the UI. Show denials in Terminal 2.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

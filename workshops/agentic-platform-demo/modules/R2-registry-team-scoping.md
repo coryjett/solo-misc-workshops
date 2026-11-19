@@ -18,3 +18,7 @@ eng-dev sees no sales agents.
 ## Say
 
 - Scoping is an access policy on identity-provider groups (`policies/teams.yaml`).
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

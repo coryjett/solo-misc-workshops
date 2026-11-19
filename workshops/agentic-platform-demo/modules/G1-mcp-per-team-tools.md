@@ -33,3 +33,7 @@ eng-dev sees `records_*` and `opsapi_*`; sales-dev sees no records tools; no tok
 ## Don't claim
 
 - OpenAPI-to-MCP is Enterprise on Kubernetes (OSS has it in standalone only).
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

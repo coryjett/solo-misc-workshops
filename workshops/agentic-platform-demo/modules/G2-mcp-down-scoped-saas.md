@@ -36,3 +36,7 @@ MCP Inspector: `./inspector.sh sales-dev http://localhost:8081/frontdoor/mcp` (9
 ## Don't claim
 
 - Per-user OAuth to third-party servers (each user consents once per vendor) is the Connectors feature: implemented on a branch, not released. Do not give a date.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

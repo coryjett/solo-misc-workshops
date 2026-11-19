@@ -32,18 +32,18 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 ```bash
 ./modules/run-module.sh G2            # runs the module's commands, shows output
 ./modules/run-module.sh A1 --step     # one command at a time (Enter to continue), useful live
+./modules/run-module.sh R4 --cleanup  # undo one module's changes (R3, R4, R5)
 ./modules/run-module.sh --all         # rehearsal: every module with commands; non-zero exit = something broke
 ```
 Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 
 ## Chaining rules
 
-1. Always start with **S0** (pre-flight). Between back-to-back demos, run `./reset.sh`.
-2. **P2** (observability) and **R6** (audit) go after the traffic modules they show.
-3. **R3** before **R4** if you show both (R4 references the approved change).
-4. Keep a demo to about 40 minutes of modules; leave the rest for questions.
-5. Show refusals in Terminal 2 (the live log), not in the UI.
-6. Do it in the CLI, then show the same fact in the UI (each module has an **In the UI** step): the CLI proves it is automatable, the UI shows operators can see it.
+1. Start with **S0** (pre-flight). After that, modules can run in any order: each one sets up what it needs.
+2. **R3, R4 and R5 change state** (approve, publish, deploy). Each card's **Cleanup** undoes just that module; `./reset.sh` (about 40 seconds) undoes everything. All other modules leave no state behind.
+3. Keep a demo to about 40 minutes of modules; leave the rest for questions.
+4. Show refusals in Terminal 2 (the live log), not in the UI.
+5. Do it in the CLI, then show the same fact in the UI (each module has an **In the UI** step).
 
 ## Suggested chains
 
@@ -68,14 +68,31 @@ Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 
 ## Related modules elsewhere in this repo
 
-Use these when the audience needs a different deployment mode or a deeper dive. They run on their own environments.
+These agentic workshops run on their own environments. Reach for one when the audience needs a different deployment mode or a deeper dive than the lab gives. The modules here already cover the core of the older agw-governance-demo, which is superseded.
+
+### Demos and deep dives
+
+| Module | Use when | Needs | Where |
+| :--- | :--- | :--- | :--- |
+| Standalone gateway (VM / binary) | no Kubernetes, VMs or edge | agentgateway binary, no cluster | [workshops/agw-standalone-demo](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/agw-standalone-demo) |
+| Three-product tour (registry, gateway, kagent, shared SSO) | a guided 50 minute build-up story instead of modules | own kind cluster, OpenAI key | [workshops/enterprise-demo](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/enterprise-demo) |
+| kagent security | agent runtime RBAC, access policies, kagent UI | own cluster, Keycloak | [workshops/kagent-security](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/kagent-security) |
+| End-to-end agent identity and delegation | identity teams want every hop secured, registry plus gateway | own kind cluster, Keycloak | [e2e-agent-identity-delegation](https://github.com/coryjett/solo-misc-workshops/tree/main/e2e-agent-identity-delegation), [workshops/agent-identity-token-exchange](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/agent-identity-token-exchange) |
+| On-behalf-of token exchange | OBO with the built-in STS, or an external STS with opaque tokens | any cluster, Keycloak | [workshops/obo-token-exchange](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/obo-token-exchange), [flow13-token-exchange](https://github.com/coryjett/solo-misc-workshops/tree/main/flow13-token-exchange) |
+| Okta token exchange | the IdP is Okta and a downstream (data platform) needs its own audience and scope | Okta tenant | [workshops/okta-token-exchange](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/okta-token-exchange) |
+| Two credentials on one MCP route | user JWT plus a separate service credential (Snowflake example) | Snowflake account, IdP | [workshops/Snowflake-Token-Exchange-Workshop](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/Snowflake-Token-Exchange-Workshop) |
+| External authorization with Cedar | policy-as-code teams, bring-your-own ext_authz | own cluster | [workshops/cedar-extauthz](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/cedar-extauthz) |
+| Coding assistants through the gateway | developers' Claude Code LLM calls go through the gateway with per-user OIDC tokens | Okta (or other OIDC), Claude Code | [workshops/claude-code-llm-via-agw-oidc](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/claude-code-llm-via-agw-oidc) |
+| Basic OIDC / JWT | first look at JWT auth on a route with Keycloak | any cluster | [workshops/oidc-integration](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/oidc-integration) |
+
+### Reference material (to send, not to demo)
 
 | Module | Use when | Where |
-|---|---|---|
-| Standalone (VM / binary) gateway | No Kubernetes, or VMs and bare metal at the edge | [agw-standalone-demo](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/agw-standalone-demo) |
-| Token exchange deep dive | Identity teams: delegation vs impersonation, multi-IdP | [agent-identity-token-exchange](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/agent-identity-token-exchange), [e2e-agent-identity-delegation](https://github.com/coryjett/solo-misc-workshops/tree/main/e2e-agent-identity-delegation) |
-| External authorization with Cedar | Policy-as-code teams | [cedar-extauthz](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/cedar-extauthz) |
-| kagent security | Agent runtime security (access policies, sandboxing) | [kagent-security](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/kagent-security) |
+| :--- | :--- | :--- |
+| Authentication patterns, with a decision flowchart | "which auth pattern fits us?" | [Agentgateway-AuthN-Patterns](https://github.com/coryjett/solo-misc-workshops/tree/main/Agentgateway-AuthN-Patterns) |
+| Deployment models for shared clusters | platform team owns clusters, app teams own namespaces, multi-cluster | [Agentgateway-Deployment-Models](https://github.com/coryjett/solo-misc-workshops/tree/main/Agentgateway-Deployment-Models) |
+| Requirements Q&A | answering an RFP or requirements list | [agentgateway-requirements-qa](https://github.com/coryjett/solo-misc-workshops/tree/main/agentgateway-requirements-qa) |
+| OBO enablement guide | teaching token exchange from zero | [workshops/obo-token-exchange-enablement](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/obo-token-exchange-enablement) |
 
 ## Building a customer walkthrough
 

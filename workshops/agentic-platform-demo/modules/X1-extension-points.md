@@ -36,3 +36,7 @@ n/a (config walkthrough).
 ## Don't claim
 
 - The callout router and the conditional example are not wired into this lab; show them as config. Check the release you quote supports them before promising.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

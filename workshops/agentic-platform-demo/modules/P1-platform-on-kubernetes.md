@@ -29,3 +29,6 @@ Pods Running; routes for `/mcp`, `/frontdoor/mcp`, `/a2a/agent-*`, `/registry`; 
 - Everything on screen is YAML in a folder, applied by a script: the same files go through any CI/CD or GitOps pipeline.
 - Same Helm chart on any conformant Kubernetes. A standalone binary covers VMs and bare metal.
 
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

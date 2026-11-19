@@ -28,3 +28,7 @@ MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`. Solo UI **P
 ## Don't claim
 
 - An exchange performed by the customer's IdP (for example Entra's OBO grant) is not shown here: offer a working session on their tenant.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

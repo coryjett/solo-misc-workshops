@@ -27,3 +27,7 @@ kubectl --context kind-agentic-demo -n agentgateway-system logs deploy/mcp-gatew
 ## Say
 
 - Run `./reset.sh` again between back-to-back demos (about 40 seconds).
+
+## Cleanup
+
+None. To return everything to the starting state at any time: `./reset.sh` (about 40 seconds).

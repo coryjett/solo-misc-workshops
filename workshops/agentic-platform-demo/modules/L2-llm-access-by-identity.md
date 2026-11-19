@@ -25,3 +25,7 @@ eng-dev gets `model_authorization_denied`; admin gets an answer.
 ## Say
 
 - Token budgets and rate limits key on the same identity (user, team).
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

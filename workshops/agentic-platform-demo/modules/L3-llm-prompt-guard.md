@@ -24,3 +24,7 @@ Solo UI **Policies** lists the guardrail objects; show the block itself in Termi
 ## Say
 
 - The webhook step calls a small service you own (`injection-guard`): the same pattern plugs in any guardrail vendor.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

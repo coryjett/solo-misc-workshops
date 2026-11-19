@@ -7,10 +7,12 @@ usage() {
   cat <<EOF
 Usage:
   ./modules/run-module.sh <MODULE_ID> [--step]      e.g. ./modules/run-module.sh G2
+  ./modules/run-module.sh <MODULE_ID> --cleanup   run only the module's Cleanup commands
   ./modules/run-module.sh --all                      runs every module that has a \`\`\`bash block, except S0
 EOF
 }
 
+WANT_SECTION=steps
 # Determine script directory and DEMO root
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEMO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -28,7 +30,15 @@ extract_bash_blocks() {
   local file="$1"
   local in_block=0
   local line block="" blocks=()
+  local section=steps
   while IFS= read -r line || [ -n "$line" ]; do
+    # "## Cleanup" starts the cleanup section; its blocks run only with --cleanup.
+    if [ "$in_block" -eq 0 ] && [ "${line#\#\# }" != "$line" ]; then
+      if [ "$line" = "## Cleanup" ]; then section=cleanup; else section=steps; fi
+    fi
+    if [ "$in_block" -eq 0 ] && [ "$line" = '```bash' ] && [ "$section" != "$WANT_SECTION" ]; then
+      continue
+    fi
     if [ "$in_block" -eq 0 ] && [ "$line" = '```bash' ]; then
       in_block=1
       block=""
@@ -219,9 +229,10 @@ case "$1" in
     module_id="$1"
     shift
     step_mode=0
-    if [ "${1:-}" = "--step" ]; then
-      step_mode=1
-    fi
+    case "${1:-}" in
+      --step) step_mode=1 ;;
+      --cleanup) WANT_SECTION=cleanup ;;
+    esac
     run_module "$module_id" "$step_mode"
     exit $?
     ;;

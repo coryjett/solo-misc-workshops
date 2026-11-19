@@ -21,3 +21,7 @@ Engineering and restricted-data items; dependency view; unregistered (discovered
 ## Say
 
 - Discovery finds agents already running in the cluster: shadow IT, found for you.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

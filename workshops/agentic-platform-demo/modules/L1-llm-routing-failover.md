@@ -29,3 +29,7 @@ An answer, with "answered by" naming the model.
 ## Don't claim
 
 - Failover is shown as config, not forced live. Keep prompts short: the self-hosted model is a small lab box.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

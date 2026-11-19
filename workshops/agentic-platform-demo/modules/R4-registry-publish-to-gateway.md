@@ -6,6 +6,8 @@
 
 **Needs:** S0. Admin window.
 
+**Changes state:** publishes customer-records-mcp. Once per reset.
+
 ## Steps
 
 Terminal: `pbcopy < catalog/gateway/access-rule.txt`
@@ -24,3 +26,9 @@ New route and backend; eng-dev 3 tools, sales-dev 0.
 ## Don't claim
 
 - The instance shows "pending" while it serves (status reporting gap for the Virtual runtime, not the data path).
+
+## Cleanup
+
+```bash
+as_user admin; arctl delete deployment default/customer-records-mcp   # removes the route, backend and policy it created
+```

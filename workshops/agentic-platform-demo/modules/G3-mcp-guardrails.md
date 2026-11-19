@@ -26,3 +26,7 @@ MCP Inspector as eng-dev on `/mcp`: run `records_lookup_customer` with `C-1001` 
 ## Say
 
 - Masking happens on the response, before the data reaches the AI client or the model.
+
+## Cleanup
+
+None: this module only reads or calls things; it leaves no state behind.

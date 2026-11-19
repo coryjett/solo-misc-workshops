@@ -6,6 +6,8 @@
 
 **Needs:** S0 (reset stages the pending item). Two windows: eng-dev (Incognito) and admin.
 
+**Changes state:** approves the staged item. Once per reset.
+
 ## Steps
 
 Registry UI (eng-dev): **Catalog** > **Administrative Requests**: `release-readiness-checker 2.0.0` pending, Withdraw only.
@@ -18,3 +20,10 @@ Pending for eng-dev; approved by admin; 1.0.0 was served until approval.
 ## Say
 
 - 2.0.0 moves the data class from pii to restricted: exactly what a human should review.
+
+## Cleanup
+
+```bash
+as_user admin; arctl delete agent release-readiness-checker --tag 2.0.0
+as_user eng-dev; arctl apply -f catalog/pending/release-readiness-checker-2.0.0.yaml   # re-stage the request
+```
