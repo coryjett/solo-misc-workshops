@@ -1,0 +1,29 @@
+# BYO on-prem asset: an agent that runs as a container on a VM in the on-prem data center, not in any
+# cloud and not deployed by the registry. Registered as metadata only (image + endpoint), so the
+# inventory covers non-cloud agents too. Fictional demo data.
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: anomaly-detector
+  tag: "2.3.1"
+  labels: {team: engineering, owner: priya.shah, service: support-operations, use-case: anomaly-detection, data-class: restricted, environment: prod, runtime: on-prem-vm, model: llama-3.3-70b-onprem, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "Docker on RHEL 9 VMs pvsig-vm-01/02, Durham DC rack B4 (demo)"
+    catalog.example/endpoint: "https://pvsig.onprem.example.com/a2a"
+    catalog.example/model-detail: "Llama 3.3 70B served by vLLM on on-prem A100 GPU nodes (gpu-pool-02)"
+spec:
+  title: Support Anomaly Detector (on-prem VM)
+  description: >-
+    [team:engineering owner:priya.shah service:support-operations data:restricted runtime:on-prem-vm model:llama-3.3-70b-onprem] Nightly pattern analysis over the support ticket database to flag emerging operational anomalies. Runs as a container on on-prem VMs, not in a cloud. Model: Llama 3.3 70B on on-prem GPUs. Endpoint: https://pvsig.onprem.example.com/a2a
+  modelProvider: vllm-onprem
+  modelName: llama-3.3-70b-instruct
+  source:
+    image: registry.onprem.example.com/safety/anomaly-detector:2.3.1
+    repository:
+      url: https://git.example.com/support-ops/anomaly-detector
+      branch: main
+    protocol: A2A
+  mcpServers:
+    - {kind: MCPServer, name: incident-db-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: data-masking-mcp, tag: "1.0.0"}

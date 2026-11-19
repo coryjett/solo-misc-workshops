@@ -1,0 +1,157 @@
+# Software Delivery agents. Submitted by eng-dev, approved by approver. Fictional demo data.
+# Relationships are real spec refs (mcpServers, skills, instructions) and are validated on apply.
+# Model: ARE v2026.9.0 has no model ref on Agent (model binds at Deployment.spec.modelRef) and the
+# Model kind only accepts provider bedrock, so the model is ALSO recorded as label `model` and in the
+# deprecated spec.modelProvider/modelName (stored, warned about, never used for runtime selection).
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: release-readiness-checker
+  tag: "1.0.0"
+  labels: {team: engineering, owner: priya.shah, service: release-management, use-case: release-gating, data-class: pii, environment: prod, runtime: azure-foundry, model: gpt-5.4-mini, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "Azure AI Foundry agent service, project eng-platform (demo)"
+spec:
+  title: Release Readiness Checker
+  description: >-
+    [team:engineering owner:priya.shah service:release-management data:pii runtime:azure-foundry model:gpt-5.4-mini] Ranks candidate release windows using ticket history and published changelogs.
+  modelProvider: azure-openai
+  modelName: gpt-5.4-mini
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: ticketing-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: docs-search-mcp, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: incident-triage
+  tag: "1.0.0"
+  labels: {team: engineering, owner: priya.shah, service: reliability, use-case: incident-triage, data-class: restricted, environment: prod, runtime: aws-agentcore, model: claude-sonnet, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "AWS Bedrock AgentCore runtime, account eng-reliability (demo)"
+spec:
+  title: Incident Triage
+  description: >-
+    [team:engineering owner:priya.shah service:reliability data:restricted runtime:aws-agentcore model:claude-sonnet] Classifies customer-reported incidents (minor, major, critical) and drafts remediation notes.
+  modelProvider: bedrock
+  modelName: claude-sonnet-bedrock
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: ticketing-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: data-masking-mcp, tag: "1.0.0"}
+  skills:
+    - {kind: Skill, name: audit-trail-logging, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: incident-triage
+  tag: "1.1.0"
+  labels: {team: engineering, owner: priya.shah, service: reliability, use-case: incident-triage, data-class: restricted, environment: prod, runtime: aws-agentcore, model: claude-sonnet, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "AWS Bedrock AgentCore runtime, account eng-reliability (demo)"
+    catalog.example/changelog: "1.1.0 adds incident-db-mcp so incidents with a security signal open a SEV case"
+spec:
+  title: Incident Triage
+  description: >-
+    [team:engineering owner:priya.shah service:reliability data:restricted runtime:aws-agentcore model:claude-sonnet] Classifies customer-reported incidents and drafts remediation notes; 1.1.0 also checks the incident database for linked security events.
+  modelProvider: bedrock
+  modelName: claude-sonnet-bedrock
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: ticketing-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: data-masking-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: incident-db-mcp, tag: "1.0.0"}
+  skills:
+    - {kind: Skill, name: audit-trail-logging, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}
+---
+# `latest` is a literal tag in ARE (not computed). Publishing it makes 1.1.0 the default for
+# `arctl get agent incident-triage` and for refs with no tag.
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: incident-triage
+  tag: latest
+  labels: {team: engineering, owner: priya.shah, service: reliability, use-case: incident-triage, data-class: restricted, environment: prod, runtime: aws-agentcore, model: claude-sonnet, points-to: "1.1.0", lifecycle: active}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "AWS Bedrock AgentCore runtime, account eng-reliability (demo)"
+    catalog.example/changelog: "latest = 1.1.0"
+spec:
+  title: Incident Triage
+  description: >-
+    [team:engineering owner:priya.shah service:reliability data:restricted runtime:aws-agentcore model:claude-sonnet] Classifies customer-reported incidents and drafts remediation notes; also checks the incident database for linked security events. latest = 1.1.0.
+  modelProvider: bedrock
+  modelName: claude-sonnet-bedrock
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: ticketing-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: data-masking-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: incident-db-mcp, tag: "1.0.0"}
+  skills:
+    - {kind: Skill, name: audit-trail-logging, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}
+---
+# Deprecated version. ARE v2026.9.0 has no deprecation field or state for artifacts (checked in
+# source), so deprecation is a label (filterable) plus an annotation with the reason and successor.
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: support-ticket-intake
+  tag: "0.9.0"
+  labels: {team: engineering, owner: priya.shah, service: support-operations, use-case: ticket-processing, data-class: restricted, environment: prod, runtime: aws-agentcore, model: claude-sonnet, lifecycle: deprecated}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/deprecated: "true"
+    catalog.example/deprecation-reason: "Wrote incident cases without de-identification; replaced by 1.0.0. Retire by 2026-12-31."
+    catalog.example/superseded-by: "support-ticket-intake:1.0.0"
+spec:
+  title: "Incident Intake (DEPRECATED)"
+  description: >-
+    [DEPRECATED team:engineering owner:priya.shah service:support-operations data:restricted runtime:aws-agentcore model:claude-sonnet] Use 1.0.0. Original incident intake agent that read call-center notes directly.
+  modelProvider: bedrock
+  modelName: claude-sonnet-bedrock
+  source:
+    protocol: A2A
+  mcpServers:
+    - {kind: MCPServer, name: incident-db-mcp, tag: "1.0.0"}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: support-ticket-intake
+  tag: "1.0.0"
+  labels: {team: engineering, owner: priya.shah, service: support-operations, use-case: ticket-processing, data-class: restricted, environment: prod, runtime: aws-agentcore, model: claude-sonnet, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "AWS Bedrock AgentCore runtime, account eng-support (demo)"
+spec:
+  title: Incident Intake
+  description: >-
+    [team:engineering owner:priya.shah service:support-operations data:restricted runtime:aws-agentcore model:claude-sonnet] Turns call-center and email reports into draft incident cases with severity classification, de-identifying first.
+  modelProvider: bedrock
+  modelName: claude-sonnet-bedrock
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: incident-db-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: data-masking-mcp, tag: "1.0.0"}
+  skills:
+    - {kind: Skill, name: audit-trail-logging, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}

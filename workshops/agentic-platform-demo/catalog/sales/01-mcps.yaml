@@ -1,0 +1,17 @@
+# Sales team MCP servers. Submitted by sales-dev, approved by approver. Fictional demo data.
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: crm-mcp
+  tag: "1.0.0"
+  labels: {team: sales, owner: marcus.lee, service: sales-crm, use-case: account-engagement, data-class: pii, environment: prod, runtime: azure-foundry}
+  annotations:
+    catalog.example/owner-email: marcus.lee@example.com
+    catalog.example/runtime-detail: "Azure Container Apps, subscription comm-prod (demo)"
+spec:
+  title: CRM MCP
+  description: >-
+    [team:sales owner:marcus.lee service:sales-crm data:pii runtime:azure-foundry] Read tools over the field-force CRM: customer profiles, call notes, territory alignment. Contains customer PII.
+  remote:
+    type: streamable-http
+    url: https://crm-mcp.sales.example.com/mcp

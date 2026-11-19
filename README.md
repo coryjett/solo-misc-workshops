@@ -4,6 +4,12 @@ Workshops, walkthroughs, and reference materials for Solo.io products.
 
 ## Contents
 
+### Agentic Platform Demo (modular)
+
+One lab (agentregistry Enterprise, agentgateway Enterprise, kagent, Keycloak) and 18 bite-size, industry-neutral demo modules (MCP, A2A, LLM routing and guardrails, identity and token exchange, Kubernetes deployment, observability, registry governance) that chain into a demo for any audience. Suggested chains per audience, chaining rules, and a walkthrough template; every module command is checked by the lab's verify scripts.
+
+- **[Modules and suggested chains](workshops/agentic-platform-demo/modules/)**
+
 ### Agent Gateway: AI Gateway Requirements Q&A
 
 Row-by-row answers to a common set of enterprise AI gateway requirements (MCP, A2A, identity, policy, LLM traffic, security, observability, reliability, operations), verified against Solo Enterprise for agentgateway v2026.10.1 source and docs, with tests where possible.

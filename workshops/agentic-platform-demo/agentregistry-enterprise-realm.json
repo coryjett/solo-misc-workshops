@@ -1,0 +1,345 @@
+{
+  "realm": "agentregistry-enterprise",
+  "enabled": true,
+  "sslRequired": "none",
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 28800,
+  "ssoSessionIdleTimeout": 36000,
+  "ssoSessionMaxLifespan": 86400,
+  "groups": [
+    {
+      "name": "are-admins",
+      "attributes": {
+        "description": [
+          "Registry superusers: approve staged writes, manage policies"
+        ]
+      },
+      "id": "00000000-0000-0000-0000-000000000201"
+    },
+    {
+      "name": "are-writers",
+      "attributes": {
+        "description": [
+          "May publish artifacts (staged for approval)"
+        ]
+      },
+      "id": "00000000-0000-0000-0000-000000000202"
+    },
+    {
+      "name": "are-readers",
+      "attributes": {
+        "description": [
+          "Read-only catalog access"
+        ]
+      },
+      "id": "00000000-0000-0000-0000-000000000203"
+    },
+    {
+      "name": "team-governance",
+      "attributes": {
+        "description": [
+          "Security and AI governance"
+        ]
+      },
+      "id": "00000000-0000-0000-0000-000000000204"
+    },
+    {
+      "name": "team-engineering",
+      "attributes": {
+        "description": [
+          "Engineering"
+        ]
+      },
+      "id": "00000000-0000-0000-0000-000000000205"
+    },
+    {
+      "name": "team-sales",
+      "attributes": {
+        "description": [
+          "Sales engineering"
+        ]
+      },
+      "id": "00000000-0000-0000-0000-000000000206"
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@example.com",
+      "firstName": "Platform",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/are-admins"
+      ],
+      "id": "00000000-0000-0000-0000-000000000101"
+    },
+    {
+      "username": "approver",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "approver@example.com",
+      "firstName": "Catalog",
+      "lastName": "Approver",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "approver",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/are-admins",
+        "/team-governance"
+      ],
+      "id": "00000000-0000-0000-0000-000000000102"
+    },
+    {
+      "username": "eng-dev",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "eng-dev@example.com",
+      "firstName": "Engineering",
+      "lastName": "Developer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "eng-dev",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/are-writers",
+        "/team-engineering"
+      ],
+      "id": "00000000-0000-0000-0000-000000000103"
+    },
+    {
+      "username": "sales-dev",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "sales-dev@example.com",
+      "firstName": "Sales",
+      "lastName": "Developer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sales-dev",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/are-writers",
+        "/team-sales"
+      ],
+      "id": "00000000-0000-0000-0000-000000000104"
+    },
+    {
+      "username": "auditor",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "auditor@example.com",
+      "firstName": "Compliance",
+      "lastName": "Auditor",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "auditor",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/are-readers"
+      ],
+      "id": "00000000-0000-0000-0000-000000000105"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "are-backend",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "are-backend-demo-secret-not-for-prod",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "aud-agentgateway",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "agentgateway",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "are-cli",
+      "name": "agentregistry UI and arctl",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:12121/*",
+        "http://127.0.0.1:12121/*"
+      ],
+      "webOrigins": [
+        "http://localhost:12121",
+        "http://127.0.0.1:12121"
+      ],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "true",
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:12121/*##http://127.0.0.1:12121/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "aud-agentgateway",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "agentgateway",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "agent-a",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agent-a-demo-secret-not-for-prod",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "aud-agentgateway",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "agentgateway",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "agent-b",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agent-b-demo-secret-not-for-prod",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "aud-agentgateway",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "agentgateway",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "agent-c",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agent-c-demo-secret-not-for-prod",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "aud-agentgateway",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "agentgateway",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "demo-fixed-rsa",
+        "providerId": "rsa",
+        "subComponents": {},
+        "config": {
+          "privateKey": [
+            "__REALM_PRIVATE_KEY__"
+          ],
+          "certificate": [
+            "__REALM_CERTIFICATE__"
+          ],
+          "priority": [
+            "200"
+          ],
+          "enabled": [
+            "true"
+          ],
+          "active": [
+            "true"
+          ],
+          "algorithm": [
+            "RS256"
+          ]
+        }
+      }
+    ]
+  }
+}

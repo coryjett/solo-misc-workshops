@@ -1,0 +1,40 @@
+# agentregistry Enterprise v2026.9.0 values for the kind demo. Host/port wiring lives in env.sh;
+# 02-registry.sh passes the image tag and license annotation on the command line.
+service:
+  type: ClusterIP   # host access via the agentregistry-enterprise-nodeport Service (02-registry.sh)
+config:
+  # Non-admin writes of tagged artifacts are staged until an are-admins member approves them.
+  requireCreateApproval: "true"
+oidc:
+  # Same URL the browser uses. Pods reach it through the CoreDNS rewrite set up in 00-cluster.sh.
+  issuer: "http://keycloak.localhost:8090/realms/agentregistry-enterprise"
+  clientId: "are-backend"
+  publicClientId: "are-cli"
+  clientSecret: "are-backend-demo-secret-not-for-prod"
+  roleClaim: "groups"
+  superuserRole: "are-admins"
+  insecureSkipVerify: false
+database:
+  postgres:
+    type: bundled
+clickhouse:
+  enabled: true
+telemetry:
+  enabled: true
+# Audit events (OTLP logs) go to the bundled telemetry collector, which writes them to ClickHouse
+# (table otel_logs_json). No extra infra. A production install would point this at a SIEM collector.
+audit:
+  enabled: true
+  destination:
+    otlp:
+      endpoint: "agentregistry-enterprise-telemetry-collector:4317"
+      insecure: true
+  collector:
+    enabled: false
+  authz:
+    allowedDecisions: sensitive
+extraEnvVars:
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://agentregistry-enterprise-telemetry-collector:4317"
+  - name: OTEL_SERVICE_NAME
+    value: "agentregistry-enterprise"

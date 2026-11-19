@@ -1,0 +1,70 @@
+# Front door for SaaS-style MCP servers: a WorkIQ (M365) and a GitHub stand-in behind one endpoint, each user
+# gets a down-scoped slice of the same servers (mail off for some, GitHub read-only for some).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata: { name: frontdoor-mcp, namespace: agentgateway-system }
+spec:
+  entMcp:
+    targets:
+      - name: workiq
+        static: { host: workiq-mcp.${TOOLS_NS}.svc.cluster.local, port: 8000, path: /mcp, protocol: StreamableHTTP }
+      - name: github
+        static: { host: github-mcp.${TOOLS_NS}.svc.cluster.local, port: 8000, path: /mcp, protocol: StreamableHTTP }
+---
+# Exposed at ${GW_URL}/frontdoor/mcp.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: frontdoor-mcp, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { name: mcp-gateway, namespace: agentgateway-system } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /frontdoor/mcp } } ]
+      backendRefs: [ { name: frontdoor-mcp, group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend } ]
+      timeouts: { request: "0s" }
+---
+# Who are you? Same IdP check as the platform endpoint.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: frontdoor-mcp-jwt, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: HTTPRoute, name: frontdoor-mcp } ]
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      preserveToken: true
+      providers:
+        - issuer: ${OIDC_ISSUER}
+          audiences: [ agentgateway ]
+          jwks:
+            remote:
+              backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
+              jwksPath: /realms/${KC_REALM}/protocol/openid-connect/certs
+              cacheDuration: 5m
+---
+# On-Behalf-Of: WorkIQ and GitHub receive an STS-issued token for the real user, never the raw IdP token.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: frontdoor-mcp-obo, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend, name: frontdoor-mcp } ]
+  backend:
+    tokenExchange:
+      mode: ExchangeOnly
+---
+# Down-scoping by group: admins everything; engineering no send_mail, GitHub read + issues/PRs (no merge/delete);
+# sales no mail tools, GitHub read-only; readers GitHub read-only, no WorkIQ.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: frontdoor-mcp-tool-authz, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend, name: frontdoor-mcp } ]
+  backend:
+    mcp:
+      authorization:
+        action: Allow
+        policy:
+          matchExpressions:
+            - "'are-admins' in jwt.groups || 'team-governance' in jwt.groups"
+            - "'team-engineering' in jwt.groups && ((mcp.tool.target == 'workiq' && mcp.tool.name != 'send_mail') || (mcp.tool.target == 'github' && mcp.tool.name in ['list_repos','get_file_contents','search_code','list_pull_requests','whoami','create_issue','create_pull_request']))"
+            - "'team-sales' in jwt.groups && ((mcp.tool.target == 'workiq' && mcp.tool.name in ['search_files','read_file','list_meetings','whoami']) || (mcp.tool.target == 'github' && mcp.tool.name in ['list_repos','get_file_contents','search_code','list_pull_requests','whoami']))"
+            - "'are-readers' in jwt.groups && mcp.tool.target == 'github' && mcp.tool.name in ['list_repos','get_file_contents','search_code','list_pull_requests','whoami']"

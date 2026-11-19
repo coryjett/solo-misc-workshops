@@ -1,0 +1,48 @@
+# Runtime connection to the in-cluster OSS kagent controller, plus one deployable MCP server.
+# Rendered and applied by deploy/setup-deploy.sh (it fills the OIDC client secret from values.yaml so
+# the secret is not written here). ARE authenticates to kagent with a client_credentials token from
+# the are-backend Keycloak client. No cloud credentials, no model keys, no agentgateway.
+apiVersion: ar.dev/v1alpha1
+kind: Secret
+metadata:
+  name: kagent-outbound-oidc
+spec:
+  type: Opaque
+  stringData:
+    clientSecret: __CLIENT_SECRET__
+---
+apiVersion: ar.dev/v1alpha1
+kind: Runtime
+metadata:
+  name: onprem-k8s-kagent
+spec:
+  type: Kagent
+  config:
+    kagentUrl: http://kagent-controller.kagent:8083
+    namespace: kagent
+    auth:
+      oidc:
+        issuer: http://keycloak.localhost:8090/realms/agentregistry-enterprise
+        clientId: are-backend
+        clientSecretRef:
+          name: kagent-outbound-oidc
+          key: clientSecret
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: everything-reference-mcp
+  tag: "1.0.0"
+  labels: {team: platform, owner: dana.ortiz, service: platform-engineering, use-case: deploy-smoke-test, data-class: public, environment: dev, runtime: on-prem-k8s}
+  annotations:
+    catalog.example/owner-email: dana.ortiz@example.com
+spec:
+  title: Everything reference MCP
+  description: >-
+    [team:platform owner:dana.ortiz service:platform-engineering data:public runtime:on-prem-k8s] Open-source
+    MCP reference server (mcp/everything image). Used to show a registry-driven deploy to on-prem Kubernetes through kagent.
+  source:
+    package:
+      origin: {type: oci, identifier: "docker.io/mcp/everything:latest", oci: {serverName: reference/everything}}
+      transport: {type: stdio}
+      launch: {command: node, args: [{type: positional, value: dist/index.js}]}

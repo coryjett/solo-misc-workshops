@@ -1,0 +1,27 @@
+# L2 · Model access by identity
+
+**Area:** LLM · **Time:** 3 min
+
+**Proves:** Premium models are locked per group; the same client gets different models depending on who calls.
+
+**Needs:** S0.
+
+## Steps
+
+```bash
+./chat.py eng-dev gpt-4.1-mini 'hi'                                    # 403: not allowed
+./chat.py admin gpt-4.1-mini 'In one sentence, what is MCP?'           # allowed
+```
+Editor: `gateway/41-llm-identity.yaml`.
+
+## In the UI
+
+Solo UI **Dashboard**: token usage by model (admin's gpt-4.1-mini call appears; the refused call does not). Show the 403 in Terminal 2.
+
+## Expect
+
+eng-dev gets `model_authorization_denied`; admin gets an answer.
+
+## Say
+
+- Token budgets and rate limits key on the same identity (user, team).

@@ -1,0 +1,1 @@
+('team-engineering' in jwt.groups || 'are-admins' in jwt.groups || 'team-governance' in jwt.groups) && !mcp.tool.name.contains('delete_')

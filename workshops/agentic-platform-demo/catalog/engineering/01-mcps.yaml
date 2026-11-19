@@ -1,0 +1,35 @@
+# Engineering team MCP servers. Submitted by eng-dev (are-writers), staged for approval,
+# approved by approver. Fictional demo data.
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: ticketing-mcp
+  tag: "1.0.0"
+  labels: {team: engineering, owner: priya.shah, service: release-management, use-case: release-gating, data-class: pii, environment: prod, runtime: azure-foundry}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "Azure Container Apps, subscription eng-prod (demo)"
+spec:
+  title: Ticketing MCP
+  description: >-
+    [team:engineering owner:priya.shah service:release-management data:pii runtime:azure-foundry] Issue tracking and release management tools: tickets, projects, assignees, status updates. Contains internal user PII.
+  remote:
+    type: streamable-http
+    url: https://ticketing-mcp.clin.example.com/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: incident-db-mcp
+  tag: "1.0.0"
+  labels: {team: engineering, owner: priya.shah, service: support-operations, use-case: ticket-processing, data-class: restricted, environment: prod, runtime: aws-agentcore}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "AWS AgentCore Gateway target, account eng-support (demo)"
+spec:
+  title: Incident Database MCP
+  description: >-
+    [team:engineering owner:priya.shah service:support-operations data:restricted runtime:aws-agentcore] Read and case-intake tools over the support-operations incident database (support tickets, categorization). Handles sensitive customer data.
+  remote:
+    type: streamable-http
+    url: https://safety-mcp.clin.example.com/mcp

@@ -1,0 +1,19 @@
+# Identity on everything the registry publishes under /registry/*: the same IdP policy as the hand-built endpoint,
+# attached once to the parent (delegating) route, so every child route the registry creates inherits it.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: registry-jwt, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: HTTPRoute, name: agentregistry-delegate } ]
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      preserveToken: true
+      providers:
+        - issuer: ${OIDC_ISSUER}
+          audiences: [ agentgateway ]
+          jwks:
+            remote:
+              backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
+              jwksPath: /realms/${KC_REALM}/protocol/openid-connect/certs
+              cacheDuration: 5m

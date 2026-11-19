@@ -1,0 +1,6 @@
+.license-source
+local.env
+.secrets/
+*.log
+cloud/*.secret.env
+__pycache__/

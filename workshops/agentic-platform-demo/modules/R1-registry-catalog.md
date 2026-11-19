@@ -1,0 +1,23 @@
+# R1 · What exists: catalog and shadow-IT discovery
+
+**Area:** Registry · **Time:** 6 min
+
+**Proves:** One place knows every agent, MCP server and model, who owns it and what data it touches, including ones nobody registered.
+
+**Needs:** S0. Registry tab as admin.
+
+## Steps
+
+Registry UI (admin):
+1. **Catalog**: search `team:engineering`, then `data:restricted`.
+2. Open **incident-triage** > **Agent Composition**: prompt, skill pinned to a commit, MCP servers.
+3. Open **data-masking-mcp** > **Used by Agents**: the blast radius.
+4. **Instances** > clear the "Managed Resources" filter: agents and servers nobody registered.
+
+## Expect
+
+Engineering and restricted-data items; dependency view; unregistered (discovered) items.
+
+## Say
+
+- Discovery finds agents already running in the cluster: shadow IT, found for you.

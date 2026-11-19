@@ -1,0 +1,23 @@
+# Who called which tool: access logs AND traces (to the Solo UI / any OTLP sink such as Datadog) carry the user and the MCP tool.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: access-logs, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway } ]
+  frontend:
+    accessLog:
+      attributes:
+        add:
+          - { name: user, expression: 'default(jwt.preferred_username, "anonymous")' }
+          - { name: groups, expression: 'default(jwt.groups, [])' }
+          - { name: mcp_tool, expression: 'default(mcp.tool.name, "")' }
+          - { name: mcp_target, expression: 'default(mcp.tool.target, "")' }
+    tracing:
+      backendRef: { name: enterprise-agentgateway-ui-telemetry-collector, namespace: agentgateway-system, port: 4317 }
+      protocol: GRPC
+      randomSampling: "true"
+      attributes:
+        add:
+          - { name: enduser.id, expression: 'default(jwt.sub, "anonymous")' }
+          - { name: enduser.name, expression: 'default(jwt.preferred_username, "anonymous")' }
+          - { name: mcp.tool, expression: 'default(mcp.tool.name, "")' }

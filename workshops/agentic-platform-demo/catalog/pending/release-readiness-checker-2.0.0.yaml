@@ -1,0 +1,29 @@
+# The ONE item left pending for the live demo (segment 3). Submitted by eng-dev; approver approves it live.
+# Story: v2 adds sensitive customer data access through data-masking-mcp, which raises data classification from pii to restricted and
+# swaps the model to Claude on Bedrock. That is exactly the change a security reviewer should see before it ships.
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: release-readiness-checker
+  tag: "2.0.0"
+  labels: {team: engineering, owner: priya.shah, service: release-management, use-case: release-gating, data-class: restricted, environment: prod, runtime: aws-agentcore, model: claude-sonnet, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: priya.shah@example.com
+    catalog.example/runtime-detail: "moving from Azure AI Foundry to AWS Bedrock AgentCore, account acme-corp (demo)"
+    catalog.example/changelog: "2.0.0 adds de-identified customer usage metrics (data-masking-mcp): data-class pii to restricted; model gpt-5.4-mini to Claude Sonnet on Bedrock"
+spec:
+  title: Enterprise Customer Success Finder
+  description: >-
+    [team:engineering owner:priya.shah service:release-management data:restricted runtime:aws-agentcore model:claude-sonnet] Ranks candidate enterprise accounts using CRM history, documentation and de-identified customer usage counts. 2.0.0 raises data classification to restricted.
+  modelProvider: bedrock
+  modelName: claude-sonnet-bedrock
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: ticketing-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: docs-search-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: data-masking-mcp, tag: "1.0.0"}
+  skills:
+    - {kind: Skill, name: audit-trail-logging, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}

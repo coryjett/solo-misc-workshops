@@ -1,0 +1,99 @@
+# A2A: three agents behind the gateway. Users can discover and call only agent-a; agent-a can call agent-b
+# and agent-c; agent-b and agent-c cannot call each other. The routes may reach the agent Services in ${TOOLS_NS}.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata: { name: a2a-routes-to-agents, namespace: ${TOOLS_NS} }
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: agentgateway-system
+  to:
+    - group: ""
+      kind: Service
+---
+# appProtocol agentgateway.dev/a2a on the Service makes the gateway A2A-aware (card URL rewrite, A2A telemetry).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: a2a-agent-a, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { name: mcp-gateway, namespace: agentgateway-system } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /a2a/agent-a } } ]
+      filters: [ { type: URLRewrite, urlRewrite: { path: { type: ReplacePrefixMatch, replacePrefixMatch: "/" } } } ]
+      backendRefs: [ { name: agent-a, namespace: ${TOOLS_NS}, port: 8000 } ]
+      timeouts: { request: "0s" }
+---
+# agent-b, market data specialist.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: a2a-agent-b, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { name: mcp-gateway, namespace: agentgateway-system } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /a2a/agent-b } } ]
+      filters: [ { type: URLRewrite, urlRewrite: { path: { type: ReplacePrefixMatch, replacePrefixMatch: "/" } } } ]
+      backendRefs: [ { name: agent-b, namespace: ${TOOLS_NS}, port: 8000 } ]
+      timeouts: { request: "0s" }
+---
+# agent-c, compliance checker.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: a2a-agent-c, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { name: mcp-gateway, namespace: agentgateway-system } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /a2a/agent-c } } ]
+      filters: [ { type: URLRewrite, urlRewrite: { path: { type: ReplacePrefixMatch, replacePrefixMatch: "/" } } } ]
+      backendRefs: [ { name: agent-c, namespace: ${TOOLS_NS}, port: 8000 } ]
+      timeouts: { request: "0s" }
+---
+# Every A2A call carries an IdP token: a user token for agent-a, an agent client-credentials token for agent to agent.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: a2a-jwt, namespace: agentgateway-system }
+spec:
+  targetRefs:
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: a2a-agent-a }
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: a2a-agent-b }
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: a2a-agent-c }
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      preserveToken: true
+      providers:
+        - issuer: ${OIDC_ISSUER}
+          audiences: [ agentgateway ]
+          jwks:
+            remote:
+              backendRef: { name: keycloak, namespace: keycloak, port: 8080 }
+              jwksPath: /realms/${KC_REALM}/protocol/openid-connect/certs
+              cacheDuration: 5m
+---
+# Users (any demo group) can reach agent-a, including its agent card.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: a2a-users-reach-agent-a, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: HTTPRoute, name: a2a-agent-a } ]
+  traffic:
+    authorization:
+      action: Allow
+      policy:
+        matchExpressions:
+          - "'are-admins' in jwt.groups || 'team-governance' in jwt.groups || 'team-engineering' in jwt.groups || 'team-sales' in jwt.groups || 'are-readers' in jwt.groups"
+---
+# Specialists accept only agent-a's identity: users and agent-b are refused here, at the gateway.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: a2a-only-agent-a-calls-specialists, namespace: agentgateway-system }
+spec:
+  targetRefs:
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: a2a-agent-b }
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: a2a-agent-c }
+  traffic:
+    authorization:
+      action: Allow
+      policy:
+        matchExpressions:
+          - "jwt.azp == 'agent-a'"

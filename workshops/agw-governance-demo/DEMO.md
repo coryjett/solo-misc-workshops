@@ -1,3 +1,5 @@
+> **Superseded:** the same segments, plus A2A, registry and Kubernetes modules, now live in [agentic-platform-demo](../agentic-platform-demo/modules/). Kept for reference.
+
 # agentgateway governance demo (25 min) · cheat sheet
 
 One gateway in front of MCP tools **and** LLM traffic: identity-based access, data guardrails, prompt-injection defense, local-model-first routing, and a full audit trail.

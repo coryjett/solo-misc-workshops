@@ -1,0 +1,66 @@
+# Tiny in-cluster Git host for the demo skill, standing in for an internal on-prem Git server.
+# ARE resolves a Skill's spec.source.repository with a real `git` call and pins the commit; with a
+# fictional URL the skill shows "failed". An init container builds the repo (SKILL.md) and nginx
+# serves it over dumb HTTP. URL: http://skills-git.demo-git.svc.cluster.local/platform/agent-skills.git
+apiVersion: v1
+kind: Namespace
+metadata: {name: demo-git}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: audit-trail-logging-skill, namespace: demo-git}
+data:
+  SKILL.md: |
+    ---
+    name: audit-trail-logging
+    description: Write a structured audit entry for every action the agent takes.
+    ---
+    # Audit trail (fictional demo skill)
+
+    For every tool call or decision you make, append one audit entry with:
+    - who: the agent name and version, and the human requester if known
+    - what: the action, the system touched, record identifiers (never personal identifiers)
+    - when: UTC timestamp
+    - why: the request or rule that caused the action
+    Entries are append-only. Never edit or delete an earlier entry; write a correcting entry instead.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: skills-git, namespace: demo-git}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: skills-git}}
+  template:
+    metadata: {labels: {app: skills-git}}
+    spec:
+      initContainers:
+        - name: build-repo
+          image: alpine/git:latest
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              rm -rf /srv/git/platform && mkdir -p /tmp/w/skills/audit-trail-logging /srv/git/platform
+              cp /skill/SKILL.md /tmp/w/skills/audit-trail-logging/SKILL.md
+              cd /tmp/w && git init -q -b main && git add -A
+              git -c user.name="Platform AI" -c user.email=platform-ai@example.com commit -q -m "audit-trail-logging skill 1.0.0"
+              git clone -q --bare /tmp/w /srv/git/platform/agent-skills.git
+              cd /srv/git/platform/agent-skills.git && git update-server-info
+          volumeMounts:
+            - {name: repo, mountPath: /srv/git}
+            - {name: skill, mountPath: /skill}
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports: [{containerPort: 80}]
+          volumeMounts:
+            - {name: repo, mountPath: /usr/share/nginx/html}
+      volumes:
+        - {name: repo, emptyDir: {}}
+        - {name: skill, configMap: {name: audit-trail-logging-skill}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: skills-git, namespace: demo-git}
+spec:
+  selector: {app: skills-git}
+  ports: [{port: 80, targetPort: 80}]

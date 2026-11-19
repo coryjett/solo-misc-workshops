@@ -1,0 +1,33 @@
+# MCP servers that already run somewhere (here: in the cluster, deployed by "their own CI/CD"). The registry does not
+# manage their lifecycle; it catalogs them and, through the Virtual runtime, publishes them behind the gateway.
+# Registered by a developer (eng-dev): requireCreateApproval stages them until an admin approves.
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: customer-records-mcp
+  tag: "1.0.0"
+  labels: {team: engineering, owner: eng-dev, service: customer-records, data-class: restricted, environment: dev, runtime: on-prem-k8s}
+spec:
+  title: Customer Records MCP
+  description: >-
+    [team:engineering owner:eng-dev service:customer-records data:restricted runtime:on-prem-k8s] Customer profile and
+    account-status lookups. Returns PII (dates of birth, phone numbers); the gateway masks it. Has a destructive
+    delete tool that must never be reachable by AI clients.
+  remote:
+    type: streamable-http
+    url: http://records-mcp.demo-tools.svc.cluster.local:8000/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: site-inventory-mcp
+  tag: "1.0.0"
+  labels: {team: sales, owner: sales-dev, service: inventory, data-class: internal, environment: dev, runtime: on-prem-k8s}
+spec:
+  title: Site Inventory MCP
+  description: >-
+    [team:sales owner:sales-dev service:inventory data:internal runtime:on-prem-k8s] Stock levels per site
+    and SKU. Internal data, no PII.
+  remote:
+    type: streamable-http
+    url: http://inventory-mcp.demo-tools.svc.cluster.local:8000/mcp

@@ -1,0 +1,54 @@
+# Team scoping for the demo catalog. Apply as admin: arctl apply -f policies/teams.yaml
+# ARE v2026.9.0 matches resource names exactly or "*" (no prefixes, no label selectors, no namespace
+# scoping in rules), so each team's items and the shared platform items are listed by name.
+# Adding a new team artifact means adding its name here. Principals are Keycloak groups (kind: Role).
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: shared-platform-catalog
+spec:
+  description: "Every team developer can see the platform-owned shared model, MCP servers, prompt and skill"
+  principals:
+    - {kind: Role, name: team-engineering}
+    - {kind: Role, name: team-sales}
+  rules:
+    - actions: ["registry:read"]
+      resources:
+        - {kind: model,  name: claude-sonnet-bedrock}
+        - {kind: server, name: docs-search-mcp}
+        - {kind: server, name: data-masking-mcp}
+        - {kind: prompt, name: pii-handling-guardrails}
+        - {kind: skill,  name: audit-trail-logging}
+---
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: team-engineering-catalog
+spec:
+  description: "Engineering teams see and deploy their own MCP servers and agents"
+  principals:
+    - {kind: Role, name: team-engineering}
+  rules:
+    - actions: ["registry:read", "registry:deploy"]
+      resources:
+        - {kind: server, name: ticketing-mcp}
+        - {kind: server, name: incident-db-mcp}
+        - {kind: agent,  name: release-readiness-checker}
+        - {kind: agent,  name: incident-triage}
+        - {kind: agent,  name: support-ticket-intake}
+        - {kind: agent,  name: anomaly-detector}
+---
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: team-sales-catalog
+spec:
+  description: "Sales and Customer Support see and deploy their own MCP servers and agents"
+  principals:
+    - {kind: Role, name: team-sales}
+  rules:
+    - actions: ["registry:read", "registry:deploy"]
+      resources:
+        - {kind: server, name: crm-mcp}
+        - {kind: agent,  name: account-insights-assistant}
+        - {kind: agent,  name: customer-faq-responder}

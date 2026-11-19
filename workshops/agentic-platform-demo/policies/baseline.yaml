@@ -1,0 +1,40 @@
+# Baseline registry access for the demo personas. Principals are Keycloak group names from the
+# `groups` claim (kind: Role). are-admins needs no policy: it is the superuserRole.
+# Resource names match exactly or "*" (no prefix wildcards at v2026.9.0), so team scoping is done by
+# listing artifact names per team (see teams.yaml).
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: auditors-read-all
+spec:
+  description: "Compliance auditors can see every catalog entry, nothing else"
+  principals:
+    - kind: Role
+      name: "are-readers"
+  rules:
+    - actions: ["registry:read"]
+      resources:
+        - { kind: server, name: "*" }
+        - { kind: agent,  name: "*" }
+        - { kind: skill,  name: "*" }
+        - { kind: prompt, name: "*" }
+        - { kind: model,  name: "*" }
+        - { kind: plugin, name: "*" }
+        - { kind: runtime, name: "*" }
+---
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: writers-publish
+spec:
+  description: "Team developers may submit artifacts; requireCreateApproval stages them for are-admins"
+  principals:
+    - kind: Role
+      name: "are-writers"
+  rules:
+    - actions: ["registry:publish", "registry:edit"]
+      resources:
+        - { kind: server, name: "*" }
+        - { kind: agent,  name: "*" }
+        - { kind: skill,  name: "*" }
+        - { kind: prompt, name: "*" }

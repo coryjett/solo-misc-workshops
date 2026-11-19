@@ -1,0 +1,10 @@
+# The deploy done live in segment 5 (or from the UI: Catalog, everything-reference-mcp, Deploy,
+# Kubernetes, onprem-k8s-kagent). reset.sh deletes it.
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: everything-reference-mcp
+spec:
+  targetRef: {kind: MCPServer, name: everything-reference-mcp, tag: "1.0.0"}
+  runtimeRef: {kind: Runtime, name: onprem-k8s-kagent}
+  desiredState: deployed

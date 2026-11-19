@@ -1,0 +1,9 @@
+# On-Behalf-Of: backends receive an STS-issued token for the real user, not the user's raw IdP token.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: mcp-obo, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend, name: governed-mcp } ]
+  backend:
+    tokenExchange:
+      mode: ExchangeOnly

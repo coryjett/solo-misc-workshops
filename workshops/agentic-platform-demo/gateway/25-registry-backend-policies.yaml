@@ -1,0 +1,40 @@
+# Platform guardrails for EVERYTHING the registry publishes through the gateway, present and future.
+# The registry owns "who may call which tool" (per Deployment); the platform owns data guardrails and the
+# identity hand-off, attached by label selector to every backend the registry creates.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: registry-backends-platform, namespace: agentregistry-system }
+spec:
+  targetSelectors:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      matchLabels: { agentregistry.solo.io/ownerKind: Deployment }
+  backend:
+    # On-Behalf-Of: the backend receives a short-lived STS token for the real user, never the raw IdP token.
+    tokenExchange:
+      mode: ExchangeOnly
+    mcp:
+      guardrails:
+        processors:
+          # destructive tools never reach a backend, whatever a Deployment's access rule says
+          - methods: { tools/call: Request }
+            expression:
+              condition: "mcp.params.name.contains('delete_')"
+              reject: "Blocked by platform policy: destructive tools are not available to AI clients"
+          # PII masked in tool results (text and structured channels) before they reach any client
+          - methods: { tools/call: Response }
+            expression:
+              transform: >-
+                mcp.result.merge({
+                  'content': mcp.result.content.map(c,
+                    c.type == 'text'
+                      ? c.merge({'text': c.text
+                          .regexReplaceAll('\\b\\d{4}-\\d{2}-\\d{2}\\b', '[DOB REDACTED]')
+                          .regexReplaceAll('\\b\\d{3}-\\d{3}-\\d{4}\\b', '[PHONE REDACTED]')})
+                      : c)
+                }).merge(
+                  has(mcp.result.structuredContent) && has(mcp.result.structuredContent.result)
+                    ? {'structuredContent': {'result': string(mcp.result.structuredContent.result)
+                          .regexReplaceAll('\\b\\d{4}-\\d{2}-\\d{2}\\b', '[DOB REDACTED]')
+                          .regexReplaceAll('\\b\\d{3}-\\d{3}-\\d{4}\\b', '[PHONE REDACTED]')}}
+                    : {})

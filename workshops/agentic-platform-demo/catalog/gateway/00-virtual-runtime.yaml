@@ -1,0 +1,10 @@
+# The registry's view of the gateway: a Virtual runtime. Its name matches the agentregistry.solo.io/runtime label on
+# the Gateway and the parent HTTPRoute in agentgateway-system (gateway/00-gateway.yaml). Deploying an MCP server to
+# this runtime makes the registry create a child HTTPRoute + backend under /registry/<pathSuffix> on that gateway.
+# Applied by admin (platform) once.
+apiVersion: ar.dev/v1alpha1
+kind: Runtime
+metadata:
+  name: mcp-gateway
+spec:
+  type: Virtual

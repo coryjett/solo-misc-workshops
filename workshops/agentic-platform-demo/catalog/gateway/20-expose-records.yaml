@@ -1,0 +1,23 @@
+# "Deploy" an approved remote MCP server to the Virtual runtime: the registry creates the gateway route
+# http://localhost:8081/registry/records and the backend, with the access rule below compiled into the gateway's
+# MCP authorization. Done live from the UI (Catalog > customer-records-mcp > Deploy > Virtual > mcp-gateway) or:
+#   as_user admin && arctl apply -f catalog/gateway/20-expose-records.yaml
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: customer-records-mcp
+spec:
+  targetRef: {kind: MCPServer, name: customer-records-mcp, tag: "1.0.0"}
+  runtimeRef: {kind: Runtime, name: mcp-gateway}
+  desiredState: deployed
+  runtimeConfig:
+    route:
+      pathSuffix: /records
+    backend:
+      mcp:
+        authorization:
+          action: Allow
+          policy:
+            matchExpressions:
+              # engineering and governance teams may use it; nobody gets the delete tool
+              - "('team-engineering' in jwt.groups || 'are-admins' in jwt.groups || 'team-governance' in jwt.groups) && !mcp.tool.name.contains('delete_')"

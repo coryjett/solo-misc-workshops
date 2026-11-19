@@ -1,0 +1,49 @@
+# Sales agents. Submitted by sales-dev, approved by approver. Fictional demo data.
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: account-insights-assistant
+  tag: "1.0.0"
+  labels: {team: sales, owner: marcus.lee, service: sales-crm, use-case: account-engagement, data-class: pii, environment: prod, runtime: azure-foundry, model: gpt-5.4-mini, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: marcus.lee@example.com
+    catalog.example/runtime-detail: "Azure AI Foundry agent service, project comm-sales (demo)"
+spec:
+  title: Account Insights Assistant
+  description: >-
+    [team:sales owner:marcus.lee service:sales-crm data:pii runtime:azure-foundry model:gpt-5.4-mini] Pre-meeting briefings for field reps: customer interests, recent news, prior interactions.
+  modelProvider: azure-openai
+  modelName: gpt-5.4-mini
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: crm-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: docs-search-mcp, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: customer-faq-responder
+  tag: "1.0.0"
+  labels: {team: sales, owner: marcus.lee, service: customer-support, use-case: customer-inquiry-response, data-class: pii, environment: prod, runtime: on-prem-k8s, model: llama-3.3-70b-onprem, lifecycle: active}
+  annotations:
+    catalog.example/owner-email: marcus.lee@example.com
+    catalog.example/runtime-detail: "on-prem Kubernetes cluster dc1-k8s, namespace support (demo)"
+    catalog.example/model-detail: "Llama 3.3 70B served by vLLM on on-prem GPU nodes"
+spec:
+  title: Customer FAQ Responder
+  description: >-
+    [team:sales owner:marcus.lee service:customer-support data:pii runtime:on-prem-k8s model:llama-3.3-70b-onprem] Drafts standard responses to unsolicited product inquiries from customers, citing documentation.
+  modelProvider: vllm-onprem
+  modelName: llama-3.3-70b-instruct
+  source:
+    protocol: A2A
+  compatibleHarnesses: [{type: claude-code}]
+  mcpServers:
+    - {kind: MCPServer, name: docs-search-mcp, tag: "1.0.0"}
+    - {kind: MCPServer, name: crm-mcp, tag: "1.0.0"}
+  skills:
+    - {kind: Skill, name: audit-trail-logging, tag: "1.0.0"}
+  instructions: {kind: Prompt, name: pii-handling-guardrails, tag: "1.0.0"}

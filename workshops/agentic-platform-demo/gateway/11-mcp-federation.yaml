@@ -1,0 +1,31 @@
+# One governed MCP endpoint (localhost:8081/mcp) federating three systems:
+#   records   (MCP server, customer PII) -> tools prefixed records_
+#   inventory (MCP server)            -> tools prefixed inventory_
+#   opsapi    (plain REST + OpenAPI)     -> each operationId becomes a tool, prefixed opsapi_
+# The opsapi-openapi ConfigMap is generated from the running API by 02-tools.sh.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata: { name: governed-mcp, namespace: agentgateway-system }
+spec:
+  entMcp:
+    targets:
+      - name: records
+        static: { host: records-mcp.${TOOLS_NS}.svc.cluster.local, port: 8000, path: /mcp, protocol: StreamableHTTP }
+      - name: inventory
+        static: { host: inventory-mcp.${TOOLS_NS}.svc.cluster.local, port: 8000, path: /mcp, protocol: StreamableHTTP }
+      - name: opsapi
+        static:
+          host: ops-api.${TOOLS_NS}.svc.cluster.local
+          port: 8000
+          protocol: OpenAPI
+          openAPI: { schemaRef: { name: opsapi-openapi } }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: governed-mcp, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { name: mcp-gateway, namespace: agentgateway-system } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /mcp } } ]
+      backendRefs: [ { name: governed-mcp, group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend } ]
+      timeouts: { request: "0s" }

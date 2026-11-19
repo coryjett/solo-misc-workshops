@@ -1,0 +1,99 @@
+# Platform-owned shared catalog items. Applied by admin (superuser), so they skip approval.
+# All names, people and systems are fictional demo data.
+#
+# Metadata convention (why three places): the ARE v2026.9.0 UI does not render labels or annotations
+# (only in "View JSON"), and its search box matches name, tag and description only. So:
+#   spec.description  starts with "[team:x owner:y service:z data:restricted|pii|public runtime:r model:m]",
+#                     visible on every card and searchable in the UI (type team:engineering or data:restricted)
+#   metadata.labels   same facts, machine-filterable: arctl get agents -l team=engineering,data-class=restricted
+#                     (list API: ?labels=team=engineering). Also use-case, environment, lifecycle.
+#   annotations       free text that is not label-safe: owner email, runtime detail, endpoint, changelog
+apiVersion: ar.dev/v1alpha1
+kind: Model
+metadata:
+  name: claude-sonnet-bedrock
+  tag: "1.0.0"
+  labels: {team: platform, owner: dana.ortiz, data-class: restricted, environment: prod, runtime: aws-bedrock, model-family: claude}
+  annotations:
+    catalog.example/owner-email: dana.ortiz@example.com
+    catalog.example/approved-for: "Sensitive customer data workloads under enterprise compliance controls (demo text)"
+spec:
+  title: Claude Sonnet on Amazon Bedrock
+  description: >-
+    [team:platform owner:dana.ortiz data:restricted runtime:aws-bedrock] Platform-approved Claude model served from Amazon Bedrock in us-east-1. Uses the runtime's ambient AWS identity, no keys in the registry.
+  provider: bedrock
+  model: anthropic.claude-sonnet-4-5-20250929-v1:0
+  auth: {strategy: runtime}
+  endpoint: {region: us-east-1}
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: docs-search-mcp
+  tag: "1.0.0"
+  labels: {team: platform, owner: dana.ortiz, service: knowledge-base, use-case: docs-research, data-class: public, environment: prod, runtime: on-prem-k8s}
+  annotations:
+    catalog.example/owner-email: dana.ortiz@example.com
+    catalog.example/runtime-detail: "on-prem Kubernetes, namespace mcp-shared"
+spec:
+  title: Internal Knowledge Search MCP
+  description: >-
+    [team:platform owner:dana.ortiz service:knowledge-base data:public runtime:on-prem-k8s] Shared MCP server for searching internal technical documentation and public knowledge base articles. Public data only.
+  remote:
+    type: streamable-http
+    url: https://mcp.example.com/literature/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: data-masking-mcp
+  tag: "1.0.0"
+  labels: {team: platform, owner: dana.ortiz, service: privacy-engineering, use-case: data-masking, data-class: restricted, environment: prod, runtime: on-prem-vm}
+  annotations:
+    catalog.example/owner-email: dana.ortiz@example.com
+    catalog.example/runtime-detail: "on-prem VM pool mask-vm-01..03, secure enclave"
+spec:
+  title: Data Masking MCP
+  description: >-
+    [team:platform owner:dana.ortiz service:privacy-engineering data:restricted runtime:on-prem-vm] Shared MCP server that masks sensitive customer and personal data in extracts before any agent sees them. Handles restricted records.
+  remote:
+    type: streamable-http
+    url: https://masking.example.com/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: Prompt
+metadata:
+  name: pii-handling-guardrails
+  tag: "1.0.0"
+  labels: {team: platform, owner: dana.ortiz, use-case: guardrails, data-class: restricted}
+  annotations:
+    catalog.example/owner-email: dana.ortiz@example.com
+spec:
+  description: >-
+    [team:platform owner:dana.ortiz data:restricted] Standard system instructions every agent that may touch sensitive customer or personal data must carry.
+  content: |
+    You operate inside a regulated enterprise environment.
+    - Never output direct personal identifiers (names, account IDs, dates of birth, addresses).
+    - Route any free-text sensitive customer data through the data-masking-mcp tools before reasoning over it.
+    - If a request asks for re-identification, refuse and log the request.
+    - Cite the source system for every fact you return.
+---
+# ARE resolves a Skill's repo with a real git call and pins the commit (Ready = Resolved); a fictional URL
+# shows "failed". The repo is served in-cluster by skills-git/skills-git.yaml, standing in for on-prem Git.
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: audit-trail-logging
+  tag: "1.0.0"
+  labels: {team: platform, owner: dana.ortiz, use-case: compliance, data-class: public}
+  annotations:
+    catalog.example/owner-email: dana.ortiz@example.com
+spec:
+  title: Compliance audit trail
+  description: >-
+    [team:platform owner:dana.ortiz data:public] Skill that teaches an agent to write structured, tamper-evident audit entries for every action it takes.
+  source:
+    repository:
+      url: http://skills-git.demo-git.svc.cluster.local/platform/agent-skills.git
+      branch: main
+      subfolder: skills/audit-trail-logging
