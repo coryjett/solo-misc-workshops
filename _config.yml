@@ -1,7 +1,7 @@
 title: solo-misc-workshops
 description: Workshops, walkthroughs, and reference materials for Solo.io products.
 theme: jekyll-theme-primer
-# Only the requirements Q&A page is published as a site; everything else stays repo-only.
+# Published as a site: the requirements Q&A and workshops/agentic-platform-demo. Everything else stays repo-only.
 exclude:
   - .claude
   - .env
@@ -11,5 +11,17 @@ exclude:
   - images
   - kagent-otel-troubleshooting
   - solo-enterprise-istio-ambient
-  - workshops
+  - workshops/Snowflake-Token-Exchange-Workshop
+  - workshops/agent-identity-token-exchange
+  - workshops/agw-governance-demo
+  - workshops/agw-standalone-demo
+  - workshops/cedar-extauthz
+  - workshops/claude-code-llm-via-agw-oidc
+  - workshops/enterprise-demo
+  - workshops/kagent-security
+  - workshops/obo-token-exchange
+  - workshops/obo-token-exchange-enablement
+  - workshops/oidc-integration
+  - workshops/okta-token-exchange
+  - workshops/troubleshooting.txt
   - README.md

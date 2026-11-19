@@ -72,10 +72,10 @@ Use these when the audience needs a different deployment mode or a deeper dive. 
 
 | Module | Use when | Where |
 |---|---|---|
-| Standalone (VM / binary) gateway | No Kubernetes, or VMs and bare metal at the edge | [agw-standalone-demo](../agw-standalone-demo/) |
-| Token exchange deep dive | Identity teams: delegation vs impersonation, multi-IdP | [agent-identity-token-exchange](../agent-identity-token-exchange/), [e2e-agent-identity-delegation](../../e2e-agent-identity-delegation/) |
-| External authorization with Cedar | Policy-as-code teams | [cedar-extauthz](../cedar-extauthz/) |
-| kagent security | Agent runtime security (access policies, sandboxing) | [kagent-security](../kagent-security/) |
+| Standalone (VM / binary) gateway | No Kubernetes, or VMs and bare metal at the edge | [agw-standalone-demo](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/agw-standalone-demo) |
+| Token exchange deep dive | Identity teams: delegation vs impersonation, multi-IdP | [agent-identity-token-exchange](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/agent-identity-token-exchange), [e2e-agent-identity-delegation](https://github.com/coryjett/solo-misc-workshops/tree/main/e2e-agent-identity-delegation) |
+| External authorization with Cedar | Policy-as-code teams | [cedar-extauthz](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/cedar-extauthz) |
+| kagent security | Agent runtime security (access policies, sandboxing) | [kagent-security](https://github.com/coryjett/solo-misc-workshops/tree/main/workshops/kagent-security) |
 
 ## Building a customer walkthrough
 
