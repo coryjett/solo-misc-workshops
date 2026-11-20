@@ -1,0 +1,14 @@
+# A1 beat 4: let agent-b call agent-c too. A second Allow policy on agent-c's route only;
+# agent-a keeps its access, users are still refused. Remove it with the A1 cleanup (reset.sh does too).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: a2a-agent-b-may-call-agent-c, namespace: agentgateway-system }
+spec:
+  targetRefs:
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: a2a-agent-c }
+  traffic:
+    authorization:
+      action: Allow
+      policy:
+        matchExpressions:
+          - "jwt.azp == 'agent-b'"

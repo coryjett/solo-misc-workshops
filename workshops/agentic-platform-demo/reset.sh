@@ -31,6 +31,7 @@ for i in (json.load(sys.stdin).get("items") or []):
   ARE_ACTION=withdraw are_approve "$k" "$n" "$t" "$ns" | python3 -c 'import json,sys; [print("  withdrew",r["kind"],r["name"],r["tag"],r["status"]) for r in json.load(sys.stdin).get("results",[])]'
 done
 
+kubectl --context "$KCTX" -n agentgateway-system delete enterpriseagentgatewaypolicy a2a-agent-b-may-call-agent-c --ignore-not-found >/dev/null   # A1 beat 4, if left behind
 echo "== 2. delete demo deployment and artifacts"
 # every managed Deployment (a UI deploy may have used a generated name); kagent removes its pods
 arctl get deployments -o json 2>/dev/null | python3 -c '

@@ -74,7 +74,20 @@ agent-a was called by: are-cli (sales-dev)
   -> agent-c: agent-c handled: ...
 ```
 
-**4. Same thing in the UI**
+**4. Let agent-b call agent-c**
+
+```bash
+kubectl --context kind-agentic-demo apply -f modules/files/a1-allow-b-to-c.yaml
+a2a_send sales-dev agent-a "Check the status of order 4512"
+```
+- Wait about 5 seconds after the apply, then send.
+- agent-b's hop now reads `agent-c was called by: agent-b`, where it said `DENIED` before.
+- One extra policy on agent-c's route: `jwt.azp == 'agent-b'`. No agent change, no redeploy.
+- Rules on a route add up: agent-a keeps its access, users still get 403.
+- Show it: `modules/files/a1-allow-b-to-c.yaml`.
+- Undo it before moving on (Cleanup below).
+
+**5. Same thing in the UI**
 
 - Solo UI **Routes**: `a2a-agent-a/b/c`, Active, with p95 latency.
 - Solo UI **Policies**: `a2a-users-reach-agent-a`, `a2a-only-agent-a-calls-specialists`.
@@ -94,7 +107,10 @@ Editor:
 
 ## Cleanup
 
-None: this module only reads or calls things; it leaves no state behind.
+```bash
+kubectl --context kind-agentic-demo -n agentgateway-system delete enterpriseagentgatewaypolicy a2a-agent-b-may-call-agent-c --ignore-not-found
+```
+- Back to the baseline: agent-b to agent-c is denied again. `reset.sh` also removes it.
 
 <!-- nav:start -->
 [All modules](README.md) · [A2A](README.md#a2a) · Previous: [G5](G5-mcp-tool-search.md) · Next: [L1](L1-llm-routing-failover.md)
