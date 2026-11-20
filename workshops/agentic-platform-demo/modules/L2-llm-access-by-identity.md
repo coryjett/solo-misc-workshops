@@ -18,10 +18,20 @@
 
 ## Steps
 
+**1. Ask for the premium model as eng-dev**
+
 ```bash
-./chat.py eng-dev gpt-4.1-mini 'hi'                                    # 403: not allowed
-./chat.py admin gpt-4.1-mini 'In one sentence, what is MCP?'           # allowed
+./chat.py eng-dev gpt-4.1-mini 'hi'
 ```
+- `model_authorization_denied`: eng-dev may not use it.
+
+**2. Same model as admin**
+
+```bash
+./chat.py admin gpt-4.1-mini 'In one sentence, what is MCP?'
+```
+- An answer: the admin's group allows it.
+
 Editor:
 - `gateway/41-llm-identity.yaml`.
 

@@ -44,8 +44,9 @@ New route and backend; eng-dev 3 tools, sales-dev 0.
 ## Cleanup
 
 ```bash
-as_user admin; arctl delete deployment default/customer-records-mcp   # removes the route, backend and policy it created
+as_user admin; arctl delete deployment default/customer-records-mcp
 ```
+- Removes the route, backend and policy it created.
 
 <!-- nav:start -->
 [All modules](README.md) · [Registry](README.md#registry) · Previous: [R3](R3-registry-approval.md) · Next: [R5](R5-registry-deploy-to-runtime.md)

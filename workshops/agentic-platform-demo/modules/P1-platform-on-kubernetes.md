@@ -18,11 +18,28 @@
 
 ## Steps
 
+**1. List the platform pods**
+
 ```bash
-kubectl --context kind-agentic-demo -n agentgateway-system get pods          # controller, mcp-gateway proxy, UI, ext-auth, rate limiter
-kubectl --context kind-agentic-demo get gateway,httproute -A                  # standard Gateway API objects
-kubectl --context kind-agentic-demo -n agentgateway-system get enterpriseagentgatewaybackends,enterpriseagentgatewaypolicies
+kubectl --context kind-agentic-demo -n agentgateway-system get pods
 ```
+- Controller, the `mcp-gateway` proxy, UI, ext-auth, rate limiter.
+
+**2. List Gateways and routes**
+
+```bash
+kubectl --context kind-agentic-demo get gateway,httproute -A
+```
+- Standard Gateway API objects, one route per path.
+
+**3. List backends and policies**
+
+```bash
+kubectl --context kind-agentic-demo -n agentgateway-system get \
+  enterpriseagentgatewaybackends,enterpriseagentgatewaypolicies
+```
+- The gateway's own resources: what it routes to, and the rules.
+
 Editor:
 - `gateway/00-gateway.yaml`: the Gateway.
 - `gateway/50-frontdoor-mcp.yaml`: a backend, its route and policies.

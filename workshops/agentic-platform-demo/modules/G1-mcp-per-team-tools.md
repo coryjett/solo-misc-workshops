@@ -21,12 +21,30 @@
 
 ## Steps
 
+**1. List eng-dev's tools**
+
 ```bash
 export MCP_URL=$GW_URL/mcp
-./mcp.py eng-dev list                                                   # records_* from an MCP server, opsapi_* from a REST API
-./mcp.py eng-dev call opsapi_get_site_hours '{"path":{"site_id":"site-112"}}'   # a REST endpoint, called as an MCP tool
-./mcp.py none list                                                      # 401: no token, no tools
+./mcp.py eng-dev list
 ```
+- Tools from REST APIs appear alongside native MCP servers.
+- Gateway generates schemas directly from OpenAPI specs.
+
+**2. Call the REST API as a tool**
+
+```bash
+./mcp.py eng-dev call opsapi_get_site_hours '{"path":{"site_id":"site-112"}}'
+```
+- REST API responds to an MCP tool call.
+- Path parameters are grouped correctly in the request.
+
+**3. Try with no token**
+
+```bash
+./mcp.py none list   # 401
+```
+- `401`: no identity, no tools.
+
 Editor:
 - `gateway/11-mcp-federation.yaml`: three targets on one backend; `opsapi` is `protocol: OpenAPI`.
 - `gateway/21-tool-authz.yaml`: which team sees which system (three CEL lines).

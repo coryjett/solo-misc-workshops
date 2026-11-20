@@ -19,8 +19,9 @@
 ## Steps
 
 ```bash
-./modules/traffic.sh     # fresh MCP, A2A and LLM traffic (skip if you just ran other modules)
+./modules/traffic.sh
 ```
+- Fresh MCP, A2A and LLM traffic. Skip it if you just ran other modules.
 
 Terminal 2 (from S0) shows one line per hop: `protocol=a2a|mcp|llm`, method, outcome, user, groups, trace id.
 

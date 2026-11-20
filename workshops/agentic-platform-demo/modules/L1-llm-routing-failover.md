@@ -19,8 +19,10 @@
 ## Steps
 
 ```bash
-./chat.py eng-dev auto 'In one sentence, what is an API gateway?'      # "auto" answers from the self-hosted model (~5s)
+./chat.py eng-dev auto 'In one sentence, what is an API gateway?'
 ```
+- "auto" answers from the self-hosted model, in about 5 seconds.
+- The first line names the model that answered.
 Editor:
 - `gateway/40-models.yaml`: `auto` = self-hosted first, cloud second.
 - Health eviction on 5xx and 429.

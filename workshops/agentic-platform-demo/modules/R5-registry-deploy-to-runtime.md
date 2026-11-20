@@ -17,7 +17,8 @@
 **Needs:** [S0](S0-preflight.md). kagent UI on http://localhost:8083, started with:
 
 ```bash
-kubectl --context kind-agentic-demo -n kagent port-forward svc/kagent-ui 8083:8080 >/dev/null 2>&1 &
+kubectl --context kind-agentic-demo -n kagent \
+  port-forward svc/kagent-ui 8083:8080 >/dev/null 2>&1 &
 ```
 
 **Changes state:** deploys everything-reference-mcp to kagent. Once per reset.
@@ -40,8 +41,9 @@ Deployed on kagent; tools discovered.
 ## Cleanup
 
 ```bash
-as_user admin; arctl delete deployment default/everything-reference-mcp   # kagent removes the server and its pods
+as_user admin; arctl delete deployment default/everything-reference-mcp
 ```
+- kagent removes the server and its pods.
 
 <!-- nav:start -->
 [All modules](README.md) · [Registry](README.md#registry) · Previous: [R4](R4-registry-publish-to-gateway.md) · Next: [R6](R6-audit-trail.md)

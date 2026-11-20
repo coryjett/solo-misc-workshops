@@ -18,16 +18,62 @@
 
 ## Steps
 
+**1. List admin's tools**
+
 ```bash
 export MCP_URL=$GW_URL/frontdoor/mcp
-./mcp.py admin list            # 16 tools
-./mcp.py eng-dev list          # 13: read mail but no send_mail; issues and PRs, no merge or delete
-./mcp.py sales-dev list        # 9: no mail at all, code read-only
-./mcp.py auditor list          # 5: code read-only, no mail server
-./mcp.py sales-dev call workiq_send_mail '{"to":"x@example.com","subject":"s","body":"b"}'     # refused
-./mcp.py eng-dev call github_merge_pull_request '{"repo":"data-pipeline","number":1}'           # refused
-./mcp.py eng-dev call github_create_issue '{"repo":"data-pipeline","title":"Flaky test"}'       # allowed
+./mcp.py admin list
 ```
+- Admin sees full set of sixteen tools.
+- No restrictions apply to this identity.
+
+**2. List eng-dev's tools**
+
+```bash
+./mcp.py eng-dev list
+```
+- Engineer sees thirteen tools with read mail access.
+- Send mail and merge actions are hidden.
+
+**3. List sales-dev's tools**
+
+```bash
+./mcp.py sales-dev list
+```
+- Sales sees nine tools without any mail access.
+- Code repositories remain strictly read only.
+
+**4. List the auditor's tools**
+
+```bash
+./mcp.py auditor list
+```
+- 5 tools: code read-only, no mail server at all.
+
+**5. Try send_mail as sales-dev**
+
+```bash
+./mcp.py sales-dev call workiq_send_mail \
+  '{"to":"x@example.com","subject":"s","body":"b"}'   # refused
+```
+- HTTP 400 `unknown resource`: for sales-dev the tool does not exist.
+
+**6. Try a merge as eng-dev**
+
+```bash
+./mcp.py eng-dev call github_merge_pull_request \
+  '{"repo":"data-pipeline","number":1}'   # refused
+```
+- Same refusal: eng-dev can open PRs, not merge them.
+
+**7. Create an issue as eng-dev**
+
+```bash
+./mcp.py eng-dev call github_create_issue \
+  '{"repo":"data-pipeline","title":"Flaky test"}'
+```
+- `CREATED`: writes the policy allows go through.
+
 Editor:
 - `gateway/50-frontdoor-mcp.yaml`: four CEL lines on group, server and tool name.
 

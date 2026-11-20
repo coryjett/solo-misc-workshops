@@ -21,10 +21,21 @@
 
 ## Steps
 
+**1. Send fresh traffic**
+
 ```bash
-./modules/traffic.sh     # fresh tool calls, including lookup_customer
-are_audit 15             # latest registry events: submit, approve (and deploy if R4/R5 ran)
+./modules/traffic.sh
 ```
+- Tool calls, including a customer lookup, for the trail.
+
+**2. Show the latest registry events**
+
+```bash
+are_audit 15
+```
+- Rows for submit and approve, with who did it.
+- Deploy rows too if R4 or R5 ran.
+
 
 Solo UI: **Tracing** > 15m > search `lookup_customer` > open a `tools/call` row: end user, tool, route.
 

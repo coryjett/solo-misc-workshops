@@ -18,11 +18,23 @@
 
 ## Steps
 
+**1. Look up a customer**
+
 ```bash
 export MCP_URL=$GW_URL/mcp
-./mcp.py eng-dev call records_lookup_customer '{"customer_id":"C-1001"}'         # DOB and phone masked
-./mcp.py eng-dev call records_delete_customer_record '{"customer_id":"C-1001"}'  # blocked
+./mcp.py eng-dev call records_lookup_customer '{"customer_id":"C-1001"}'
 ```
+- Sensitive fields like DOB and phone are redacted.
+- Masking occurs before data reaches the client.
+
+**2. Try a delete**
+
+```bash
+./mcp.py eng-dev call records_delete_customer_record '{"customer_id":"C-1001"}'
+```
+- Delete operation returns policy violation error.
+- Destructive tools remain unavailable for this user.
+
 Editor:
 - `gateway/22-guardrails.yaml`.
 

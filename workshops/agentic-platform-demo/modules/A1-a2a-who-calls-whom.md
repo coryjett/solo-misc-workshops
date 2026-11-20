@@ -18,13 +18,33 @@
 
 ## Steps
 
+**1. Fetch agent-a's card through the gateway**
+
 ```bash
 UT=$(are_token sales-dev)
-curl -s -H "Authorization: Bearer $UT" $GW_URL/a2a/agent-a/.well-known/agent-card.json | python3 -m json.tool   # card, URL rewritten to the gateway
-curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $UT" $GW_URL/a2a/agent-b/.well-known/agent-card.json   # 403
-MSG='{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","messageId":"m1","role":"user","parts":[{"kind":"text","text":"Check the status of order 4512"}]}}}'
-curl -s -H "Authorization: Bearer $UT" -H 'Content-Type: application/json' -d "$MSG" $GW_URL/a2a/agent-a/ | python3 -c 'import json,sys;print(json.load(sys.stdin)["result"]["parts"][0]["text"])'
+curl -s \
+  -H "Authorization: Bearer $UT" $GW_URL/a2a/agent-a/.well-known/agent-card.json \
+  | python3 -m json.tool
 ```
+- The agent card: name, skills, protocol.
+- Its `url` points at the gateway, not the agent's own address.
+
+**2. Try agent-b's card as a user**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $UT" $GW_URL/a2a/agent-b/.well-known/agent-card.json
+```
+- `403`: users cannot even read a specialist's card.
+
+**3. Send a task to agent-a**
+
+```bash
+a2a_send sales-dev agent-a "Check the status of order 4512"
+```
+- agent-a calls agent-b and agent-c with its own identity.
+- agent-b calling agent-c: `DENIED by gateway (HTTP 403)`.
+
 Editor:
 - `gateway/60-a2a.yaml`: two short policies.
 

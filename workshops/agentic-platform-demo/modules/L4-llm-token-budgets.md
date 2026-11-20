@@ -21,11 +21,21 @@
 
 ## Steps
 
+**1. Spend eng-dev's budget**
+
 ```bash
-T=$(are_token eng-dev)
-for i in 1 2 3 4 5; do curl -s -o /dev/null -w "eng-dev request $i: HTTP %{http_code}\n" $GW_URL/budget/v1/chat/completions -H "Authorization: Bearer $T" -H 'content-type: application/json' -d '{"model":"budget","max_tokens":20,"messages":[{"role":"user","content":"In one short sentence, what does an API gateway do?"}]}'; done   # a few 200s, then 429
-curl -s -D - -o /dev/null $GW_URL/budget/v1/chat/completions -H "Authorization: Bearer $(are_token sales-dev)" -H 'content-type: application/json' -d '{"model":"budget","max_tokens":20,"messages":[{"role":"user","content":"In one short sentence, what does an API gateway do?"}]}' | grep -iE '^HTTP|x-ratelimit'   # sales-dev has its own budget
+for i in 1 2 3 4; do llm_call eng-dev budget budget "What does an API gateway do?"; done
 ```
+- `x-ratelimit-remaining` drains with each call, then `429 Too Many Requests`.
+- `llm_call` is a plain chat completion to `/budget/v1/chat/completions` (see `env.sh`).
+
+**2. Same question as sales-dev**
+
+```bash
+llm_call sales-dev budget budget "What does an API gateway do?"
+```
+- `200 OK` with a full budget: every user has their own counter.
+
 Editor:
 - `gateway/43-token-budget.yaml`: 100 input tokens per minute, keyed on `jwt.sub`.
 - Attached to the `/budget` route only; same prompt guards as L3.
@@ -38,11 +48,10 @@ Editor:
 
 ## Expect
 
-- eng-dev: two or three 200s, then 429.
-- The limiter counts its own estimate of input tokens (about 28 to 50 a request), not the model's reported usage. Resets each minute.
-- sales-dev: `200 OK`, its own budget.
-- Headers: `x-ratelimit-limit: 100`, `x-ratelimit-remaining` (before this request), `x-ratelimit-reset` (seconds left).
-- Run it twice within a minute and eng-dev starts at 429: say that is the budget working.
+- eng-dev: one or two `200`s, then `429`. Remaining shows the budget before each call.
+- If a new minute starts mid-loop, remaining jumps back to 100: say that is the window resetting.
+- The limiter counts its own estimate of input tokens, not the model's reported usage.
+- sales-dev: `200 OK` and its own `x-ratelimit-remaining`.
 
 ## Say
 

@@ -22,12 +22,14 @@
 
 ```bash
 cd ~/Documents/Workspace/Solo/solo-misc-workshops/workshops/agentic-platform-demo
-./verify.sh && ./verify-gateway.sh && ./reset.sh     # both ALL-PASS, then back to start state
+./verify.sh && ./verify-gateway.sh && ./reset.sh
 . ./env.sh; clear
 ```
+- Both checks end `ALL-PASS`, then reset puts the lab back to the start.
 Terminal 2 (live gateway log, used by many modules):
 ```bash
-kubectl --context kind-agentic-demo -n agentgateway-system logs deploy/mcp-gateway -f | grep --line-buffered -E 'protocol=(a2a|mcp|llm)'
+kubectl --context kind-agentic-demo -n agentgateway-system logs deploy/mcp-gateway -f \
+  | grep --line-buffered -E 'protocol=(a2a|mcp|llm)'
 ```
 
 ## Expect

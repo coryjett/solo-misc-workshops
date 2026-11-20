@@ -21,16 +21,64 @@
 
 ## Steps
 
+**1. List tools in search mode**
+
 ```bash
 export MCP_URL=$GW_URL/search/mcp
-./mcp.py eng-dev list                                   # 2 tools: get_tool, invoke_tool
-MCP_URL=$GW_URL/mcp ./mcp.py eng-dev list               # the same user sees 6 tools on /mcp
-./mcp.py eng-dev call get_tool '{"name":"records_lookup_customer"}'      # schema of one tool, on demand
-./mcp.py sales-dev call get_tool '{"name":"customer"}'                   # a miss lists only the tools sales-dev may use
-./mcp.py eng-dev call invoke_tool '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}'   # DOB and phone masked
-./mcp.py eng-dev call invoke_tool '{"name":"records_delete_customer_record","arguments":{"customer_id":"C-1001"}}'   # blocked
-./mcp.py sales-dev call invoke_tool '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}'   # refused: not sales-dev's tool
+./mcp.py eng-dev list
 ```
+- Two tools only: `get_tool` and `invoke_tool`.
+
+**2. Same user on /mcp**
+
+```bash
+MCP_URL=$GW_URL/mcp ./mcp.py eng-dev list
+```
+- Standard endpoint lists all six available tools.
+- Search mode hides unused tool definitions.
+
+**3. Look up one tool**
+
+```bash
+./mcp.py eng-dev call get_tool '{"name":"records_lookup_customer"}'
+```
+- Gateway returns detailed schema for one tool.
+- Agents can discover capabilities on demand.
+
+**4. Search with a partial name**
+
+```bash
+./mcp.py sales-dev call get_tool '{"name":"customer"}'
+```
+- Miss response lists only permitted tools.
+- Agent recovers without guessing invalid names.
+
+**5. Call a tool through invoke_tool**
+
+```bash
+./mcp.py eng-dev call invoke_tool \
+  '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}'
+```
+- Tool invocation returns redacted personal data.
+- Policy filters output before delivery.
+
+**6. Try a delete through invoke_tool**
+
+```bash
+./mcp.py eng-dev call invoke_tool \
+  '{"name":"records_delete_customer_record","arguments":{"customer_id":"C-1001"}}'   # blocked
+```
+- Delete attempt is blocked by policy rules.
+- Unauthorized actions are strictly prevented.
+
+**7. Invoke a records tool as sales-dev**
+
+```bash
+./mcp.py sales-dev call invoke_tool \
+  '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}'   # refused
+```
+- HTTP 400 `unknown resource`: not sales-dev's tool.
+
 Editor:
 - `gateway/44-tool-search.yaml`: `toolMode: Search` on the backend.
 - Same team rules as G1, same guardrails as G3, same on-behalf-of as G4.

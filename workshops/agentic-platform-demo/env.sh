@@ -138,6 +138,25 @@ export LOCAL_LLM_MODEL="${LOCAL_LLM_MODEL:-default}"
 export OPENAI_ENV_FILE="${OPENAI_ENV_FILE:-}"
 # Access token for the gateway as a realm user (password = username). Usage: token eng-dev
 token() { are_token "$@"; }
+# One chat completion through the gateway, as a user; prints the status and any rate-limit headers.
+# Usage: llm_call <user> <route prefix, e.g. budget; "" for /v1> <model> "prompt"
+llm_call() {
+  local tok body
+  tok="$(are_token "$1")" || return 1
+  body="$(python3 -c 'import json,sys; print(json.dumps({"model": sys.argv[1], "max_tokens": 20, "messages": [{"role": "user", "content": sys.argv[2]}]}))' "$3" "$4")"
+  curl -s -o /dev/null -D - "$GW_URL${2:+/$2}/v1/chat/completions" \
+    -H "Authorization: Bearer $tok" -H 'content-type: application/json' -d "$body" |
+    tr -d '\r' | grep -iE '^HTTP|^x-ratelimit-(limit|remaining)' | paste -sd' ' - | sed "s/^/$1: /"
+}
+# A2A message/send to an agent through the gateway, as a user. Usage: a2a_send sales-dev agent-a "text"
+# (the JSON-RPC body is the standard A2A message/send; prints the agent's reply text, or the HTTP error)
+a2a_send() {
+  local tok body
+  tok="$(are_token "$1")" || return 1
+  body="$(python3 -c 'import json,sys; print(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "message/send", "params": {"message": {"kind": "message", "messageId": "m1", "role": "user", "parts": [{"kind": "text", "text": sys.argv[1]}]}}}))' "$3")"
+  curl -s -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' -d "$body" "$GW_URL/a2a/$2/" |
+    python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["result"]["parts"][0]["text"] if "result" in d else d)'
+}
 load_openai_key() {
   [ -n "${OPENAI_API_KEY:-}" ] && return 0
   [ -n "${OPENAI_ENV_FILE:-}" ] && OPENAI_API_KEY="$(sed -n 's/^OPENAI_API_KEY=//p' "$OPENAI_ENV_FILE" | head -1 | tr -d '"'"'"' \r\n')"

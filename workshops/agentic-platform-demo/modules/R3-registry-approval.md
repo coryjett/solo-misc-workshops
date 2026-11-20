@@ -38,8 +38,9 @@ Pending for eng-dev; approved by admin; 1.0.0 was served until approval.
 
 ```bash
 as_user admin; arctl delete agent release-readiness-checker --tag 2.0.0
-as_user eng-dev; arctl apply -f catalog/pending/release-readiness-checker-2.0.0.yaml   # re-stage the request
+as_user eng-dev; arctl apply -f catalog/pending/release-readiness-checker-2.0.0.yaml
 ```
+- Deletes the approved 2.0.0, then re-stages the request.
 
 <!-- nav:start -->
 [All modules](README.md) · [Registry](README.md#registry) · Previous: [R2](R2-registry-team-scoping.md) · Next: [R4](R4-registry-publish-to-gateway.md)
