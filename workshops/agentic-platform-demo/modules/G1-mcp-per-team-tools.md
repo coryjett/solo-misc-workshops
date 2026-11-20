@@ -1,12 +1,12 @@
-# G1 · One MCP endpoint, tools filtered per team
+# G1 · One MCP endpoint for many systems
 
 <!-- nav:start -->
 [All modules](README.md) · [MCP](README.md#mcp) · Previous: [P2](P2-observability.md) · Next: [G2](G2-mcp-down-scoped-saas.md)
 <!-- nav:end -->
 
-**Area:** MCP · **Time:** 5 min
+**Area:** MCP · **Time:** 3 min
 
-**Proves:** Several MCP servers (including a REST API exposed as tools) behind one URL; each caller sees only the tools their group allows.
+**Proves:** One governed MCP endpoint federates different kinds of backends: two MCP servers and a plain REST API that the gateway turns into MCP tools from its OpenAPI spec, with no code and no MCP server to build. Who sees which system is decided at the gateway (G2 goes deeper on per-person scoping).
 
 **Needs:** [S0](S0-preflight.md).
 
@@ -14,29 +14,32 @@
 
 ```bash
 export MCP_URL=$GW_URL/mcp
-./mcp.py eng-dev list        # records + ops API tools
-./mcp.py sales-dev list      # inventory + ops API tools, no records
-./mcp.py none list           # 401: no token, no tools
+./mcp.py eng-dev list                                                   # records_* from an MCP server, opsapi_* from a REST API
+./mcp.py eng-dev call opsapi_get_site_hours '{"path":{"site_id":"site-112"}}'   # a REST endpoint, called as an MCP tool
+./mcp.py none list                                                      # 401: no token, no tools
 ```
-Editor: `gateway/21-tool-authz.yaml` (three CEL lines on group and target).
+Editor: `gateway/11-mcp-federation.yaml` (three targets on one backend; `opsapi` is `protocol: OpenAPI` with the spec as a ConfigMap) and `gateway/21-tool-authz.yaml` (which team sees which system: three CEL lines on group and target).
 
 ## In the UI
 
-MCP Inspector as each user: `./inspector.sh eng-dev http://localhost:8081/mcp`, then `./inspector.sh sales-dev ...`: the same tool lists as `mcp.py`, in an MCP client. Solo UI **Policies**: `mcp-tool-authz`. Solo UI **Composable MCP**: the wizard that turns an OpenAPI spec into MCP tools (the UI version of the ops API tools; walk the Import step, don't deploy).
+Solo UI **Composable MCP**: the wizard that turns an OpenAPI spec into MCP tools, the UI version of the `opsapi` target (walk the Import step, don't deploy). MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/mcp` lists the same tools; open `opsapi_get_site_hours` to show the schema the gateway generated. Solo UI **Policies**: `mcp-tool-authz`.
 
 ## Expect
 
-eng-dev sees `records_*` and `opsapi_*`; sales-dev sees no records tools; no token is 401.
+- eng-dev: 6 tools, `opsapi_*` and `records_*` side by side.
+- The call returns `{"site_id":"site-112","hours":"6am-11pm"}`: the REST API answered, the client only spoke MCP.
+- No token: 401.
 
 ## Say
 
-- Same URL for everyone; what you get is decided at the gateway from the identity provider's groups.
-- Filtering applies to tools/list AND tools/call, so a hidden tool cannot be called either.
-- The ops API is a plain REST service turned into MCP tools from its OpenAPI spec, no code.
+- Bring the APIs you already have: any REST service with an OpenAPI spec becomes MCP tools at the gateway, no wrapper service to write and run.
+- One URL for every system, whether it speaks MCP or REST; clients and agents configure one endpoint.
+- The gateway generated the tool schema from the spec: URL parameters arrive grouped under `path`.
+- Each team sees only its systems (sales gets inventory instead of records). For per-person, per-action scoping of a SaaS server, see [G2](G2-mcp-down-scoped-saas.md).
 
 ## Don't claim
 
-- OpenAPI-to-MCP is Enterprise on Kubernetes (OSS has it in standalone only).
+- OpenAPI-to-MCP is Enterprise on Kubernetes (open source has it in standalone only).
 
 ## Cleanup
 

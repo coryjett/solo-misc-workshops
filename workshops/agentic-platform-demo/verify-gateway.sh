@@ -38,6 +38,8 @@ check "/registry/records: platform policy does OBO" "agentgateway-system.svc.clu
 check "/registry/records: admin cannot run delete either (platform guardrail)" "isError" "$(MCP_URL=$REG mcp admin call delete_customer_record '{"customer_id":"C-1001"}')"
 arctl delete deployment default/customer-records-mcp >/dev/null 2>&1
 
+check "OpenAPI tool call reaches the REST API" "6am-11pm" "$(mcp eng-dev call opsapi_get_site_hours '{"path":{"site_id":"site-112"}}')"
+
 echo "## front door (/frontdoor/mcp): WorkIQ + GitHub down-scoped per user"
 FD="$GW_URL/frontdoor/mcp"
 check "admin: all 16 tools"                     "16 tools" "$(MCP_URL=$FD mcp admin list | head -1)"

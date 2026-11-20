@@ -24,7 +24,7 @@ The content is industry-neutral. A demo is a chain of bite-size modules (3 to 8 
 | Area | Modules |
 |---|---|
 | Platform | P1 what it looks like on Kubernetes · P2 observability · X1 extension points |
-| MCP | G1 one endpoint, tools per team · G2 down-scoped SaaS tools · G3 guardrails · G4 on-behalf-of token flow · G5 tool search for large catalogs |
+| MCP | G1 one endpoint for many systems · G2 down-scoped SaaS tools · G3 guardrails · G4 on-behalf-of token flow · G5 tool search for large catalogs |
 | A2A | A1 who can call whom |
 | LLM | L1 routing and failover · L2 model access by identity · L3 prompt-injection guard · L4 token budgets per user |
 | Registry | R1 catalog and discovery · R2 team scoping · R3 approval · R4 publish to the gateway · R5 deploy to a runtime · R6 audit trail |

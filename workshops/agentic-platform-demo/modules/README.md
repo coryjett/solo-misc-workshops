@@ -33,7 +33,7 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 | [S0](S0-preflight.md) | Setup | Pre-flight (do before every demo) | - |
 | [P1](P1-platform-on-kubernetes.md) | Platform | What it looks like on Kubernetes (containers, control plane, data plane) | 5 |
 | [P2](P2-observability.md) | Platform | Observability: one view of MCP, A2A and LLM traffic | 5 |
-| [G1](G1-mcp-per-team-tools.md) | MCP | One MCP endpoint, tools filtered per team | 5 |
+| [G1](G1-mcp-per-team-tools.md) | MCP | One MCP endpoint for many systems, including a REST API as tools | 3 |
 | [G2](G2-mcp-down-scoped-saas.md) | MCP | Down-scoped SaaS tools (mail and code-hosting stand-ins) | 8 |
 | [G3](G3-mcp-guardrails.md) | MCP | Guardrails on tool calls: block destructive tools, mask PII | 4 |
 | [G4](G4-token-flow-obo.md) | Identity | Token flow: on-behalf-of, the backend never sees the user's token | 4 |
@@ -64,7 +64,7 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 - [X1 · Extension points: plug your own logic into routing and policy](X1-extension-points.md) _(5 min)_
 
 ### MCP
-- [G1 · One MCP endpoint, tools filtered per team](G1-mcp-per-team-tools.md) _(5 min)_
+- [G1 · One MCP endpoint for many systems, including a REST API as tools](G1-mcp-per-team-tools.md) _(3 min)_
 - [G2 · Down-scoped SaaS tools (mail and code-hosting stand-ins)](G2-mcp-down-scoped-saas.md) _(8 min)_
 - [G3 · Guardrails on tool calls: block destructive tools, mask PII](G3-mcp-guardrails.md) _(4 min)_
 - [G5 · Tool search: hundreds of tools without filling the context](G5-mcp-tool-search.md) _(5 min)_
