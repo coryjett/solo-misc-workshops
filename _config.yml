@@ -13,7 +13,6 @@ exclude:
   - solo-enterprise-istio-ambient
   - workshops/Snowflake-Token-Exchange-Workshop
   - workshops/agent-identity-token-exchange
-  - workshops/agw-governance-demo
   - workshops/agw-standalone-demo
   - workshops/cedar-extauthz
   - workshops/claude-code-llm-via-agw-oidc

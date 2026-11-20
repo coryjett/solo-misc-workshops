@@ -13,10 +13,12 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
   - [A2A](#a2a)
   - [LLM](#llm)
   - [Registry](#registry)
+  - [Ecosystem](#ecosystem)
 - [Rehearse or step through a module](#rehearse-or-step-through-a-module)
 - [Chaining rules](#chaining-rules)
 - [Suggested chains](#suggested-chains)
 - [Recovery](#recovery)
+- [Gateway labs from the enterprise agentgateway workshop](#gateway-labs-from-the-enterprise-agentgateway-workshop)
 - [Related modules elsewhere in this repo](#related-modules-elsewhere-in-this-repo)
 - [Building a customer walkthrough](#building-a-customer-walkthrough)
 - [Lab setup](#lab-setup)
@@ -46,6 +48,9 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 | [R4](R4-registry-publish-to-gateway.md) | Registry | Publish an MCP server to the gateway, self-service | 6 |
 | [R5](R5-registry-deploy-to-runtime.md) | Registry | Deploy to an agent runtime (kagent) | 5 |
 | [R6](R6-audit-trail.md) | Registry | The audit trail | 4 |
+| [D1](D1-agentdesktop.md) | Ecosystem | agentdesktop: the AI tools on the developer's laptop, governed (draft) | 8 |
+| [D2](D2-agentshield.md) | Ecosystem | agentshield: who can reach what, beside the gateway (draft) | 6 |
+| [D3](D3-agentevals.md) | Ecosystem | agentevals: score agents from their OpenTelemetry traces (draft) | 5 |
 
 <!-- areas:start -->
 ### Setup
@@ -79,6 +84,11 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 - [R4 · Publish an MCP server to the gateway, self-service](R4-registry-publish-to-gateway.md) _(6 min)_
 - [R5 · Deploy to an agent runtime (kagent)](R5-registry-deploy-to-runtime.md) _(5 min)_
 - [R6 · The audit trail](R6-audit-trail.md) _(4 min)_
+
+### Ecosystem
+- [D1 · agentdesktop: the AI tools on the developer's laptop, governed (draft)](D1-agentdesktop.md) _(8 min)_
+- [D2 · agentshield: who can reach what, beside the gateway (draft)](D2-agentshield.md) _(6 min)_
+- [D3 · agentevals: score agents from their OpenTelemetry traces (draft)](D3-agentevals.md) _(5 min)_
 <!-- areas:end -->
 
 ## Rehearse or step through a module
@@ -120,9 +130,25 @@ Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 | Wrong tool counts | `./04-gateway-config.sh` |
 | Node NotReady after a Docker restart | `./down.sh && ./up.sh` (about 15 min), then S0 |
 
+## Gateway labs from the enterprise agentgateway workshop
+
+For a deeper gateway dive than these modules, use the labs in the [enterprise agentgateway workshop](https://github.com/solo-io/fe-enterprise-agentgateway-workshop) as they are. They run on that workshop's own install (its labs `001` and `002`), not on this lab, and the links follow its `main`, so new labs show up as they land. When one becomes a regular part of demos, write a short module for it here on `mcp-gateway`, using the lab as the reference.
+
+| When the conversation goes to | Workshop section |
+|---|---|
+| LLM routing, failover, providers | [Routing](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#routing), [Inference](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#inference) |
+| MCP: federation, OpenAPI to MCP, tool modes, OAuth | [MCP](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#mcp-model-context-protocol) |
+| Auth, OPA, WAF, TLS, virtual keys | [Security](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#security) |
+| Rate limits (request and token) | [Rate Limiting](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#rate-limiting) |
+| Guardrails and transformations | [Guardrails](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#guardrails), [Transformations](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#transformations) |
+| On-behalf-of and delegation | [Identity & Delegation](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#identity--delegation) |
+| Agent frameworks and coding agents | [Agent Frameworks](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#agent-frameworks), [Agent Harnesses](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#agent-harnesses) |
+| Evaluations, load testing, observability | [Evaluations](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#evaluations), [Load Testing](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#load-testing), [Observability](https://github.com/solo-io/fe-enterprise-agentgateway-workshop#observability) |
+| Curated sequences | [LLM track](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/tracks/llm-track.md), [MCP track](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/tracks/mcp-track.md) |
+
 ## Related modules elsewhere in this repo
 
-These agentic workshops run on their own environments. Reach for one when the audience needs a different deployment mode or a deeper dive than the lab gives. The modules here already cover the core of the older agw-governance-demo, which is superseded.
+These agentic workshops run on their own environments. Reach for one when the audience needs a different deployment mode or a deeper dive than the lab gives.
 
 ### Demos and deep dives
 

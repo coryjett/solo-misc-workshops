@@ -45,8 +45,8 @@ check "eng-dev: 13 (no send_mail, no merge/delete)" "13 tools" "$(MCP_URL=$FD mc
 check "sales-dev: 9 (no mail, GitHub read-only)" "9 tools" "$(MCP_URL=$FD mcp sales-dev list | head -1)"
 check "auditor: 5 (GitHub read-only, no WorkIQ)" "5 tools" "$(MCP_URL=$FD mcp auditor list | head -1)"
 check "sales-dev sees no mail tools"       "no-mail" "$(MCP_URL=$FD mcp sales-dev list | grep -q _mail || echo no-mail)"
-check "sales-dev send_mail refused"        "Unknown tool" "$(MCP_URL=$FD mcp sales-dev call workiq_send_mail '{"to":"x@example.com","subject":"s","body":"b"}')"
-check "eng-dev merge refused"              "Unknown tool" "$(MCP_URL=$FD mcp eng-dev call github_merge_pull_request '{"repo":"data-pipeline","number":1}')"
+check "sales-dev send_mail refused"        "unknown resource" "$(MCP_URL=$FD mcp sales-dev call workiq_send_mail '{"to":"x@example.com","subject":"s","body":"b"}')"
+check "eng-dev merge refused"              "unknown resource" "$(MCP_URL=$FD mcp eng-dev call github_merge_pull_request '{"repo":"data-pipeline","number":1}')"
 check "eng-dev create_issue allowed"       "CREATED issue" "$(MCP_URL=$FD mcp eng-dev call github_create_issue '{"repo":"data-pipeline","title":"t"}')"
 check "OBO: WorkIQ gets a gateway STS token"    "agentgateway-system.svc.cluster.local:7777" "$(MCP_URL=$FD mcp sales-dev call workiq_whoami '{}')"
 

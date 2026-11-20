@@ -1,7 +1,7 @@
 # R6 · The audit trail
 
 <!-- nav:start -->
-[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md)
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md) · Next: [D1](D1-agentdesktop.md)
 <!-- nav:end -->
 
 **Area:** Registry · **Time:** 4 min
@@ -37,5 +37,5 @@ Span with the end user; audit rows for submit and approve.
 None: this module only reads or calls things; it leaves no state behind.
 
 <!-- nav:start -->
-[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md)
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md) · Next: [D1](D1-agentdesktop.md)
 <!-- nav:end -->

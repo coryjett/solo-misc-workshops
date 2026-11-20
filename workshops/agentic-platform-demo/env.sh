@@ -20,7 +20,7 @@ export ARE_HOST_PORT=12121    ARE_NODE_PORT=31212
 export MCP_HOST_PORT=31313    MCP_NODE_PORT=31313
 export GW_HOST_PORT=8081      GW_NODE_PORT=30081    # agentgateway proxy (MCP + LLM endpoint)
 export UI_HOST_PORT=8082      UI_NODE_PORT=30082    # Solo Enterprise UI
-export AGW_VERSION=v2026.10.1
+export AGW_VERSION=v2026.11.1
 export TOOLS_NS=demo-tools
 export TOOLS_IMAGE=agw-demo-tools:1
 export GW_URL="http://localhost:${GW_HOST_PORT}"

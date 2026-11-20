@@ -3,7 +3,7 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"; . "$DIR/env.sh"; K="kubectl --context $KCTX"
 load_license
-kubectl --context "$KCTX" apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml >/dev/null
+kubectl --context "$KCTX" apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml >/dev/null
 helm --kube-context "$KCTX" upgrade -i enterprise-agentgateway-crds \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
   -n agentgateway-system --create-namespace --version "$AGW_VERSION" --wait >/dev/null

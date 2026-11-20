@@ -8,7 +8,7 @@ usage() {
 Usage:
   ./modules/run-module.sh <MODULE_ID> [--step]      e.g. ./modules/run-module.sh G2
   ./modules/run-module.sh <MODULE_ID> --cleanup   run only the module's Cleanup commands
-  ./modules/run-module.sh --all                      runs every module that has a \`\`\`bash block, except S0
+  ./modules/run-module.sh --all                      runs every module that has a \`\`\`bash block, except S0 and draft cards
 EOF
 }
 
@@ -193,6 +193,8 @@ case "$1" in
       if [[ "$basename_f" =~ ^([A-Z][0-9])- ]]; then
         id="${BASH_REMATCH[1]}"
         [ "$id" = "S0" ] && continue
+        # Draft cards (not yet rehearsed, may install third-party software) only run when named.
+        grep -q '^\*\*Status:\*\* draft' "$f" && { echo "${id}: skipped (draft)"; continue; }
         # Check if file has any ```bash block
         if grep -q '^```bash$' "$f" 2>/dev/null; then
           # Run module and capture output to get counts

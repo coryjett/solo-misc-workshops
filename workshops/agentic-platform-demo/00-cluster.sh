@@ -7,7 +7,7 @@ ENV_QUIET=1 . "$(dirname "$0")/env.sh"
 NODE="${CLUSTER}-control-plane"
 
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
-  for p in "$KC_HOST_PORT" "$ARE_HOST_PORT" "$MCP_HOST_PORT"; do
+  for p in "$KC_HOST_PORT" "$ARE_HOST_PORT" "$MCP_HOST_PORT" "$GW_HOST_PORT" "$UI_HOST_PORT"; do
     if nc -z 127.0.0.1 "$p" 2>/dev/null; then echo "host port $p is in use; change it in env.sh" >&2; exit 1; fi
   done
   PREV_CTX="$(kubectl config current-context 2>/dev/null || true)"

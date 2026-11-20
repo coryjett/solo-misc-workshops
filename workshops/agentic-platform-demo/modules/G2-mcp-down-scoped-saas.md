@@ -30,7 +30,7 @@ MCP Inspector: `./inspector.sh sales-dev http://localhost:8081/frontdoor/mcp` (9
 
 ## Expect
 
-16 / 13 / 9 / 5 tools; send_mail and merge return "Unknown tool"; create_issue returns CREATED.
+16 / 13 / 9 / 5 tools; send_mail and merge are refused (HTTP 400 "unknown resource": the gateway treats a tool the caller may not see as not existing); create_issue returns CREATED.
 
 ## Say
 
