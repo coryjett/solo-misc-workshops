@@ -76,8 +76,9 @@ export MCP_URL=$GW_URL/frontdoor/mcp
 
 **8. Same thing in the UI**
 
-- MCP Inspector: `./inspector.sh sales-dev http://localhost:8081/frontdoor/mcp`: 9 tools, no mail.
-- Same for `eng-dev`: 13 tools.
+- MCP Inspector: `./inspector.sh sales-dev http://localhost:8081/frontdoor/mcp`. Then open http://127.0.0.1:6274 and click **Connect**.
+- **Tools** > List: 9 tools, no mail.
+- Ctrl-C, then `./inspector.sh eng-dev http://localhost:8081/frontdoor/mcp`: 13 tools.
 - Solo UI **Policies**: `frontdoor-mcp-tool-authz`.
 - Solo UI **Tracing** (5m): the `tools/call` rows for create_issue.
 

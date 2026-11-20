@@ -37,7 +37,8 @@ export MCP_URL=$GW_URL/mcp
 
 **3. Same thing in the UI**
 
-- MCP Inspector as eng-dev on `/mcp`: run `records_lookup_customer` with `C-1001`.
+- MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/mcp`. Then open http://127.0.0.1:6274 and click **Connect**.
+- Run `records_lookup_customer` with `customer_id` `C-1001` (or `C-1002`).
 - Point at the masked fields.
 - Solo UI **Policies**: `mcp-guardrails`.
 

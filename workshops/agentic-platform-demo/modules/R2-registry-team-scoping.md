@@ -14,7 +14,7 @@
 
 **Proves:** Teams see and deploy only their own items plus shared platform items.
 
-**Needs:** [S0](S0-preflight.md). Incognito window signed in as eng-dev.
+**Needs:** [S0](S0-preflight.md). Incognito window on http://localhost:12121/are/, signed in as eng-dev (password `eng-dev`).
 
 ## Steps
 

@@ -81,7 +81,9 @@ MCP_URL=$GW_URL/mcp ./mcp.py eng-dev list
 
 **8. Same thing in the UI**
 
-- MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/search/mcp`: two tools.
+- MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/search/mcp`. Then open http://127.0.0.1:6274 and click **Connect**.
+- **Tools** > List: two tools.
+- Run `get_tool` with `name` `records_lookup_customer`.
 - Solo UI **Tracing** (5m): `get_tool` and `invoke_tool` rows.
 - Solo UI **Policies**: `tool-search-authz`, `tool-search-guardrails`.
 

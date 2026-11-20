@@ -14,7 +14,7 @@
 
 **Proves:** Developers request, they do not publish; an approver sees the diff and approves.
 
-**Needs:** [S0](S0-preflight.md) (reset stages the pending item). Two windows: eng-dev (Incognito) and admin.
+**Needs:** [S0](S0-preflight.md) (reset stages the pending item). Two windows on http://localhost:12121/are/: eng-dev in Incognito (password `eng-dev`) and admin (`admin`).
 
 **Changes state:** approves the staged item. Once per reset.
 

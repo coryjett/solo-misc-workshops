@@ -28,7 +28,8 @@ export MCP_URL=$GW_URL/frontdoor/mcp
 
 **Then in the UI**
 
-- MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`.
+- MCP Inspector: `./inspector.sh sales-dev http://localhost:8081/frontdoor/mcp`. Then open http://127.0.0.1:6274 and click **Connect**.
+- Run `workiq_whoami` (no arguments).
 - Solo UI **Policies**: `frontdoor-mcp-obo`.
 
 ## Say

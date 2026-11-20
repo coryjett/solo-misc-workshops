@@ -27,7 +27,10 @@ Registry UI (admin):
 - **+ Add Policy**: MCP Authorization, Allow, Match Expressions: paste.
 - **Deploy MCP Server**.
 Solo UI: **Routes** (new `/registry/records` route), **Policies** (`registry-backends-platform` now Active).
-Then: `./inspector.sh eng-dev http://localhost:8081/registry/records` (3 tools, PII masked) and `sales-dev` (0 tools).
+Then MCP Inspector:
+- `./inspector.sh eng-dev http://localhost:8081/registry/records`. Then open http://127.0.0.1:6274 and click **Connect**.
+- 3 tools. Run `lookup_customer` with `customer_id` `C-1001`: DOB and phone masked.
+- Ctrl-C, then `./inspector.sh sales-dev http://localhost:8081/registry/records`: 0 tools.
 
 - Look for: a new route and backend; eng-dev gets 3 tools, sales-dev 0.
 
