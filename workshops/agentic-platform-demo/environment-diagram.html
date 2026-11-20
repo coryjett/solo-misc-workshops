@@ -6,30 +6,32 @@
   --bg:#f5f6f8; --card:#ffffff; --fg:#1b1f2a; --muted:#5d6577; --rule:#d8dce5;
   --cluster:#eef1f7; --clusterb:#b9c2d4;
   --cp:#eef0fb; --cpb:#6a6fd1; --dp:#e8f4f2; --dpb:#2c8a7c; --ext:#f6f1e8; --extb:#a37a35;
-  --chip:#ffffff; --line:#8d95a6; --accent:#d9480f; --accentfg:#ffffff;
+  --chip:#ffffff; --line:#8d95a6; --accent:#d9480f; --accentfg:#ffffff; --accentbg:#fff1ea;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#12141a; --card:#1a1d25; --fg:#e7e9ee; --muted:#a2a9b8; --rule:#2c313d;
   --cluster:#171a22; --clusterb:#3a4152;
   --cp:#1d1f33; --cpb:#8f93ec; --dp:#152825; --dpb:#5cc0b0; --ext:#2a2318; --extb:#d2a65a;
-  --chip:#20242e; --line:#7b8396; --accent:#ff7a3d; --accentfg:#14161c; color-scheme:dark}}
+  --chip:#20242e; --line:#7b8396; --accent:#ff7a3d; --accentfg:#14161c; --accentbg:#2c1d14; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#12141a; --card:#1a1d25; --fg:#e7e9ee; --muted:#a2a9b8; --rule:#2c313d;
   --cluster:#171a22; --clusterb:#3a4152;
   --cp:#1d1f33; --cpb:#8f93ec; --dp:#152825; --dpb:#5cc0b0; --ext:#2a2318; --extb:#d2a65a;
-  --chip:#20242e; --line:#7b8396; --accent:#ff7a3d; --accentfg:#14161c; color-scheme:dark}
+  --chip:#20242e; --line:#7b8396; --accent:#ff7a3d; --accentfg:#14161c; --accentbg:#2c1d14; color-scheme:dark}
 body{background:var(--bg);color:var(--fg);font:15px/1.5 "IBM Plex Sans",system-ui,-apple-system,sans-serif;margin:0}
-main{max-width:1240px;margin:0 auto;padding-block:28px 40px;padding-inline:16px}
+main{max-width:1260px;margin:0 auto;padding-block:28px 40px;padding-inline:16px}
 h1{font-size:24px;font-weight:600;margin:0 0 4px;text-wrap:balance}
-.sub{color:var(--muted);margin:0 0 18px;max-width:80ch}
-.views{position:absolute;opacity:0;pointer-events:none}
+.sub{color:var(--muted);margin:0 0 18px;max-width:84ch}
 .seg{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--rule);border-radius:10px;background:var(--card);margin-bottom:14px}
-.seg label{padding:6px 14px;border-radius:7px;cursor:pointer;font-weight:500;font-size:14px;color:var(--muted)}
-#v-env:checked ~ .seg label[for=v-env], #v-flow:checked ~ .seg label[for=v-flow], #v-deep:checked ~ .seg label[for=v-deep]{background:var(--fg);color:var(--bg)}
-#v-env:focus-visible ~ .seg label[for=v-env], #v-flow:focus-visible ~ .seg label[for=v-flow], #v-deep:focus-visible ~ .seg label[for=v-deep]{outline:2px solid var(--accent);outline-offset:2px}
-figure{margin:0;background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:12px}
+.seg button{all:unset;padding:6px 14px;border-radius:7px;cursor:pointer;font-weight:500;font-size:14px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.layout{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.layout.tour{grid-template-columns:minmax(0,1fr) minmax(260px,330px)}
+@media (max-width:980px){.layout.tour{grid-template-columns:minmax(0,1fr)}}
+figure{margin:0;background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:12px;min-width:0}
 .scroll{overflow-x:auto}
-svg{display:block;width:100%;min-width:860px;height:auto}
+svg{display:block;width:100%;min-width:900px;height:auto}
 svg text{fill:var(--fg);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:13px}
 svg .t{font-weight:600;font-size:15px}
 svg .m{fill:var(--muted);font-size:11.5px}
@@ -39,350 +41,320 @@ svg .lab{fill:var(--muted);font-size:11.5px}
 .cp{fill:var(--cp);stroke:var(--cpb);stroke-width:1.5}
 .dp{fill:var(--dp);stroke:var(--dpb);stroke-width:1.5}
 .ext{fill:var(--ext);stroke:var(--extb);stroke-width:1.5}
+.opt{fill:var(--ext);stroke:var(--extb);stroke-width:1.5;stroke-dasharray:5 4}
 .actor{fill:var(--card);stroke:var(--line);stroke-width:1.2}
 .chip{fill:var(--chip);stroke:var(--rule);stroke-width:1}
 .a{fill:none;stroke:var(--line);stroke-width:1.8;marker-end:url(#mb)}
 .a.nohead{marker-end:none}
 .trust{fill:none;stroke:var(--line);stroke-width:1.4;stroke-dasharray:5 4;marker-end:url(#mb)}
-.flow{display:none}
-.badge circle{fill:var(--accent)}
-.badge text{fill:var(--accentfg);font-weight:600;font-size:12.5px;text-anchor:middle}
-#v-flow:checked ~ figure .flow{display:inline}
-#v-flow:checked ~ figure .a, #v-flow:checked ~ figure .trust{opacity:.35}
-#v-flow:checked ~ figure .s{opacity:1;stroke:var(--accent);stroke-width:2.4;marker-end:url(#ma)}
-#v-flow:checked ~ figure .s.nohead{marker-end:none}
-#v-flow:checked ~ figure .hl{stroke:var(--accent);stroke-width:2}
-.legend{display:none;margin:16px 0 0;padding:0;list-style:none;gap:10px 24px;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr))}
-.legend li{display:flex;gap:10px;align-items:flex-start;min-width:0}
-.legend b{flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accentfg);display:grid;place-items:center;font-size:13px}
-.legend span{min-width:0}
+/* walkthrough focus: dim everything keyed, light up the module's parts */
+svg.focus [data-k]{opacity:.22;transition:opacity .2s}
+svg.focus [data-k].on{opacity:1}
+svg.focus .on rect.chip, svg.focus .on rect.actor{stroke:var(--accent);stroke-width:2.2}
+svg.focus .on path.a, svg.focus .on path.trust{stroke:var(--accent);stroke-width:2.6;marker-end:url(#ma)}
+svg.focus .on path.a.nohead{marker-end:none}
+svg.focus .on text.lab{fill:var(--accent)}
+.envnote[hidden]{display:none}
+.panel{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:16px;min-width:0;align-self:start}
+.panel[hidden]{display:none}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;padding:0;list-style:none}
+.steps button{all:unset;cursor:pointer;font:500 13px "IBM Plex Mono",ui-monospace,monospace;padding:4px 9px;border-radius:7px;border:1px solid var(--rule);color:var(--muted)}
+.steps button[aria-current="step"]{background:var(--accent);border-color:var(--accent);color:var(--accentfg)}
+.steps button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel h2{font-size:18px;margin:0 0 2px;text-wrap:balance}
+.panel .area{color:var(--muted);font-size:13px;margin:0 0 10px}
+.panel p{margin:0 0 10px}
+.panel .see{background:var(--accentbg);border-radius:8px;padding:10px 12px;font-size:14px}
+.nav{display:flex;gap:8px;margin-top:12px;align-items:center}
+.nav button{all:unset;cursor:pointer;padding:6px 12px;border-radius:8px;border:1px solid var(--rule);font-weight:500;font-size:14px}
+.nav button:disabled{opacity:.4;cursor:default}
+.nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nav .count{color:var(--muted);font-size:13px;margin-left:auto;font-variant-numeric:tabular-nums}
 .envnote{margin:16px 0 0;display:grid;gap:10px 24px;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr))}
 .envnote p{margin:0;min-width:0}
 .envnote strong{font-weight:600}
-#v-flow:checked ~ .legend{display:grid}
-#v-flow:checked ~ .envnote{display:none}
-.deep, .deepnote{display:none}
-#v-deep:checked ~ .deep{display:block}
-#v-deep:checked ~ .deepnote{display:grid}
-#v-deep:checked ~ figure.main, #v-deep:checked ~ .envnote:not(.deepnote){display:none}
-.deep .a{marker-end:url(#mb2)} .deep .a.nohead{marker-end:none}
 .foot{color:var(--muted);font-size:13px;margin-top:18px;max-width:90ch}
 </style>
 <main>
 <h1>Agent platform demo environment</h1>
-<p class="sub">Registry, gateway and runtime on one Kubernetes cluster. The registry decides what exists and who owns it. The gateway is the only path to it, and it enforces identity and scope on every call.</p>
+<p class="sub">Registry, gateway and agent runtime on one Kubernetes cluster. The registry decides what exists and who owns it. The gateway is the one path to tools, agents and models, and it enforces identity and policy on every call.</p>
 
-<input type="radio" name="view" id="v-env" class="views" checked>
-<input type="radio" name="view" id="v-flow" class="views">
-<input type="radio" name="view" id="v-deep" class="views">
-<div class="seg" role="group" aria-label="Diagram view"><label for="v-env">Environment</label><label for="v-flow">Demo flow</label><label for="v-deep">Deep dive 11-18</label></div>
+<div class="seg" role="group" aria-label="View">
+  <button type="button" id="b-env" aria-pressed="true">Environment</button>
+  <button type="button" id="b-tour" aria-pressed="false">Walkthrough</button>
+</div>
 
-<figure class="main">
+<div class="layout" id="layout">
+<figure>
 <div class="scroll">
-<svg viewBox="0 0 1200 800" role="img" aria-label="Five people on the left: platform admin, engineering developer, sales developer, auditor, and an MCP client or agent. Inside one Kubernetes cluster: agentregistry Enterprise with catalog, approvals, access policies and audit; kagent as an agent runtime; Keycloak standing in for Entra ID; agentgateway Enterprise with registry-published and federated MCP routes and a per-call pipeline of JWT validation, scope filtering, PII masking and on-behalf-of token exchange; MCP servers behind it; the Solo Enterprise UI receiving traces; and model providers.">
+<svg id="map" viewBox="0 0 1240 860" role="img" aria-label="People on the left: platform admin, approver, engineering developer, sales developer, auditor, and an agent or MCP client. Inside one Kubernetes cluster: agentregistry Enterprise with catalog, approvals, access policies and audit; kagent as the agent runtime; Keycloak as the identity provider; optional services of your own; and agentgateway Enterprise with routes for federated MCP tools, down-scoped SaaS tools, tool search, A2A agents, models and registry-published servers, a per-call pipeline of token validation, tool filtering, guardrails and on-behalf-of tokens, model policies, and an access log. Behind it: MCP servers and APIs, three A2A agents, and self-hosted and hosted models. The Solo Enterprise UI receives traces.">
 <defs>
 <marker id="mb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--line)"/></marker>
 <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker>
 </defs>
 
 <!-- cluster -->
-<rect class="cluster" x="232" y="20" width="952" height="764" rx="14"/>
-<text x="252" y="48" class="t">Kubernetes cluster</text>
-<text x="252" y="67" class="m">A laptop today. The same Helm charts run on EKS, AKS, GKE or on-prem.</text>
+<g data-k="cluster"><rect class="cluster" x="220" y="20" width="1004" height="822" rx="14"/>
+<text x="240" y="48" class="t">Kubernetes cluster</text>
+<text x="240" y="67" class="m">A laptop today. The same Helm charts run on EKS, AKS, GKE, OpenShift or on-prem.</text></g>
 
-<!-- actors -->
-<rect class="actor" x="16" y="140" width="160" height="48" rx="8"/><text x="30" y="160">Platform admin</text><text x="30" y="177" class="m">approves, sets policy</text>
-<rect class="actor" x="16" y="200" width="160" height="48" rx="8"/><text x="30" y="220">Engineering developer</text><text x="30" y="237" class="m">team-engineering</text>
-<rect class="actor" x="16" y="260" width="160" height="48" rx="8"/><text x="30" y="280">Sales developer</text><text x="30" y="297" class="m">team-sales</text>
-<rect class="actor" x="16" y="320" width="160" height="48" rx="8"/><text x="30" y="340">Auditor</text><text x="30" y="357" class="m">read-only</text>
-<rect class="actor" x="16" y="496" width="160" height="58" rx="8"/><text x="30" y="519">MCP client or agent</text><text x="30" y="537" class="m">any client; Inspector today</text>
+<!-- people -->
+<g data-k="act-admin"><rect class="actor" x="16" y="104" width="168" height="46" rx="8"/><text x="30" y="123">Platform admin</text><text x="30" y="140" class="m">sets policy, publishes</text></g>
+<g data-k="act-appr"><rect class="actor" x="16" y="158" width="168" height="46" rx="8"/><text x="30" y="177">Approver</text><text x="30" y="194" class="m">reviews changes</text></g>
+<g data-k="act-eng"><rect class="actor" x="16" y="212" width="168" height="46" rx="8"/><text x="30" y="231">Engineering developer</text><text x="30" y="248" class="m">eng-dev</text></g>
+<g data-k="act-sales"><rect class="actor" x="16" y="266" width="168" height="46" rx="8"/><text x="30" y="285">Sales developer</text><text x="30" y="302" class="m">sales-dev, or a partner</text></g>
+<g data-k="act-aud"><rect class="actor" x="16" y="320" width="168" height="46" rx="8"/><text x="30" y="339">Auditor</text><text x="30" y="356" class="m">read-only</text></g>
+<g data-k="act-client"><rect class="actor" x="16" y="512" width="168" height="62" rx="8"/><text x="30" y="535">Agent or MCP client</text><text x="30" y="553" class="m">acts as one of the people</text></g>
 
-<!-- actor bus to registry -->
-<path class="a nohead s" d="M176,164 H200"/>
-<path class="a nohead s" d="M176,224 H200"/>
-<path class="a nohead" d="M176,284 H200"/>
-<path class="a nohead s" d="M176,344 H200"/>
-<path class="a nohead s" d="M200,164 V344"/>
-<path class="a s" d="M200,225 H254"/>
-<text class="lab" transform="translate(220,300) rotate(-90)" text-anchor="middle">registry UI and CLI</text>
+<!-- people to registry -->
+<g data-k="e-bus">
+<path class="a nohead" d="M184,127 H200 M184,181 H200 M184,235 H200 M184,289 H200 M184,343 H200 M200,127 V343"/>
+<path class="a" d="M200,186 H238"/>
+<text class="lab" transform="translate(212,282) rotate(-90)" text-anchor="middle">registry UI and CLI</text>
+</g>
 
 <!-- registry -->
-<rect class="cp" x="256" y="140" width="310" height="170" rx="10"/>
-<text x="272" y="165" class="t">agentregistry Enterprise</text>
-<text x="272" y="183" class="m">system of record for agents, MCP servers, models</text>
-<rect class="chip" x="272" y="196" width="134" height="30" rx="6"/><text x="339" y="216" text-anchor="middle">Catalog</text>
-<rect class="chip" x="416" y="196" width="134" height="30" rx="6"/><text x="483" y="216" text-anchor="middle">Approvals</text>
-<rect class="chip" x="272" y="234" width="134" height="30" rx="6"/><text x="339" y="254" text-anchor="middle">Access policies</text>
-<rect class="chip" id="auditchip" x="416" y="234" width="134" height="30" rx="6"/><text x="483" y="254" text-anchor="middle">Audit events</text>
-<rect class="chip" x="272" y="272" width="278" height="28" rx="6"/><text x="411" y="291" text-anchor="middle" class="m">Virtual runtime: publishes to the gateway</text>
+<g data-k="reg"><rect class="cp" x="240" y="96" width="304" height="184" rx="10"/>
+<text x="256" y="121" class="t">agentregistry Enterprise</text>
+<text x="256" y="139" class="m">agents, MCP servers and models, with owners</text></g>
+<g data-k="reg-cat"><rect class="chip" x="256" y="152" width="136" height="30" rx="6"/><text x="324" y="172" text-anchor="middle">Catalog</text></g>
+<g data-k="reg-appr"><rect class="chip" x="396" y="152" width="136" height="30" rx="6"/><text x="464" y="172" text-anchor="middle">Approvals</text></g>
+<g data-k="reg-pol"><rect class="chip" x="256" y="190" width="136" height="30" rx="6"/><text x="324" y="210" text-anchor="middle">Access policies</text></g>
+<g data-k="reg-audit"><rect class="chip" x="396" y="190" width="136" height="30" rx="6"/><text x="464" y="210" text-anchor="middle">Audit trail</text></g>
+<g data-k="reg-virt"><rect class="chip" x="256" y="228" width="276" height="38" rx="6"/><text x="394" y="243" text-anchor="middle">Runtimes: publish to the gateway,</text><text x="394" y="259" text-anchor="middle">or deploy to kagent</text></g>
 
 <!-- kagent -->
-<rect class="cp" x="626" y="140" width="230" height="170" rx="10"/>
-<text x="642" y="165" class="t">kagent</text>
-<text x="642" y="183" class="m">agent runtime on Kubernetes</text>
-<rect class="chip" x="642" y="196" width="198" height="30" rx="6"/><text x="741" y="216" text-anchor="middle">Agent and MCP pods</text>
-<text x="642" y="252" class="m">Deployed by the registry. One of</text>
-<text x="642" y="268" class="m">several runtimes it can target.</text>
-<text x="642" y="288" class="m">Unregistered pods are discovered.</text>
+<g data-k="kagent"><rect class="cp" x="600" y="96" width="230" height="184" rx="10"/>
+<text x="616" y="121" class="t">kagent</text>
+<text x="616" y="139" class="m">agent runtime on Kubernetes</text>
+<rect class="chip" x="616" y="152" width="198" height="30" rx="6"/><text x="715" y="172" text-anchor="middle">Agent and MCP pods</text>
+<text x="616" y="206" class="m">Deployed by the registry.</text>
+<text x="616" y="222" class="m">Pods nobody registered are</text>
+<text x="616" y="238" class="m">discovered and shown.</text></g>
 
-<!-- keycloak -->
-<rect class="ext" x="916" y="140" width="244" height="110" rx="10"/>
-<text x="932" y="165" class="t">Keycloak</text>
-<text x="932" y="183" class="m">stand-in for Entra ID</text>
-<text x="932" y="207" class="m">Signs every user token. Groups</text>
-<text x="932" y="223" class="m">become scopes. Entra sign-in is</text>
-<text x="932" y="239" class="m">config, not code.</text>
+<!-- IdP -->
+<g data-k="idp"><rect class="ext" x="860" y="96" width="344" height="104" rx="10"/>
+<text x="876" y="121" class="t">Keycloak</text>
+<text x="876" y="139" class="m">stands in for your IdP: Entra ID, Okta, Ping</text>
+<text x="876" y="163" class="m">Signs every user token. Groups become</text>
+<text x="876" y="179" class="m">permissions. Swapping the IdP is config.</text></g>
 
-<!-- trust lines -->
-<path class="trust" d="M1038,140 V118 H411 V138"/>
-<text x="724" y="111" class="lab" text-anchor="middle">trusted issuer for sign-in</text>
-<path class="trust" d="M1000,250 V335 H830 V376"/>
-<text x="1008" y="300" class="lab">gateway verifies JWTs</text>
+<!-- your services -->
+<g data-k="svc"><rect class="opt" x="600" y="710" width="230" height="116" rx="10"/>
+<text x="616" y="735" class="t">Your services</text>
+<text x="616" y="755" class="m">optional: pick a model, inspect</text>
+<text x="616" y="771" class="m">or rewrite a request, allow</text>
+<text x="616" y="787" class="m">or deny (callout, ext_proc,</text>
+<text x="616" y="803" class="m">ext_authz)</text></g>
 
-<!-- registry to kagent -->
-<path class="a s" d="M566,225 H624"/>
-<text x="595" y="205" class="lab" text-anchor="middle">deploys</text>
+<!-- trust -->
+<g data-k="e-trust1"><path class="trust" d="M1032,96 V80 H405 V94"/><text x="718" y="74" class="lab" text-anchor="middle">sign-in</text></g>
 
-<!-- registry to gateway -->
-<path class="a s" d="M520,310 V438"/>
-<text x="510" y="362" class="lab" text-anchor="end">creates route, backend, scope rule</text>
-
-<!-- kagent to gateway -->
-<path class="a s" d="M740,310 V376"/>
-<text x="732" y="350" class="lab" text-anchor="end">agent tool calls</text>
+<!-- registry and kagent to gateway -->
+<g data-k="e-deploy"><path class="a" d="M544,170 H598"/><text x="571" y="160" class="lab" text-anchor="middle">deploys</text></g>
+<g data-k="e-publish"><path class="a" d="M480,280 V328"/><text x="470" y="309" class="lab" text-anchor="end">publishes routes</text></g>
+<g data-k="e-kagent"><path class="a" d="M715,280 V328"/><text x="705" y="309" class="lab" text-anchor="end">agent tool calls</text></g>
 
 <!-- gateway -->
-<rect class="dp" x="256" y="380" width="600" height="230" rx="10"/>
-<text x="276" y="406" class="t">agentgateway Enterprise</text>
-<text x="276" y="424" class="m">one door for tools and models</text>
-<rect class="chip" x="276" y="440" width="270" height="32" rx="6"/><text x="290" y="461" class="mono">/registry/*</text><text x="380" y="461" class="m">published by the registry</text>
-<rect class="chip" x="566" y="440" width="270" height="32" rx="6"/><text x="580" y="461" class="mono">/mcp</text><text x="622" y="461" class="m">federated platform endpoint</text>
+<g data-k="gw"><rect class="dp" x="240" y="330" width="590" height="340" rx="10"/>
+<text x="256" y="355" class="t">agentgateway Enterprise</text>
+<text x="256" y="373" class="m">one door for tools, agents and models</text></g>
+<g data-k="r-mcp"><rect class="chip" x="256" y="386" width="182" height="40" rx="6"/><text x="268" y="403" class="mono">/mcp</text><text x="268" y="419" class="m">federated tools</text></g>
+<g data-k="r-fd"><rect class="chip" x="446" y="386" width="182" height="40" rx="6"/><text x="458" y="403" class="mono">/frontdoor/mcp</text><text x="458" y="419" class="m">down-scoped SaaS tools</text></g>
+<g data-k="r-search"><rect class="chip" x="636" y="386" width="182" height="40" rx="6"/><text x="648" y="403" class="mono">/search/mcp</text><text x="648" y="419" class="m">tool search</text></g>
+<g data-k="r-a2a"><rect class="chip" x="256" y="432" width="182" height="40" rx="6"/><text x="268" y="449" class="mono">/a2a/agent-*</text><text x="268" y="465" class="m">agent to agent</text></g>
+<g data-k="r-llm"><rect class="chip" x="446" y="432" width="182" height="40" rx="6"/><text x="458" y="449" class="mono">/v1, /budget</text><text x="458" y="465" class="m">models</text></g>
+<g data-k="r-reg"><rect class="chip" x="636" y="432" width="182" height="40" rx="6"/><text x="648" y="449" class="mono">/registry/*</text><text x="648" y="465" class="m">published by the registry</text></g>
 
-<rect class="chip" x="276" y="490" width="132" height="66" rx="8"/><text x="342" y="518" text-anchor="middle">Validate</text><text x="342" y="536" text-anchor="middle">user JWT</text>
-<rect class="chip" x="422" y="490" width="132" height="66" rx="8"/><text x="488" y="518" text-anchor="middle">Filter tools</text><text x="488" y="536" text-anchor="middle">by scope</text>
-<rect class="chip" x="568" y="490" width="132" height="66" rx="8"/><text x="634" y="518" text-anchor="middle">Guardrails,</text><text x="634" y="536" text-anchor="middle">PII masking</text>
-<rect class="chip" x="714" y="490" width="132" height="66" rx="8"/><text x="780" y="518" text-anchor="middle">On-behalf-of</text><text x="780" y="536" text-anchor="middle">token (STS)</text>
-<path class="a" d="M408,523 H420"/><path class="a" d="M554,523 H566"/><path class="a" d="M700,523 H712"/>
-<rect class="chip" x="276" y="568" width="570" height="28" rx="6"/><text x="561" y="587" text-anchor="middle" class="m">Model route: prompt-injection guard, failover across providers</text>
+<text x="256" y="498" class="m">On every call</text>
+<g data-k="p-jwt"><rect class="chip" x="256" y="506" width="136" height="54" rx="8"/><text x="324" y="529" text-anchor="middle">Validate</text><text x="324" y="547" text-anchor="middle">user token</text></g>
+<g data-k="p-filter"><rect class="chip" x="400" y="506" width="136" height="54" rx="8"/><text x="468" y="529" text-anchor="middle">Filter tools</text><text x="468" y="547" text-anchor="middle">by group</text></g>
+<g data-k="p-guard"><rect class="chip" x="544" y="506" width="136" height="54" rx="8"/><text x="612" y="529" text-anchor="middle">Guardrails,</text><text x="612" y="547" text-anchor="middle">data masking</text></g>
+<g data-k="p-obo"><rect class="chip" x="688" y="506" width="130" height="54" rx="8"/><text x="753" y="529" text-anchor="middle">On-behalf-of</text><text x="753" y="547" text-anchor="middle">token</text></g>
+<path class="a" d="M392,533 H398"/><path class="a" d="M536,533 H542"/><path class="a" d="M680,533 H686"/>
+<g data-k="m-route"><rect class="chip" x="256" y="572" width="562" height="38" rx="6"/><text x="537" y="587" text-anchor="middle">Models: prompt guard, access by identity,</text><text x="537" y="603" text-anchor="middle">token budgets, failover</text></g>
+<g data-k="log"><rect class="chip" x="256" y="620" width="562" height="34" rx="6"/><text x="537" y="642" text-anchor="middle" class="m">Access log per call: user, groups, protocol, tool or method, outcome, trace id</text></g>
 
-<!-- client to gateway -->
-<path class="a s" d="M176,525 H254"/>
-<text x="216" y="494" class="lab" text-anchor="middle">MCP call</text>
-<text x="216" y="507" class="lab" text-anchor="middle">+ user JWT</text>
+<!-- client to gateway; IdP to gateway; your services -->
+<g data-k="e-client"><path class="a" d="M184,543 H238"/><text x="214" y="500" class="lab" text-anchor="middle">calls with</text><text x="214" y="514" class="lab" text-anchor="middle">user token</text></g>
+<g data-k="e-trust2"><path class="trust" d="M860,150 H846 V328"/><text x="840" y="318" class="lab" text-anchor="end">verifies tokens</text></g>
+<g data-k="e-svc"><path class="trust" d="M715,708 V672"/><text x="705" y="694" class="lab" text-anchor="end">optional hooks</text></g>
 
 <!-- MCP servers -->
-<rect class="ext" x="916" y="380" width="244" height="230" rx="10"/>
-<text x="932" y="406" class="t">MCP servers and APIs</text>
-<rect class="chip" x="932" y="422" width="212" height="42" rx="6"/><text x="946" y="448">Customer records (PII)</text>
-<rect class="chip" x="932" y="474" width="212" height="42" rx="6"/><text x="946" y="500">Inventory</text>
-<rect class="chip" x="932" y="526" width="212" height="42" rx="6"/><text x="946" y="552">Ops REST API via OpenAPI</text>
-<text x="932" y="594" class="m">Backends never see the raw user token</text>
+<g data-k="mcpbox"><rect class="ext" x="860" y="344" width="344" height="206" rx="10"/>
+<text x="876" y="369" class="t">MCP servers and APIs</text></g>
+<g data-k="mcp-records"><rect class="chip" x="876" y="380" width="312" height="28" rx="6"/><text x="888" y="399">Customer records (PII)</text></g>
+<g data-k="mcp-inv"><rect class="chip" x="876" y="412" width="312" height="28" rx="6"/><text x="888" y="431">Inventory</text></g>
+<g data-k="mcp-ops"><rect class="chip" x="876" y="444" width="312" height="28" rx="6"/><text x="888" y="463">Ops REST API, exposed as tools (OpenAPI)</text></g>
+<g data-k="mcp-mail"><rect class="chip" x="876" y="476" width="312" height="28" rx="6"/><text x="888" y="495">Mail, files, meetings (SaaS stand-in)</text></g>
+<g data-k="mcp-code"><rect class="chip" x="876" y="508" width="312" height="28" rx="6"/><text x="888" y="527">Code hosting (SaaS stand-in)</text></g>
+<g data-k="e-tools"><path class="a" d="M830,460 H858"/><text x="845" y="452" class="lab" text-anchor="middle">tools</text></g>
 
-<path class="a s" d="M856,523 H914"/>
-<text x="885" y="494" class="lab" text-anchor="middle">scoped</text>
-<text x="885" y="507" class="lab" text-anchor="middle">token</text>
-
-<!-- Solo UI -->
-<rect class="dp" x="256" y="650" width="300" height="110" rx="10"/>
-<text x="272" y="675" class="t">Solo Enterprise UI</text>
-<text x="272" y="697" class="m">Per-call traces: user, tool, route,</text>
-<text x="272" y="713" class="m">guardrail decision, token exchange.</text>
-<text x="272" y="737" class="m">Exported over OTLP to your SIEM.</text>
-<path class="a s" d="M400,610 V648"/>
-<text x="418" y="634" class="lab">traces</text>
+<!-- A2A agents -->
+<g data-k="agbox"><rect class="ext" x="860" y="564" width="344" height="132" rx="10"/>
+<text x="876" y="588" class="t">A2A agents</text>
+<text x="1188" y="588" class="m" text-anchor="end">each with its own identity</text></g>
+<g data-k="ag-a"><rect class="chip" x="876" y="598" width="312" height="26" rx="6"/><text x="888" y="616">agent-a, coordinator: the only one users reach</text></g>
+<g data-k="ag-b"><rect class="chip" x="876" y="628" width="312" height="26" rx="6"/><text x="888" y="646">agent-b, data specialist</text></g>
+<g data-k="ag-c"><rect class="chip" x="876" y="658" width="312" height="26" rx="6"/><text x="888" y="676">agent-c, policy checker</text></g>
+<g data-k="e-a2a"><path class="a" d="M830,620 H858"/><text x="844" y="608" class="lab" text-anchor="middle">A2A</text></g>
 
 <!-- models -->
-<rect class="ext" x="916" y="650" width="244" height="110" rx="10"/>
-<text x="932" y="675" class="t">Model providers</text>
-<rect class="chip" x="932" y="688" width="212" height="28" rx="6"/><text x="946" y="707">Hosted model (OpenAI)</text>
-<rect class="chip" x="932" y="722" width="212" height="28" rx="6"/><text x="946" y="741">Self-hosted model</text>
-<path class="a" d="M846,582 H880 V705 H914"/>
-<text x="872" y="642" class="lab" text-anchor="end">model calls</text>
+<g data-k="mdlbox"><rect class="ext" x="860" y="710" width="344" height="116" rx="10"/>
+<text x="876" y="734" class="t">Models</text></g>
+<g data-k="mdl-self"><rect class="chip" x="876" y="744" width="312" height="30" rx="6"/><text x="888" y="764">Self-hosted model (first choice)</text></g>
+<g data-k="mdl-hosted"><rect class="chip" x="876" y="782" width="312" height="30" rx="6"/><text x="888" y="802">Hosted model (failover, premium)</text></g>
+<g data-k="e-models"><path class="a" d="M830,650 H846 V778 H874"/><text x="840" y="692" class="lab" text-anchor="end">model calls</text></g>
 
-<!-- flow overlay -->
-<g class="flow">
-  <rect x="269" y="193" width="140" height="36" rx="8" fill="none" style="stroke:var(--accent);stroke-width:2"/>
-  <rect x="413" y="193" width="140" height="36" rx="8" fill="none" style="stroke:var(--accent);stroke-width:2"/>
-  <rect x="266" y="484" width="586" height="78" rx="10" fill="none" style="stroke:var(--accent);stroke-width:2;stroke-dasharray:6 4"/>
-  <rect x="413" y="231" width="140" height="36" rx="8" fill="none" style="stroke:var(--accent);stroke-width:2"/>
-  <g class="badge"><circle cx="188" cy="224" r="11"/><text x="188" y="228.5">2</text></g>
-  <g class="badge"><circle cx="188" cy="164" r="11"/><text x="188" y="168.5">3</text></g>
-  <g class="badge"><circle cx="392" cy="211" r="11"/><text x="392" y="215.5">1</text></g>
-  <g class="badge"><circle cx="836" cy="162" r="11"/><text x="836" y="166.5">1</text></g>
-  <g class="badge"><circle cx="520" cy="334" r="11"/><text x="520" y="338.5">3</text></g>
-  <g class="badge"><circle cx="216" cy="525" r="11"/><text x="216" y="529.5">4</text></g>
-  <g class="badge"><circle cx="885" cy="523" r="11"/><text x="885" y="527.5">4</text></g>
-  <g class="badge"><circle cx="595" cy="225" r="11"/><text x="595" y="229.5">5</text></g>
-  <g class="badge"><circle cx="740" cy="334" r="11"/><text x="740" y="338.5">5</text></g>
-  <g class="badge"><circle cx="188" cy="344" r="11"/><text x="188" y="348.5">6</text></g>
-  <g class="badge"><circle cx="400" cy="629" r="11"/><text x="400" y="633.5">6</text></g>
-</g>
+<!-- Solo UI -->
+<g data-k="ui"><rect class="dp" x="240" y="710" width="330" height="116" rx="10"/>
+<text x="256" y="735" class="t">Solo Enterprise UI</text>
+<text x="256" y="757" class="m">Gateways, routes, policies, traces and</text>
+<text x="256" y="773" class="m">dashboards for every call the gateway carries.</text>
+<text x="256" y="797" class="m">Traces export over OpenTelemetry to your stack.</text></g>
+<g data-k="e-traces"><path class="a" d="M400,670 V708"/><text x="412" y="694" class="lab">traces, metrics</text></g>
 </svg>
 </div>
 </figure>
 
-<figure class="deep">
-<div class="scroll">
-<svg viewBox="0 0 1200 600" role="img" aria-label="Two gateway lanes: Lane 1 sends users to /frontdoor/mcp where the gateway validates the JWT, down-scopes WorkIQ and GitHub tools per group, and exchanges an on-behalf-of token. Lane 2 lets users reach only agent-a over A2A; agent-a calls agent-b and agent-c with its own identity, while agent-b calling agent-c is refused at the gateway with 403.">
-<defs>
-<marker id="mb2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--line)"/></marker>
-<marker id="ma2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker>
-</defs>
-  <rect class="actor" x="16" y="60" width="160" height="48" rx="8"/>
-  <text x="30" y="80">Admin</text>
-  <text class="m" x="30" y="97">are-admins</text>
-
-  <rect class="actor" x="16" y="120" width="160" height="48" rx="8"/>
-  <text x="30" y="140">Engineering developer</text>
-  <text class="m" x="30" y="157">team-engineering</text>
-
-  <rect class="actor" x="16" y="180" width="160" height="48" rx="8"/>
-  <text x="30" y="200">Sales developer</text>
-  <text class="m" x="30" y="217">team-sales</text>
-
-  <rect class="actor" x="16" y="240" width="160" height="48" rx="8"/>
-  <text x="30" y="260">Auditor</text>
-  <text class="m" x="30" y="277">are-readers</text>
-
-  <path class="a nohead" d="M176,84 H200"/>
-  <path class="a nohead" d="M176,144 H200"/>
-  <path class="a nohead" d="M176,204 H200"/>
-  <path class="a nohead" d="M176,264 H200"/>
-  <path class="a nohead" d="M200,84 V264"/>
-  <path class="a" d="M200,150 H254"/>
-  <text class="lab" x="227" y="138" text-anchor="middle">user JWT</text>
-
-  <rect class="dp" x="256" y="20" width="600" height="560" rx="10"/>
-  <text class="t" x="276" y="46">agentgateway Enterprise</text>
-  <text class="m" x="276" y="64">every hop passes the same gateway</text>
-
-  <text class="mono" x="276" y="96">/frontdoor/mcp</text>
-  <text class="m" x="400" y="96">WorkIQ + GitHub, one endpoint</text>
-
-  <rect class="chip" x="276" y="112" width="176" height="66" rx="8"/>
-  <text class="t" x="364" y="140" text-anchor="middle">Validate JWT</text>
-  <text class="m" x="364" y="158" text-anchor="middle">issuer, audience</text>
-
-  <path class="a" d="M452,145 H468"/>
-
-  <rect class="chip" x="470" y="112" width="176" height="66" rx="8"/>
-  <text class="t" x="558" y="140" text-anchor="middle">Down-scope tools</text>
-  <text class="m" x="558" y="158" text-anchor="middle">group, target, tool</text>
-
-  <path class="a" d="M646,145 H662"/>
-
-  <rect class="chip" x="664" y="112" width="176" height="66" rx="8"/>
-  <text class="t" x="752" y="140" text-anchor="middle">On-behalf-of</text>
-  <text class="m" x="752" y="158" text-anchor="middle">token from gateway STS</text>
-
-  <rect class="chip" x="276" y="194" width="137" height="48" rx="6"/>
-  <text class="mono" x="286" y="214">admin 16</text>
-  <text class="m" x="286" y="232">all tools</text>
-
-  <rect class="chip" x="420" y="194" width="137" height="48" rx="6"/>
-  <text class="mono" x="430" y="214">eng-dev 13</text>
-  <text class="m" x="430" y="232">no send, no merge</text>
-
-  <rect class="chip" x="564" y="194" width="137" height="48" rx="6"/>
-  <text class="mono" x="574" y="214">sales-dev 9</text>
-  <text class="m" x="574" y="232">no mail, GitHub read</text>
-
-  <rect class="chip" x="708" y="194" width="137" height="48" rx="6"/>
-  <text class="mono" x="718" y="214">auditor 5</text>
-  <text class="m" x="718" y="232">GitHub read only</text>
-
-  <path class="a nohead" d="M276,262 H836" style="stroke-dasharray:3 4"/>
-
-  <text class="mono" x="276" y="292">/a2a/agent-*</text>
-  <text class="m" x="390" y="292">A2A routes, one policy per agent</text>
-
-  <rect class="chip" x="276" y="310" width="270" height="70" rx="8"/>
-  <text class="t" x="290" y="336">agent-a route</text>
-  <text class="m" x="290" y="354">Allow: any user group</text>
-  <text class="m" x="290" y="370">card URL rewritten to gateway</text>
-
-  <rect class="chip" x="566" y="310" width="270" height="70" rx="8"/>
-  <text class="t" x="580" y="336">agent-b and agent-c routes</text>
-  <text class="m" x="580" y="354">Allow: jwt.azp == agent-a</text>
-  <text class="m" x="580" y="370">users and agent-b refused (403)</text>
-
-  <path class="a" d="M200,264 V345 H274"/>
-  <text class="lab" x="237" y="316" text-anchor="middle">A2A +</text><text class="lab" x="237" y="330" text-anchor="middle">user JWT</text>
-
-  <rect class="chip" x="276" y="500" width="560" height="60" rx="8"/>
-  <text class="t" x="290" y="524">Access log per hop</text>
-  <text class="m" x="290" y="544">protocol=a2a, a2a.method, outcome, context id, user, groups, trace id</text>
-
-  <rect class="ext" x="916" y="20" width="244" height="240" rx="10"/>
-  <text class="t" x="932" y="46">Remote MCP servers</text>
-  <text class="m" x="932" y="64">stand-ins here; real hosts in production</text>
-
-  <rect class="chip" x="932" y="80" width="212" height="78" rx="6"/>
-  <text class="t" x="938" y="102">WorkIQ (Microsoft 365)</text>
-  <text class="m" x="938" y="122">mail: search, read, send</text>
-  <text class="m" x="938" y="140">files, meetings</text>
-
-  <rect class="chip" x="932" y="168" width="212" height="78" rx="6"/>
-  <text class="t" x="938" y="190">GitHub</text>
-  <text class="m" x="938" y="210">read: repos, files, code, PRs</text>
-  <text class="m" x="938" y="228">write: issue, PR; merge, delete</text>
-
-  <path class="a" d="M840,145 H914"/>
-  <text class="lab" x="886" y="132" text-anchor="middle">scoped token</text>
-
-  <rect class="ext" x="916" y="290" width="244" height="290" rx="10"/>
-  <text class="t" x="932" y="316">A2A agents</text>
-  <text class="m" x="932" y="334">each has its own client identity</text>
-
-  <rect class="chip" x="932" y="350" width="212" height="52" rx="6"/>
-  <text class="t" x="938" y="372">agent-a</text>
-  <text class="m" x="938" y="390">research coordinator</text>
-
-  <rect class="chip" x="932" y="430" width="212" height="52" rx="6"/>
-  <text class="t" x="938" y="452">agent-b</text>
-  <text class="m" x="938" y="470">market data</text>
-
-  <rect class="chip" x="932" y="510" width="212" height="52" rx="6"/>
-  <text class="t" x="938" y="532">agent-c</text>
-  <text class="m" x="938" y="550">compliance</text>
-
-  <path class="a" d="M411,380 V400 H900 V376 H930"/>
-  <text class="lab" x="650" y="394">user call</text>
-
-  <path class="a" d="M932,368 H880 V345 H838"/>
-  <path class="a" d="M701,380 V456 H930"/>
-  <text class="lab" x="720" y="450">to agent-b</text>
-  <path class="a" d="M760,380 V536 H930"/>
-  <text class="lab" x="780" y="530">to agent-c</text>
-
-  <path d="M932,470 H870 V380" fill="none" marker-end="url(#ma2)" style="stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4"/>
-  <text class="lab" x="862" y="480" text-anchor="end" style="fill:var(--accent)">agent-b to agent-c: 403</text>
-</svg>
-</div>
-</figure>
-
-<div class="envnote">
-<p><strong>Control plane.</strong> The registry holds every agent, MCP server and model with its owner, data class and approvals. Access policies scope what each team can see and change.</p>
-<p><strong>Data plane.</strong> agentgateway carries every tool and model call. Identity, scope, guardrails and token exchange are enforced per call, not per app.</p>
-<p><strong>Runtimes.</strong> kagent runs agents on Kubernetes. The registry can also target cloud agent runtimes. Approved servers can be published straight to the gateway with no compute.</p>
-<p><strong>Identity.</strong> Keycloak keeps the demo self-contained. Pointing sign-in at Entra ID is configuration; the on-behalf-of exchange against Entra is validated on your tenant.</p>
+<aside class="panel" id="panel" hidden aria-live="polite">
+  <ol class="steps" id="steps"></ol>
+  <h2 id="p-title"></h2>
+  <p class="area" id="p-area"></p>
+  <p id="p-proves"></p>
+  <p class="see" id="p-see"></p>
+  <div class="nav"><button type="button" id="prev">Previous</button><button type="button" id="next">Next</button><span class="count" id="count"></span></div>
+</aside>
 </div>
 
-<div class="envnote deepnote">
-<p><strong>Down-scoped SaaS tools.</strong> One front door serves a WorkIQ and a GitHub stand-in. Each group gets its own slice of the same servers, enforced on tools/list and tools/call. In production only the target host changes.</p>
-<p><strong>Token flow.</strong> The user token is validated and never forwarded. Each backend gets a token the gateway STS issued for the same user.</p>
-<p><strong>A2A.</strong> Users can discover and call only agent-a. agent-a reaches agent-b and agent-c with its own identity. agent-b calling agent-c is refused at the gateway, not inside the agent.</p>
-<p><strong>Limits today.</strong> A2A authorization is per agent route, not per method or skill. Content guardrails for A2A use ext_proc. A2A rate limits count requests, not tokens.</p>
+<div class="envnote" id="envnote">
+<p><strong>Control plane.</strong> The registry holds every agent, MCP server and model with its owner and data class. Changes go through approval, and access policies decide what each team sees.</p>
+<p><strong>Data plane.</strong> agentgateway carries every tool, agent and model call. Identity, tool access, guardrails and token exchange are enforced per call, not per app.</p>
+<p><strong>Runtimes.</strong> kagent runs agents on Kubernetes. Approved MCP servers can also be published straight to the gateway, with no compute to manage.</p>
+<p><strong>Identity.</strong> Keycloak keeps the demo self-contained. Pointing sign-in at your own IdP is configuration, not code.</p>
 </div>
 
-<ol class="legend">
-<li><b>1</b><span>The catalog shows what exists, who owns it and what data it touches, plus agents running that nobody registered.</span></li>
-<li><b>2</b><span>A developer submits a new agent version. Their write is staged for approval, not published.</span></li>
-<li><b>3</b><span>The admin approves it, then publishes an MCP server to the Virtual runtime. The registry creates the gateway route and backend, carrying the per-tool scope rule.</span></li>
-<li><b>4</b><span>A client calls as a user. The gateway checks the JWT, filters tools by scope, masks PII and mints an on-behalf-of token for the backend.</span></li>
-<li><b>5</b><span>An approved MCP server or agent is deployed to kagent. Agents reach their tools through the same gateway, so they inherit the same rules.</span></li>
-<li><b>6</b><span>Audit from both planes: registry events show who submitted, approved and deployed; gateway traces show every call.</span></li>
-</ol>
-
-<p class="foot">Catalog contents, teams and data in this demo are fictional.</p>
+<p class="foot">Teams, people and data in this demo are fictional. Use the arrow keys to step through a walkthrough.</p>
 </main>
+
+<script>
+(() => {
+  const M = {
+    P1: {t: "What it looks like on Kubernetes", a: "Platform", k: "cluster gw reg kagent idp ui r-mcp r-fd r-search r-a2a r-llm r-reg",
+         p: "The whole platform is standard Kubernetes: Helm charts, Gateway API objects, policies as YAML in a repo.",
+         s: "The same objects in kubectl and in the Solo UI: gateways, routes, policies."},
+    P2: {t: "Observability", a: "Platform", k: "act-client e-client gw log ui e-traces",
+         p: "One place to see MCP, A2A and model traffic: who called what, and what the gateway decided.",
+         s: "Routes with latency, traces per call, token usage. Refusals show in the access log."},
+    X1: {t: "Extension points", a: "Platform", k: "gw svc e-svc m-route p-guard",
+         p: "Plug your own logic into routing and policy without forking the gateway.",
+         s: "A callout that picks the model, a conditional model rule, and ext_proc or ext_authz hooks."},
+    G1: {t: "One MCP endpoint, tools per team", a: "MCP", k: "act-eng act-sales act-client e-client r-mcp p-jwt p-filter e-tools mcp-records mcp-inv mcp-ops",
+         p: "One endpoint federates three systems, including a REST API turned into tools with no code. Each team sees only its tools.",
+         s: "Engineering sees records and ops tools, sales sees inventory and ops tools, no token gets 401."},
+    G2: {t: "Down-scoped SaaS tools", a: "MCP", k: "act-admin act-eng act-sales act-aud act-client e-client r-fd p-jwt p-filter e-tools mcp-mail mcp-code",
+         p: "The same mail and code-hosting servers, a different slice per user: mail off for some, read-only for others.",
+         s: "16, 13, 9 and 5 tools by user. Sending mail or merging is refused at the gateway."},
+    G3: {t: "Guardrails on tool calls", a: "MCP", k: "act-client e-client r-mcp p-guard e-tools mcp-records",
+         p: "Policy applies even to authorized users: destructive tools are blocked, personal data is masked in results.",
+         s: "A delete is blocked; dates of birth and phone numbers come back redacted."},
+    G4: {t: "On-behalf-of token flow", a: "Identity", k: "act-sales act-client e-client idp e-trust2 r-fd p-jwt p-obo e-tools mcp-mail",
+         p: "The backend never sees the user's own token: the gateway exchanges it for a short-lived token for the same user.",
+         s: "The server reports the real caller, with a token issued by the gateway."},
+    G5: {t: "Tool search for large catalogs", a: "MCP", k: "act-eng act-sales act-client e-client r-search p-filter p-guard p-obo e-tools mcp-records mcp-inv mcp-ops",
+         p: "An agent sees two tools, search and invoke, instead of every schema, so hundreds of tools do not fill its context.",
+         s: "2 tools instead of 6; a lookup returns one schema; team rules and masking still apply."},
+    A1: {t: "A2A: who can call whom", a: "A2A", k: "act-sales act-client e-client r-a2a p-jwt e-a2a ag-a ag-b ag-c log",
+         p: "Users reach only the coordinator agent. It calls the specialists with its own identity; a specialist calling another is refused.",
+         s: "Every hop logged with caller, method and outcome; agent-b to agent-c gets 403 at the gateway."},
+    L1: {t: "Model routing and failover", a: "LLM", k: "act-client e-client r-llm m-route e-models mdl-self mdl-hosted",
+         p: "One virtual model: the self-hosted model first, a hosted model when it fails or is overloaded.",
+         s: "An answer that names the model that served it."},
+    L2: {t: "Model access by identity", a: "LLM", k: "act-eng act-client e-client r-llm p-jwt m-route e-models mdl-hosted",
+         p: "Which models a user may call comes from their identity, not from which API key an app holds.",
+         s: "The premium model answers one team and refuses another."},
+    L3: {t: "Prompt-injection guard", a: "LLM", k: "act-client e-client r-llm m-route e-models mdl-self",
+         p: "Prompts are checked before any model sees them: injection attempts blocked, personal data masked.",
+         s: "An injection attempt gets a policy refusal; a normal prompt goes through."},
+    L4: {t: "Token budgets per user", a: "LLM", k: "act-eng act-sales act-client e-client r-llm m-route e-models mdl-self",
+         p: "A per-user token budget keyed on the verified identity, so changing a header cannot reset it.",
+         s: "A couple of answers, then 429; another user still has a budget."},
+    R1: {t: "Catalog and discovery", a: "Registry", k: "act-admin e-bus reg reg-cat kagent",
+         p: "What exists, who owns it and what data it touches, plus agents running that nobody registered.",
+         s: "The catalog, and the unregistered agents found in the runtime."},
+    R2: {t: "Who sees what in the catalog", a: "Registry", k: "act-eng act-sales e-bus reg reg-pol",
+         p: "Each team sees and changes only its own entries.",
+         s: "Two developers, two different catalogs."},
+    R3: {t: "A change and its approval", a: "Registry", k: "act-eng act-appr e-bus reg reg-appr",
+         p: "Developers request, they do not publish. An approver sees exactly what changes before it goes live.",
+         s: "A pending request with its diff, then approval."},
+    R4: {t: "Publish to the gateway", a: "Registry", k: "act-admin e-bus reg reg-virt e-publish gw r-reg",
+         p: "An approved MCP server becomes a governed gateway route with no tickets and no compute.",
+         s: "A new route under /registry, with its access rule already attached."},
+    R5: {t: "Deploy to an agent runtime", a: "Registry", k: "act-admin e-bus reg reg-virt e-deploy kagent e-kagent",
+         p: "The registry deploys what it approved to kagent; the agent then reaches tools through the same gateway.",
+         s: "The deployment appears in the runtime and in the catalog."},
+    R6: {t: "Audit trail", a: "Registry", k: "act-aud e-bus reg reg-audit log ui e-traces",
+         p: "Who submitted, approved and deployed what, next to every call the gateway carried.",
+         s: "Registry events and gateway traces, from the auditor's read-only view."}
+  };
+  const ALL = Object.keys(M);
+  const svg = document.getElementById("map"), panel = document.getElementById("panel"), layout = document.getElementById("layout");
+  const envnote = document.getElementById("envnote"), stepsEl = document.getElementById("steps");
+  const bEnv = document.getElementById("b-env"), bTour = document.getElementById("b-tour");
+  let chain = ALL, i = 0;
+
+  const fromHash = () => {
+    const h = location.hash.replace(/^#/, "");
+    if (!h.startsWith("tour")) return null;
+    const ids = h.split("-").slice(1).filter(x => M[x]);
+    return ids.length ? ids : ALL;
+  };
+  const light = (id) => {
+    const keys = new Set(M[id].k.split(" "));
+    svg.querySelectorAll("[data-k]").forEach(el => el.classList.toggle("on", keys.has(el.dataset.k)));
+    // parents of lit chips stay readable
+    ["mcpbox:mcp-", "agbox:ag-", "mdlbox:mdl-", "gw:r-", "gw:p-", "reg:reg-"].forEach(rule => {
+      const [box, pre] = rule.split(":");
+      if ([...keys].some(k => k.startsWith(pre))) svg.querySelector(`[data-k="${box}"]`).classList.add("on");
+    });
+    svg.querySelector('[data-k="cluster"]').classList.add("on");
+  };
+  const show = () => {
+    const id = chain[i], m = M[id];
+    document.getElementById("p-title").textContent = `${id} · ${m.t}`;
+    document.getElementById("p-area").textContent = m.a;
+    document.getElementById("p-proves").textContent = m.p;
+    document.getElementById("p-see").textContent = "You will see: " + m.s;
+    document.getElementById("count").textContent = `${i + 1} of ${chain.length}`;
+    document.getElementById("prev").disabled = i === 0;
+    document.getElementById("next").disabled = i === chain.length - 1;
+    stepsEl.querySelectorAll("button").forEach((b, n) => b.setAttribute("aria-current", n === i ? "step" : "false"));
+    light(id);
+  };
+  const mode = (tour) => {
+    bEnv.setAttribute("aria-pressed", String(!tour)); bTour.setAttribute("aria-pressed", String(tour));
+    panel.hidden = !tour; envnote.hidden = tour; layout.classList.toggle("tour", tour); svg.classList.toggle("focus", tour);
+    if (tour) {
+      stepsEl.replaceChildren(...chain.map((id, n) => {
+        const li = document.createElement("li"), b = document.createElement("button");
+        b.type = "button"; b.textContent = id; b.title = M[id].t; b.onclick = () => { i = n; show(); };
+        li.append(b); return li;
+      }));
+      show();
+    } else svg.querySelectorAll(".on").forEach(el => el.classList.remove("on"));
+  };
+  bEnv.onclick = () => mode(false);
+  bTour.onclick = () => mode(true);
+  document.getElementById("prev").onclick = () => { if (i > 0) { i--; show(); } };
+  document.getElementById("next").onclick = () => { if (i < chain.length - 1) { i++; show(); } };
+  document.addEventListener("keydown", e => {
+    if (panel.hidden || e.altKey || e.metaKey || e.ctrlKey) return;
+    if (e.key === "ArrowRight") document.getElementById("next").click();
+    if (e.key === "ArrowLeft") document.getElementById("prev").click();
+  });
+  const start = () => { const c = fromHash(); if (c) { chain = c; i = 0; mode(true); } else mode(false); };
+  window.addEventListener("hashchange", start);
+  start();
+})();
+</script>
