@@ -1,7 +1,7 @@
 # G4 · Token flow: on-behalf-of, the backend never sees the user's token
 
 <!-- nav:start -->
-[All modules](README.md) · [Identity](README.md#identity) · Previous: [G3](G3-mcp-guardrails.md) · Next: [A1](A1-a2a-who-calls-whom.md)
+[All modules](README.md) · [Identity](README.md#identity) · Previous: [G3](G3-mcp-guardrails.md) · Next: [G5](G5-mcp-tool-search.md)
 <!-- nav:end -->
 
 **Area:** Identity · **Time:** 4 min
@@ -38,5 +38,5 @@ MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`. Solo UI **P
 None: this module only reads or calls things; it leaves no state behind.
 
 <!-- nav:start -->
-[All modules](README.md) · [Identity](README.md#identity) · Previous: [G3](G3-mcp-guardrails.md) · Next: [A1](A1-a2a-who-calls-whom.md)
+[All modules](README.md) · [Identity](README.md#identity) · Previous: [G3](G3-mcp-guardrails.md) · Next: [G5](G5-mcp-tool-search.md)
 <!-- nav:end -->

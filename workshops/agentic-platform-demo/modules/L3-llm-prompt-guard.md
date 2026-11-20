@@ -1,7 +1,7 @@
 # L3 · Prompt-injection guard and prompt masking
 
 <!-- nav:start -->
-[All modules](README.md) · [LLM](README.md#llm) · Previous: [L2](L2-llm-access-by-identity.md) · Next: [X1](X1-extension-points.md)
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [L2](L2-llm-access-by-identity.md) · Next: [L4](L4-llm-token-budgets.md)
 <!-- nav:end -->
 
 **Area:** LLM · **Time:** 3 min
@@ -34,5 +34,5 @@ Solo UI **Policies** lists the guardrail objects; show the block itself in Termi
 None: this module only reads or calls things; it leaves no state behind.
 
 <!-- nav:start -->
-[All modules](README.md) · [LLM](README.md#llm) · Previous: [L2](L2-llm-access-by-identity.md) · Next: [X1](X1-extension-points.md)
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [L2](L2-llm-access-by-identity.md) · Next: [L4](L4-llm-token-budgets.md)
 <!-- nav:end -->

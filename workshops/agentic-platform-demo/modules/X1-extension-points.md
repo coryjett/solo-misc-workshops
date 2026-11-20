@@ -1,7 +1,7 @@
 # X1 · Extension points: plug your own logic into routing and policy
 
 <!-- nav:start -->
-[All modules](README.md) · [Platform](README.md#platform) · Previous: [L3](L3-llm-prompt-guard.md) · Next: [R1](R1-registry-catalog.md)
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [L4](L4-llm-token-budgets.md) · Next: [R1](R1-registry-catalog.md)
 <!-- nav:end -->
 
 **Area:** Platform · **Time:** 5 min
@@ -46,5 +46,5 @@ n/a (config walkthrough).
 None: this module only reads or calls things; it leaves no state behind.
 
 <!-- nav:start -->
-[All modules](README.md) · [Platform](README.md#platform) · Previous: [L3](L3-llm-prompt-guard.md) · Next: [R1](R1-registry-catalog.md)
+[All modules](README.md) · [Platform](README.md#platform) · Previous: [L4](L4-llm-token-budgets.md) · Next: [R1](R1-registry-catalog.md)
 <!-- nav:end -->

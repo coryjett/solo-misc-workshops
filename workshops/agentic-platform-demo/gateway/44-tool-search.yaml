@@ -1,0 +1,82 @@
+# G5: the same three systems as /mcp, but in Search mode at localhost:8081/search/mcp. tools/list returns
+# two meta-tools (get_tool, invoke_tool) instead of every schema, so an agent with hundreds of tools
+# looks them up instead of loading them all into its context. Separate path: /mcp is untouched.
+# Stateful sessions on purpose: with sessionRouting Stateless and several targets, v2026.11.1 misreads
+# the meta-tool name (get_tool fails with "unknown service get").
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata: { name: tool-search-mcp, namespace: agentgateway-system }
+spec:
+  entMcp:
+    toolMode: Search
+    targets:
+      - name: records
+        static: { host: records-mcp.${TOOLS_NS}.svc.cluster.local, port: 8000, path: /mcp, protocol: StreamableHTTP }
+      - name: inventory
+        static: { host: inventory-mcp.${TOOLS_NS}.svc.cluster.local, port: 8000, path: /mcp, protocol: StreamableHTTP }
+      - name: opsapi
+        static:
+          host: ops-api.${TOOLS_NS}.svc.cluster.local
+          port: 8000
+          protocol: OpenAPI
+          openAPI: { schemaRef: { name: opsapi-openapi } }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: tool-search-mcp, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { name: mcp-gateway, namespace: agentgateway-system } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /search/mcp } } ]
+      backendRefs: [ { name: tool-search-mcp, group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend } ]
+      timeouts: { request: "0s" }
+---
+# Same team rules as /mcp (G1): a lookup only finds tools the caller may use.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: tool-search-authz, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend, name: tool-search-mcp } ]
+  backend:
+    mcp:
+      authorization:
+        action: Allow
+        policy:
+          matchExpressions:
+            - "'team-engineering' in jwt.groups && (mcp.tool.target == 'records' || mcp.tool.target == 'opsapi')"
+            - "'team-sales' in jwt.groups && (mcp.tool.target == 'inventory' || mcp.tool.target == 'opsapi')"
+            - "'are-admins' in jwt.groups || 'team-governance' in jwt.groups"
+---
+# Same data guardrails as /mcp (G3), so Search mode is not a way around them.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: tool-search-guardrails, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend, name: tool-search-mcp } ]
+  backend:
+    mcp:
+      guardrails:
+        processors:
+          - methods: { tools/call: Request }
+            expression:
+              # In Search mode the real tool arrives as invoke_tool's "name" argument.
+              condition: "mcp.params.name.startsWith('delete_') || (mcp.params.name == 'invoke_tool' && string(mcp.params.arguments.name).contains('delete_'))"
+              reject: "Blocked by policy: destructive tools are not available to AI clients"
+          - methods: { tools/call: Response }
+            expression:
+              # Redact BOTH result channels: text content and structuredContent (a second copy many
+              # MCP servers return). Missing either one leaks PII.
+              transform: >-
+                mcp.result.merge({
+                  'content': mcp.result.content.map(c,
+                    c.type == 'text'
+                      ? c.merge({'text': c.text
+                          .regexReplaceAll('\\b\\d{4}-\\d{2}-\\d{2}\\b', '[DOB REDACTED]')
+                          .regexReplaceAll('\\b\\d{3}-\\d{3}-\\d{4}\\b', '[PHONE REDACTED]')})
+                      : c)
+                }).merge(
+                  has(mcp.result.structuredContent) && has(mcp.result.structuredContent.result)
+                    ? {'structuredContent': {'result': string(mcp.result.structuredContent.result)
+                          .regexReplaceAll('\\b\\d{4}-\\d{2}-\\d{2}\\b', '[DOB REDACTED]')
+                          .regexReplaceAll('\\b\\d{3}-\\d{3}-\\d{4}\\b', '[PHONE REDACTED]')}}
+                    : {})

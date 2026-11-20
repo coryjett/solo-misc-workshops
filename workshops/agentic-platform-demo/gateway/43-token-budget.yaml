@@ -1,0 +1,50 @@
+# L4: a per-user token budget on its own route (localhost:8081/budget/v1/chat/completions), so no other
+# module is ever rate limited. The budget keys on the verified JWT subject (gateway-jwt validates first),
+# so a user cannot reset it by changing a header. Counts input tokens, 100 per user per minute.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: llm-budget, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { name: mcp-gateway } ]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /budget } } ]
+      backendRefs: [ { group: agentgateway.dev, kind: AgentgatewayModel, name: "*" } ]   # model-serving routes pick the model by request body
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayModel
+metadata: { name: budget, namespace: agentgateway-system }
+spec:
+  parentRefs: [ { group: gateway.networking.k8s.io, kind: HTTPRoute, name: llm-budget } ]
+  match: { model: budget }
+  provider: OpenAI
+  baseURL: ${LOCAL_LLM_BASE_URL}
+  policies:
+    auth: { secretRef: { name: local-llm-key } }
+    headers:
+      request:
+        set: [ { name: User-Agent, value: agentgateway-demo } ]
+    transformations:
+      - { field: model, expression: '"${LOCAL_LLM_MODEL}"' }
+---
+apiVersion: ratelimit.solo.io/v1alpha1
+kind: RateLimitConfig
+metadata: { name: llm-budget-per-user, namespace: agentgateway-system }
+spec:
+  raw:
+    descriptors:
+      - key: user
+        rateLimit: { unit: MINUTE, requestsPerUnit: 100 }
+    rateLimits:
+      - type: TOKEN
+        actions:
+          - cel: { key: user, expression: 'jwt.sub' }
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: llm-budget-per-user, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: gateway.networking.k8s.io, kind: HTTPRoute, name: llm-budget } ]
+  traffic:
+    entRateLimit:
+      global:
+        rateLimitConfigRefs: [ { name: llm-budget-per-user } ]

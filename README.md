@@ -6,7 +6,7 @@ Workshops, walkthroughs, and reference materials for Solo.io products.
 
 ### Agentic Platform Demo (modular)
 
-One lab (agentregistry Enterprise, agentgateway Enterprise, kagent, Keycloak) and 18 bite-size, industry-neutral demo modules (MCP, A2A, LLM routing and guardrails, identity and token exchange, Kubernetes deployment, observability, registry governance) that chain into a demo for any audience. Suggested chains per audience, chaining rules, and a walkthrough template; every module command is checked by the lab's verify scripts.
+One lab (agentregistry Enterprise, agentgateway Enterprise, kagent, Keycloak) and 20 bite-size, industry-neutral demo modules (MCP, A2A, LLM routing and guardrails, identity and token exchange, Kubernetes deployment, observability, registry governance) that chain into a demo for any audience. Suggested chains per audience, chaining rules, and a walkthrough template; every module command is checked by the lab's verify scripts.
 
 - **[Modules and suggested chains](workshops/agentic-platform-demo/modules/)**
 

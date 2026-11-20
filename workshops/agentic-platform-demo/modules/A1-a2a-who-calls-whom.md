@@ -1,7 +1,7 @@
 # A1 · A2A: who can call whom
 
 <!-- nav:start -->
-[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G4](G4-token-flow-obo.md) · Next: [L1](L1-llm-routing-failover.md)
+[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G5](G5-mcp-tool-search.md) · Next: [L1](L1-llm-routing-failover.md)
 <!-- nav:end -->
 
 **Area:** A2A · **Time:** 8 min
@@ -50,5 +50,5 @@ agent-a was called by: are-cli (sales-dev)
 None: this module only reads or calls things; it leaves no state behind.
 
 <!-- nav:start -->
-[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G4](G4-token-flow-obo.md) · Next: [L1](L1-llm-routing-failover.md)
+[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G5](G5-mcp-tool-search.md) · Next: [L1](L1-llm-routing-failover.md)
 <!-- nav:end -->

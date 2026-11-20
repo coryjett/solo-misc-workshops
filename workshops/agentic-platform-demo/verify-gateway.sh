@@ -48,6 +48,13 @@ check "sales-dev sees no mail tools"       "no-mail" "$(MCP_URL=$FD mcp sales-de
 check "sales-dev send_mail refused"        "unknown resource" "$(MCP_URL=$FD mcp sales-dev call workiq_send_mail '{"to":"x@example.com","subject":"s","body":"b"}')"
 check "eng-dev merge refused"              "unknown resource" "$(MCP_URL=$FD mcp eng-dev call github_merge_pull_request '{"repo":"data-pipeline","number":1}')"
 check "eng-dev create_issue allowed"       "CREATED issue" "$(MCP_URL=$FD mcp eng-dev call github_create_issue '{"repo":"data-pipeline","title":"t"}')"
+
+echo "## tool search (/search/mcp): two meta-tools, same team rules and guardrails"
+SM="$GW_URL/search/mcp"
+check "eng-dev: 2 meta-tools"                  "2 tools" "$(MCP_URL=$SM mcp eng-dev list | head -1)"
+check "invoke masks PII"                       "PHONE REDACTED" "$(MCP_URL=$SM mcp eng-dev call invoke_tool '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}')"
+check "invoke delete blocked"                  "Blocked by policy" "$(MCP_URL=$SM mcp eng-dev call invoke_tool '{"name":"records_delete_customer_record","arguments":{"customer_id":"C-1001"}}')"
+check "sales-dev cannot invoke records"        "unknown resource" "$(MCP_URL=$SM mcp sales-dev call invoke_tool '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}')"
 check "OBO: WorkIQ gets a gateway STS token"    "agentgateway-system.svc.cluster.local:7777" "$(MCP_URL=$FD mcp sales-dev call workiq_whoami '{}')"
 
 echo "## A2A: users reach agent-a only; only agent-a calls agent-b and agent-c"

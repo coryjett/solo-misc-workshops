@@ -37,10 +37,12 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 | [G2](G2-mcp-down-scoped-saas.md) | MCP | Down-scoped SaaS tools (mail and code-hosting stand-ins) | 8 |
 | [G3](G3-mcp-guardrails.md) | MCP | Guardrails on tool calls: block destructive tools, mask PII | 4 |
 | [G4](G4-token-flow-obo.md) | Identity | Token flow: on-behalf-of, the backend never sees the user's token | 4 |
+| [G5](G5-mcp-tool-search.md) | MCP | Tool search: hundreds of tools without filling the context | 5 |
 | [A1](A1-a2a-who-calls-whom.md) | A2A | A2A: who can call whom | 8 |
 | [L1](L1-llm-routing-failover.md) | LLM | LLM routing and failover (virtual models) | 5 |
 | [L2](L2-llm-access-by-identity.md) | LLM | Model access by identity | 3 |
 | [L3](L3-llm-prompt-guard.md) | LLM | Prompt-injection guard and prompt masking | 3 |
+| [L4](L4-llm-token-budgets.md) | LLM | Token budgets per user | 4 |
 | [X1](X1-extension-points.md) | Platform | Extension points: plug your own logic into routing and policy | 5 |
 | [R1](R1-registry-catalog.md) | Registry | What exists: catalog and shadow-IT discovery | 6 |
 | [R2](R2-registry-team-scoping.md) | Registry | Who sees what in the catalog | 3 |
@@ -65,6 +67,7 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 - [G1 · One MCP endpoint, tools filtered per team](G1-mcp-per-team-tools.md) _(5 min)_
 - [G2 · Down-scoped SaaS tools (mail and code-hosting stand-ins)](G2-mcp-down-scoped-saas.md) _(8 min)_
 - [G3 · Guardrails on tool calls: block destructive tools, mask PII](G3-mcp-guardrails.md) _(4 min)_
+- [G5 · Tool search: hundreds of tools without filling the context](G5-mcp-tool-search.md) _(5 min)_
 
 ### Identity
 - [G4 · Token flow: on-behalf-of, the backend never sees the user's token](G4-token-flow-obo.md) _(4 min)_
@@ -76,6 +79,7 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 - [L1 · LLM routing and failover (virtual models)](L1-llm-routing-failover.md) _(5 min)_
 - [L2 · Model access by identity](L2-llm-access-by-identity.md) _(3 min)_
 - [L3 · Prompt-injection guard and prompt masking](L3-llm-prompt-guard.md) _(3 min)_
+- [L4 · Token budgets per user](L4-llm-token-budgets.md) _(4 min)_
 
 ### Registry
 - [R1 · What exists: catalog and shadow-IT discovery](R1-registry-catalog.md) _(6 min)_
