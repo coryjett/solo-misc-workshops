@@ -49,6 +49,7 @@ export MCP_URL=$GW_URL/mcp
 
 - Solo UI **Composable MCP**: walk the Import step (OpenAPI spec to tools). Don't deploy.
 - MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/mcp`, open `opsapi_get_site_hours`: the generated schema.
+- Run it with `site_id` `site-112` inside the `path` field (or `site-205`).
 - Solo UI **Policies**: `mcp-tool-authz`.
 
 Editor:
