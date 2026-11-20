@@ -60,8 +60,19 @@ spec:
           - methods: { tools/call: Request }
             expression:
               # In Search mode the real tool arrives as invoke_tool's "name" argument.
-              # Total: a missing or oddly shaped argument can never skip the check.
-              condition: "mcp.params.name.contains('delete_') || (has(mcp.params.arguments) && has(mcp.params.arguments.name) && string(mcp.params.arguments.name).contains('delete_'))"
+              # Fail closed: an invoke_tool call whose target cannot be read is rejected outright.
+              condition: >-
+                mcp.params.name.endsWith('invoke_tool') &&
+                !(has(mcp.params.arguments) && type(mcp.params.arguments) == map &&
+                  has(mcp.params.arguments.name) && type(mcp.params.arguments.name) == string)
+              reject: "Blocked by policy: invoke_tool needs the name of the tool to call"
+          - methods: { tools/call: Request }
+            expression:
+              # Destructive tools, called directly or through invoke_tool.
+              condition: >-
+                mcp.params.name.matches('(delete|drop|purge|remove|wipe)_') ||
+                (mcp.params.name.endsWith('invoke_tool') &&
+                  string(mcp.params.arguments.name).matches('(delete|drop|purge|remove|wipe)_'))
               reject: "Blocked by policy: destructive tools are not available to AI clients"
           - methods: { tools/call: Response }
             expression:
