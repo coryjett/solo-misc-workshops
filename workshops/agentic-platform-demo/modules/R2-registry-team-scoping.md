@@ -21,9 +21,7 @@
 Registry UI (eng-dev): **Catalog** shows engineering and shared items only, no sales items.
 Optional terminal: `./who-sees-what.sh`
 
-## Expect
-
-eng-dev sees no sales agents.
+- Look for: no sales agents in eng-dev's catalog.
 
 ## Say
 

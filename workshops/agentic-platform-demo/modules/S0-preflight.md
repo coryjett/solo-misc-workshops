@@ -32,10 +32,6 @@ kubectl --context kind-agentic-demo -n agentgateway-system logs deploy/mcp-gatew
   | grep --line-buffered -E 'protocol=(a2a|mcp|llm)'
 ```
 
-## Expect
-
-`ALL-PASS` twice, then `pending: 1` from reset (the approval used in R3).
-
 ## Say
 
 - Run `./reset.sh` again between back-to-back demos (about 40 seconds).

@@ -35,18 +35,14 @@ export MCP_URL=$GW_URL/mcp
 - Delete operation returns policy violation error.
 - Destructive tools remain unavailable for this user.
 
-Editor:
-- `gateway/22-guardrails.yaml`.
-
-## In the UI
+**3. Same thing in the UI**
 
 - MCP Inspector as eng-dev on `/mcp`: run `records_lookup_customer` with `C-1001`.
 - Point at the masked fields.
 - Solo UI **Policies**: `mcp-guardrails`.
 
-## Expect
-
-`[DOB REDACTED]`, `[PHONE REDACTED]`; the delete returns "destructive tools are not available".
+Editor:
+- `gateway/22-guardrails.yaml`.
 
 ## Say
 

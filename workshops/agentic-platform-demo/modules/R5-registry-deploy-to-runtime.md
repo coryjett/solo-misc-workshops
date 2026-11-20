@@ -30,9 +30,7 @@ Registry UI (admin):
 - **Catalog** > **everything-reference-mcp** > **Deploy**: Kubernetes, `onprem-k8s-kagent`.
 kagent UI: reload > **MCP & tools**, filter `everything`: 8 tools discovered.
 
-## Expect
-
-Deployed on kagent; tools discovered.
+- Look for: deployed on kagent, tools discovered.
 
 ## Say
 

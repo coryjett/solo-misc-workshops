@@ -40,20 +40,16 @@ kubectl --context kind-agentic-demo -n agentgateway-system get \
 ```
 - The gateway's own resources: what it routes to, and the rules.
 
-Editor:
-- `gateway/00-gateway.yaml`: the Gateway.
-- `gateway/50-frontdoor-mcp.yaml`: a backend, its route and policies.
-
-## In the UI
+**4. Same thing in the UI**
 
 - Solo UI http://localhost:8082 **Gateways**: `mcp-gateway`, its routes and destinations.
 - **Routes**: every path you just listed with kubectl.
 - **Policies**: the same objects, all Active.
 - Say: same objects, two views. CLI for automation, UI for operators.
 
-## Expect
-
-Pods Running; routes for `/mcp`, `/frontdoor/mcp`, `/a2a/agent-*`, `/registry`; backends and policies listed.
+Editor:
+- `gateway/00-gateway.yaml`: the Gateway.
+- `gateway/50-frontdoor-mcp.yaml`: a backend, its route and policies.
 
 ## Say
 

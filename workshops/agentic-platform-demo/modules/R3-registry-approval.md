@@ -26,9 +26,7 @@ Registry UI (admin):
 - **Approve**.
 - Open 2.0.0 > **Agent Composition**: the new `data-masking-mcp` dependency.
 
-## Expect
-
-Pending for eng-dev; approved by admin; 1.0.0 was served until approval.
+- Look for: 1.0.0 stays live until the approval.
 
 ## Say
 

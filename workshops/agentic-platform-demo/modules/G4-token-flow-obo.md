@@ -23,14 +23,13 @@ export MCP_URL=$GW_URL/frontdoor/mcp
 ./mcp.py sales-dev call workiq_whoami '{}'
 ```
 
-## In the UI
+- The caller is sales-dev.
+- `token issued by enterprise-agentgateway...:7777`: the gateway's token service, not the IdP.
+
+**Then in the UI**
 
 - MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`.
 - Solo UI **Policies**: `frontdoor-mcp-obo`.
-
-## Expect
-
-"caller: sales-dev (sub ...); token issued by enterprise-agentgateway...:7777" (the gateway's token service).
 
 ## Say
 

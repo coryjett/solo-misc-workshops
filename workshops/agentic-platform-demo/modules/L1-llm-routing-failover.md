@@ -23,18 +23,15 @@
 ```
 - "auto" answers from the self-hosted model, in about 5 seconds.
 - The first line names the model that answered.
-Editor:
-- `gateway/40-models.yaml`: `auto` = self-hosted first, cloud second.
-- Health eviction on 5xx and 429.
 
-## In the UI
+**Then in the UI**
 
 - Solo UI **Dashboard**: token usage by model.
 - Solo UI **Tracing** (5m): the `POST /v1/chat/completions` row and the model that answered.
 
-## Expect
-
-An answer, with "answered by" naming the model.
+Editor:
+- `gateway/40-models.yaml`: `auto` = self-hosted first, cloud second.
+- Health eviction on 5xx and 429.
 
 ## Say
 

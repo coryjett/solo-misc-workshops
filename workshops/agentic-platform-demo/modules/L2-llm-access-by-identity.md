@@ -32,17 +32,13 @@
 ```
 - An answer: the admin's group allows it.
 
-Editor:
-- `gateway/41-llm-identity.yaml`.
-
-## In the UI
+**3. Same thing in the UI**
 
 - Solo UI **Dashboard**: admin's gpt-4.1-mini call shows; the refused one does not.
 - Show the 403 in Terminal 2.
 
-## Expect
-
-eng-dev gets `model_authorization_denied`; admin gets an answer.
+Editor:
+- `gateway/41-llm-identity.yaml`.
 
 ## Say
 

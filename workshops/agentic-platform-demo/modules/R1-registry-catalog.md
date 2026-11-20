@@ -24,9 +24,7 @@ Registry UI (admin):
 3. Open **data-masking-mcp** > **Used by Agents**: the blast radius.
 4. **Instances** > clear the "Managed Resources" filter: agents and servers nobody registered.
 
-## Expect
-
-Engineering and restricted-data items; dependency view; unregistered (discovered) items.
+- Look for: engineering and restricted-data items, the dependency view, unregistered items.
 
 ## Say
 

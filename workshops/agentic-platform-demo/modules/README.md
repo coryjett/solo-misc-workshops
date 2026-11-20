@@ -111,7 +111,7 @@ Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 2. **R3, R4 and R5 change state** (approve, publish, deploy). Each card's **Cleanup** undoes just that module; `./reset.sh` (about 40 seconds) undoes everything. All other modules leave no state behind.
 3. Keep a demo to about 40 minutes of modules; leave the rest for questions.
 4. Show refusals in Terminal 2 (the live log), not in the UI.
-5. Do it in the CLI, then show the same fact in the UI (each module has an **In the UI** step).
+5. Do it in the CLI, then show the same fact in the UI (each module ends with a **Same thing in the UI** beat).
 
 ## Suggested chains
 

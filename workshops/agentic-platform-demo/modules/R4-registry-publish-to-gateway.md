@@ -29,9 +29,7 @@ Registry UI (admin):
 Solo UI: **Routes** (new `/registry/records` route), **Policies** (`registry-backends-platform` now Active).
 Then: `./inspector.sh eng-dev http://localhost:8081/registry/records` (3 tools, PII masked) and `sales-dev` (0 tools).
 
-## Expect
-
-New route and backend; eng-dev 3 tools, sales-dev 0.
+- Look for: a new route and backend; eng-dev gets 3 tools, sales-dev 0.
 
 ## Say
 

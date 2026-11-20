@@ -74,21 +74,15 @@ export MCP_URL=$GW_URL/frontdoor/mcp
 ```
 - `CREATED`: writes the policy allows go through.
 
-Editor:
-- `gateway/50-frontdoor-mcp.yaml`: four CEL lines on group, server and tool name.
-
-## In the UI
+**8. Same thing in the UI**
 
 - MCP Inspector: `./inspector.sh sales-dev http://localhost:8081/frontdoor/mcp`: 9 tools, no mail.
 - Same for `eng-dev`: 13 tools.
 - Solo UI **Policies**: `frontdoor-mcp-tool-authz`.
 - Solo UI **Tracing** (5m): the `tools/call` rows for create_issue.
 
-## Expect
-
-- 16 / 13 / 9 / 5 tools.
-- send_mail and merge: HTTP 400 "unknown resource" (a hidden tool does not exist for that caller).
-- create_issue: CREATED.
+Editor:
+- `gateway/50-frontdoor-mcp.yaml`: four CEL lines on group, server and tool name.
 
 ## Say
 

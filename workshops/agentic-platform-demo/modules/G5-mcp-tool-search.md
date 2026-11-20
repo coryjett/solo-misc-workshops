@@ -79,24 +79,15 @@ MCP_URL=$GW_URL/mcp ./mcp.py eng-dev list
 ```
 - HTTP 400 `unknown resource`: not sales-dev's tool.
 
-Editor:
-- `gateway/44-tool-search.yaml`: `toolMode: Search` on the backend.
-- Same team rules as G1, same guardrails as G3, same on-behalf-of as G4.
-
-## In the UI
+**8. Same thing in the UI**
 
 - MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/search/mcp`: two tools.
 - Solo UI **Tracing** (5m): `get_tool` and `invoke_tool` rows.
 - Solo UI **Policies**: `tool-search-authz`, `tool-search-guardrails`.
 
-## Expect
-
-- 2 tools vs 6.
-- `get_tool`: name, description and argument schema.
-- sales-dev miss: `no_match`, plus `available_tools` (inventory and ops only).
-- Invoke: `[DOB REDACTED]`, `[PHONE REDACTED]`.
-- Delete: "Blocked by policy".
-- sales-dev invoking records: HTTP 400 "unknown resource".
+Editor:
+- `gateway/44-tool-search.yaml`: `toolMode: Search` on the backend.
+- Same team rules as G1, same guardrails as G3, same on-behalf-of as G4.
 
 ## Say
 

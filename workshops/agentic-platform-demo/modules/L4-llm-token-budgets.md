@@ -28,6 +28,8 @@ for i in 1 2 3 4; do llm_call eng-dev budget budget "What does an API gateway do
 ```
 - `x-ratelimit-remaining` drains with each call, then `429 Too Many Requests`.
 - `llm_call` is a plain chat completion to `/budget/v1/chat/completions` (see `env.sh`).
+- A new minute mid-loop sends remaining back to 100: that is the window resetting.
+- The limiter counts its own estimate of input tokens, not the model's reported usage.
 
 **2. Same question as sales-dev**
 
@@ -36,22 +38,15 @@ llm_call sales-dev budget budget "What does an API gateway do?"
 ```
 - `200 OK` with a full budget: every user has their own counter.
 
-Editor:
-- `gateway/43-token-budget.yaml`: 100 input tokens per minute, keyed on `jwt.sub`.
-- Attached to the `/budget` route only; same prompt guards as L3.
-
-## In the UI
+**3. Same thing in the UI**
 
 - Solo UI **Tracing** (5m): `POST /budget/...` rows, 200s then 429s.
 - Solo UI **Dashboard**: token usage by model.
 - Solo UI **Policies**: `llm-budget-per-user`.
 
-## Expect
-
-- eng-dev: one or two `200`s, then `429`. Remaining shows the budget before each call.
-- If a new minute starts mid-loop, remaining jumps back to 100: say that is the window resetting.
-- The limiter counts its own estimate of input tokens, not the model's reported usage.
-- sales-dev: `200 OK` and its own `x-ratelimit-remaining`.
+Editor:
+- `gateway/43-token-budget.yaml`: 100 input tokens per minute, keyed on `jwt.sub`.
+- Attached to the `/budget` route only; same prompt guards as L3.
 
 ## Say
 

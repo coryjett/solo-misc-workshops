@@ -34,9 +34,7 @@ Solo UI http://localhost:8082:
    - Open one row: payload and trace id.
 3. **Dashboard:** tool requests, token usage by model, totals.
 
-## Expect
-
-Rows for the traffic you just generated.
+- Look for: rows for the traffic you just generated.
 
 ## Say
 

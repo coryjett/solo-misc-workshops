@@ -45,18 +45,9 @@ a2a_send sales-dev agent-a "Check the status of order 4512"
 - agent-a calls agent-b and agent-c with its own identity.
 - agent-b calling agent-c: `DENIED by gateway (HTTP 403)`.
 
-Editor:
-- `gateway/60-a2a.yaml`: two short policies.
+The output looks like this:
 
-## In the UI
-
-- Solo UI **Routes**: `a2a-agent-a/b/c`, Active, with p95 latency.
-- Solo UI **Policies**: `a2a-users-reach-agent-a`, `a2a-only-agent-a-calls-specialists`.
-- Solo UI **Tracing** (5m): the `POST /a2a/agent-*` hops.
-
-## Expect
-
-```
+```text
 agent-a handled: Check the status of order 4512
 agent-a was called by: are-cli (sales-dev)
   -> agent-b: agent-b handled: ...
@@ -64,6 +55,15 @@ agent-a was called by: are-cli (sales-dev)
        -> agent-c: DENIED by gateway (HTTP 403)
   -> agent-c: agent-c handled: ...
 ```
+
+**4. Same thing in the UI**
+
+- Solo UI **Routes**: `a2a-agent-a/b/c`, Active, with p95 latency.
+- Solo UI **Policies**: `a2a-users-reach-agent-a`, `a2a-only-agent-a-calls-specialists`.
+- Solo UI **Tracing** (5m): the `POST /a2a/agent-*` hops.
+
+Editor:
+- `gateway/60-a2a.yaml`: two short policies.
 
 ## Say
 

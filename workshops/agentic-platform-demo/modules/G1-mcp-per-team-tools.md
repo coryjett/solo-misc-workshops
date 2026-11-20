@@ -36,7 +36,7 @@ export MCP_URL=$GW_URL/mcp
 ./mcp.py eng-dev call opsapi_get_site_hours '{"path":{"site_id":"site-112"}}'
 ```
 - REST API responds to an MCP tool call.
-- Path parameters are grouped correctly in the request.
+- URL parameters go under `path`: the gateway built that schema from the spec.
 
 **3. Try with no token**
 
@@ -45,21 +45,15 @@ export MCP_URL=$GW_URL/mcp
 ```
 - `401`: no identity, no tools.
 
-Editor:
-- `gateway/11-mcp-federation.yaml`: three targets on one backend; `opsapi` is `protocol: OpenAPI`.
-- `gateway/21-tool-authz.yaml`: which team sees which system (three CEL lines).
-
-## In the UI
+**4. Same thing in the UI**
 
 - Solo UI **Composable MCP**: walk the Import step (OpenAPI spec to tools). Don't deploy.
 - MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/mcp`, open `opsapi_get_site_hours`: the generated schema.
 - Solo UI **Policies**: `mcp-tool-authz`.
 
-## Expect
-
-- eng-dev: 6 tools, `opsapi_*` and `records_*` side by side.
-- The call returns `{"site_id":"site-112","hours":"6am-11pm"}`: the REST API answered, the client only spoke MCP.
-- No token: 401.
+Editor:
+- `gateway/11-mcp-federation.yaml`: three targets on one backend; `opsapi` is `protocol: OpenAPI`.
+- `gateway/21-tool-authz.yaml`: which team sees which system (three CEL lines).
 
 ## Say
 

@@ -31,14 +31,10 @@ virtualModel:
 ```
 3. **ext_proc / ext_authz:** your gRPC or HTTP service sees the request and can set headers, rewrite, allow or deny; results can be cached with a TTL.
 
-## In the UI
+**Then in the UI**
 
 - Solo UI **Composable MCP**: the no-code path for APIs.
 - The callout and ext_proc hooks are config only: show the YAML.
-
-## Expect
-
-n/a (config walkthrough).
 
 ## Say
 
