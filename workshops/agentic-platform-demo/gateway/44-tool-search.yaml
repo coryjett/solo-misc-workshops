@@ -60,7 +60,8 @@ spec:
           - methods: { tools/call: Request }
             expression:
               # In Search mode the real tool arrives as invoke_tool's "name" argument.
-              condition: "mcp.params.name.startsWith('delete_') || (mcp.params.name == 'invoke_tool' && string(mcp.params.arguments.name).contains('delete_'))"
+              # Total: a missing or oddly shaped argument can never skip the check.
+              condition: "mcp.params.name.contains('delete_') || (has(mcp.params.arguments) && has(mcp.params.arguments.name) && string(mcp.params.arguments.name).contains('delete_'))"
               reject: "Blocked by policy: destructive tools are not available to AI clients"
           - methods: { tools/call: Response }
             expression:
@@ -80,3 +81,13 @@ spec:
                           .regexReplaceAll('\\b\\d{4}-\\d{2}-\\d{2}\\b', '[DOB REDACTED]')
                           .regexReplaceAll('\\b\\d{3}-\\d{3}-\\d{4}\\b', '[PHONE REDACTED]')}}
                     : {})
+---
+# On-Behalf-Of, as on /mcp (G4): tool servers receive an STS-issued token for the real user, not the raw IdP token.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata: { name: tool-search-obo, namespace: agentgateway-system }
+spec:
+  targetRefs: [ { group: enterpriseagentgateway.solo.io, kind: EnterpriseAgentgatewayBackend, name: tool-search-mcp } ]
+  backend:
+    tokenExchange:
+      mode: ExchangeOnly

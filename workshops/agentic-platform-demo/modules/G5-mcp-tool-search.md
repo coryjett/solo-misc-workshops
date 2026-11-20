@@ -22,7 +22,7 @@ MCP_URL=$GW_URL/mcp ./mcp.py eng-dev list               # the same user sees 6 t
 ./mcp.py eng-dev call invoke_tool '{"name":"records_delete_customer_record","arguments":{"customer_id":"C-1001"}}'   # blocked
 ./mcp.py sales-dev call invoke_tool '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}'   # refused: not sales-dev's tool
 ```
-Editor: `gateway/44-tool-search.yaml` (toolMode: Search on the backend; the same team rules as G1 and the same guardrails as G3, with the delete rule also checking invoke_tool's name argument).
+Editor: `gateway/44-tool-search.yaml` (toolMode: Search on the backend; the same team rules as G1 and the same guardrails as G3, with the delete rule also checking invoke_tool's name argument; and On-Behalf-Of as in G4, so the tool servers get a gateway-issued token for the user).
 
 ## In the UI
 

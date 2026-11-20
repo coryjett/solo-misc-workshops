@@ -20,6 +20,26 @@ spec:
   baseURL: ${LOCAL_LLM_BASE_URL}
   policies:
     auth: { secretRef: { name: local-llm-key } }
+    # Prompt guards, before any model sees the request: block injection attempts, mask PII.
+    promptGuard:
+      request:
+        - regex:
+            action: Reject
+            matches:
+              - '(?i)ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)'
+              - '(?i)disregard\s+(all\s+|any\s+|the\s+)?(previous|prior|above|system)\s+(instructions|rules|prompts?)'
+              - '(?i)(reveal|print|show|repeat)\s+(me\s+)?(your|the)\s+(system\s+prompt|hidden\s+instructions)'
+              - '(?i)you\s+are\s+now\s+(DAN|in\s+developer\s+mode|unrestricted|jailbroken)'
+          response:
+            statusCode: 403
+            message: "Blocked by policy: this request looks like a prompt-injection attempt."
+        - webhook:
+            action: Reject
+            failureMode: FailOpen
+            backendRef: { kind: Service, name: injection-guard, namespace: ${TOOLS_NS}, port: 8000 }
+        - regex:
+            action: Mask
+            builtins: [ Ssn, CreditCard, PhoneNumber, Email ]
     headers:
       request:
         set: [ { name: User-Agent, value: agentgateway-demo } ]

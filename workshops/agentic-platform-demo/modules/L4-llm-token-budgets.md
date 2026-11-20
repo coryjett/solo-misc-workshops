@@ -17,7 +17,7 @@ T=$(are_token eng-dev)
 for i in 1 2 3 4 5; do curl -s -o /dev/null -w "eng-dev request $i: HTTP %{http_code}\n" $GW_URL/budget/v1/chat/completions -H "Authorization: Bearer $T" -H 'content-type: application/json' -d '{"model":"budget","max_tokens":20,"messages":[{"role":"user","content":"In one short sentence, what does an API gateway do?"}]}'; done   # a few 200s, then 429
 curl -s -D - -o /dev/null $GW_URL/budget/v1/chat/completions -H "Authorization: Bearer $(are_token sales-dev)" -H 'content-type: application/json' -d '{"model":"budget","max_tokens":20,"messages":[{"role":"user","content":"In one short sentence, what does an API gateway do?"}]}' | grep -iE '^HTTP|x-ratelimit'   # sales-dev has its own budget
 ```
-Editor: `gateway/43-token-budget.yaml` (RateLimitConfig: type TOKEN, 100 input tokens per minute, key = CEL jwt.sub; policy attached to the llm-budget route only).
+Editor: `gateway/43-token-budget.yaml` (RateLimitConfig: type TOKEN, 100 input tokens per minute, key = CEL jwt.sub; policy attached to the llm-budget route only; the budget model keeps the same prompt guards as L3).
 
 ## In the UI
 
