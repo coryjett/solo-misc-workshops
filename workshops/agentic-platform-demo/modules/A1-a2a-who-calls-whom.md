@@ -42,8 +42,26 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 ```bash
 a2a_send sales-dev agent-a "Check the status of order 4512"
 ```
-- agent-a calls agent-b and agent-c with its own identity.
-- agent-b calling agent-c: `DENIED by gateway (HTTP 403)`.
+Talking points, hop by hop:
+- sales-dev reaches agent-a: allowed, sales-dev is in a user group.
+- agent-a calls agent-b and agent-c with its own token, not the user's.
+- The "called by" lines show who each agent saw: the user, then `agent-a`.
+- agent-b tries agent-c: `DENIED by gateway (HTTP 403)`.
+- agent-b's token says `azp: agent-b`; agent-c's route only accepts `agent-a`.
+- agent-c never sees that request. The gateway stops it.
+
+Where the policy is:
+- `gateway/60-a2a.yaml`, two short policies on the agent routes.
+- `a2a-users-reach-agent-a`: user groups may call agent-a.
+- `a2a-only-agent-a-calls-specialists`, on agent-b and agent-c routes: one CEL line.
+
+```yaml
+matchExpressions:
+  - "jwt.azp == 'agent-a'"
+```
+- `azp` is the client the token was issued to: each agent has its own Keycloak client.
+- No code in the agents: a buggy or compromised agent-b still cannot reach agent-c.
+- Same policies in the Solo UI under **Policies** (next beat).
 
 The output looks like this:
 
