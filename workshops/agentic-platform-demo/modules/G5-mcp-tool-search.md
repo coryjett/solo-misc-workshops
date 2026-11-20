@@ -6,6 +6,12 @@
 
 **Area:** MCP · **Time:** 5 min
 
+## Framing
+
+- Every tool schema lands in the model's context on every turn, before anyone asks anything.
+- With hundreds of tools that costs tokens and makes picking the right tool harder.
+- Next: agents that look tools up on demand, with the same rules still applied.
+
 **Proves:** Agents see two tools (`get_tool`, `invoke_tool`) instead of every schema, so big catalogs don't fill the context.
 
 - Team rules and guardrails still apply to what they find and call.
@@ -46,7 +52,6 @@ Editor:
 
 ## Say
 
-- Tool schemas cost context tokens on every turn, so 200 tools can cost thousands of tokens before the user asks anything.
 - Search mode pays only for the tools used.
 - The gateway still decides who may find and call what.
 - A miss tells the agent what it may use, so it recovers without guessing. The workshop also has a Code mode (run_code in a sandboxed JS runtime) for chaining calls.

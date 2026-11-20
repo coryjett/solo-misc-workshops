@@ -6,6 +6,12 @@
 
 **Area:** Registry · **Time:** 5 min
 
+## Framing
+
+- Deploying agents to different runtimes often breaks established security controls.
+- Ensuring consistent governance across varied execution environments is a persistent challenge.
+- Next: an approved server deployed to a runtime, reaching its tools through the same gateway.
+
 **Proves:** The approved artifact is the unit; where it runs is a choice.
 
 **Needs:** [S0](S0-preflight.md). kagent UI on http://localhost:8083, started with:

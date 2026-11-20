@@ -6,6 +6,12 @@
 
 **Area:** Identity · **Time:** 4 min
 
+## Framing
+
+- Backends need to know who is acting without handling raw login tokens.
+- Passing the user's own credentials to every service spreads them far and wide.
+- Next: the backend sees the real user, with a token the gateway issued.
+
 **Proves:** The user's identity reaches the backend, but as a short-lived token the gateway issued, not the raw sign-in token.
 
 **Needs:** [S0](S0-preflight.md).

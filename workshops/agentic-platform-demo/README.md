@@ -30,7 +30,7 @@ The content is industry-neutral. A demo is a chain of bite-size modules (3 to 8 
 | Registry | R1 catalog and discovery · R2 team scoping · R3 approval · R4 publish to the gateway · R5 deploy to a runtime · R6 audit trail |
 | Ecosystem (drafts) | D1 agentdesktop · D2 agentshield · D3 agentevals |
 
-Each module card lists what it proves, the commands, the same fact in the UI, what to say, and what not to claim.
+Each module card opens with framing to say before showing anything, then what it proves, the commands, the same fact in the UI, what to say, and what not to claim.
 
 ## Quick start
 

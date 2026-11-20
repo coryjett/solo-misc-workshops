@@ -6,6 +6,12 @@
 
 **Area:** LLM · **Time:** 3 min
 
+## Framing
+
+- Organizations need to restrict expensive premium models to specific user groups.
+- Enforcing these limits consistently across different applications is challenging to manage.
+- Next: the premium model answers one team and refuses another.
+
 **Proves:** Premium models are locked per group; the same client gets different models depending on who calls.
 
 **Needs:** [S0](S0-preflight.md).

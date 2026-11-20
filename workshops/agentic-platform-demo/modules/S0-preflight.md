@@ -6,6 +6,12 @@
 
 **Area:** Setup
 
+## Framing
+
+- Done before the call, not in front of the audience.
+- Opening line once you share: everything today runs on one lab you could rebuild yourself.
+- Next: the environment diagram, then your first module.
+
 **Proves:** The environment is healthy and in its starting state.
 
 **Needs:** Cluster running (`kind get clusters` shows `agentic-demo`). If Docker or the Mac restarted: `./down.sh && ./up.sh` first (about 15 min).

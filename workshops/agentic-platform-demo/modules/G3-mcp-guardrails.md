@@ -6,6 +6,12 @@
 
 **Area:** MCP · **Time:** 4 min
 
+## Framing
+
+- Companies fear AI tools accidentally deleting critical data or exposing private information.
+- Those checks belong outside the model, where a clever prompt cannot talk its way past them.
+- Next: a destructive tool blocked and personal details masked, even for an authorized user.
+
 **Proves:** Platform rules no tool may break: destructive tools blocked for everyone, personal data masked in results.
 
 **Needs:** [S0](S0-preflight.md).

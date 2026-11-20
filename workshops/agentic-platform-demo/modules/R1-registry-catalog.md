@@ -6,6 +6,12 @@
 
 **Area:** Registry · **Time:** 6 min
 
+## Framing
+
+- Companies lack visibility into all agents and tools running in their environment.
+- Unregistered shadow IT creates security blind spots that are hard to detect.
+- Next: the catalog with owners and data classes, plus agents nobody registered.
+
 **Proves:** One place knows every agent, MCP server and model, who owns it and what data it touches, including ones nobody registered.
 
 **Needs:** [S0](S0-preflight.md). Registry tab as admin.

@@ -6,6 +6,12 @@
 
 **Area:** Registry · **Time:** 3 min
 
+## Framing
+
+- Teams need to see only resources relevant to their specific work.
+- Everyone seeing everything is noise, and a risk when entries describe sensitive data.
+- Next: two developers, two different catalogs.
+
 **Proves:** Teams see and deploy only their own items plus shared platform items.
 
 **Needs:** [S0](S0-preflight.md). Incognito window signed in as eng-dev.

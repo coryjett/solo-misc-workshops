@@ -6,6 +6,12 @@
 
 **Area:** MCP · **Time:** 8 min
 
+## Framing
+
+- Users need access to specific data slices, not entire enterprise systems.
+- Applying granular permission rules to external services is difficult and error-prone.
+- Next: the same mail and code servers, a different slice for each person.
+
 **Proves:** One mail/files/meetings server and one code-hosting server, each user gets a different slice: mail off for some, read-only for others.
 
 **Needs:** [S0](S0-preflight.md).

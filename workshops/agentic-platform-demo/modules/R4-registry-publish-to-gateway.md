@@ -6,6 +6,12 @@
 
 **Area:** Registry · **Time:** 6 min
 
+## Framing
+
+- Publishing new tools usually requires waiting for platform team tickets and delays.
+- Self-service publishing risks bypassing essential security and governance policies entirely.
+- Next: an approved server becomes a governed gateway route, self-service.
+
 **Proves:** An approved server gets a governed endpoint without a platform ticket; the platform policy attaches itself.
 
 **Needs:** [S0](S0-preflight.md). Admin window.

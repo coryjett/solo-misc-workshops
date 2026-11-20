@@ -6,6 +6,12 @@
 
 **Area:** Platform · **Time:** 5 min
 
+## Framing
+
+- Teams worry that new infrastructure components complicate existing Kubernetes operations.
+- Integrating new gateways often requires learning proprietary management tools and workflows.
+- Next: the gateway as ordinary Kubernetes objects, in kubectl and in the UI.
+
 **Proves:** agentgateway is just Kubernetes: a controller, a proxy Deployment, and Gateway API objects you manage like any other config.
 
 **Needs:** [S0](S0-preflight.md).

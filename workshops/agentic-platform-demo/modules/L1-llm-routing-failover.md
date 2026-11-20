@@ -6,6 +6,12 @@
 
 **Area:** LLM · **Time:** 5 min
 
+## Framing
+
+- Applications break when their primary AI model becomes unavailable or slow.
+- Manually switching between cloud and local models requires complex client logic.
+- Next: one model name that prefers the self-hosted model and can fail over to a hosted one.
+
 **Proves:** Clients call one model name; the gateway picks the real backend and fails over when one is unhealthy.
 
 **Needs:** [S0](S0-preflight.md).

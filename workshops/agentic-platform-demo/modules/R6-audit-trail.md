@@ -6,6 +6,12 @@
 
 **Area:** Registry · **Time:** 4 min
 
+## Framing
+
+- Auditors require clear records of who accessed data and what actions occurred.
+- Reconstructing decision chains from disparate logs is time-consuming and incomplete.
+- Next: one trail from who approved a change to every call that followed.
+
 **Proves:** Every decision and every call has a name on it.
 
 **Needs:** [S0](S0-preflight.md). Works anywhere in a chain.

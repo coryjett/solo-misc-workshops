@@ -6,6 +6,12 @@
 
 **Area:** Platform · **Time:** 5 min
 
+## Framing
+
+- Routing decisions often depend on live business data outside the gateway.
+- Hardcoding these complex logic rules into the gateway makes it rigid.
+- Next: the hooks where your own service plugs into routing and policy.
+
 **Proves:** When a decision depends on business data (bandwidth, entitlements, budgets), the gateway calls your service instead of you forking the gateway.
 
 **Needs:** Talk track plus config; [L3](L3-llm-prompt-guard.md) shows one live callout (the injection-guard webhook).

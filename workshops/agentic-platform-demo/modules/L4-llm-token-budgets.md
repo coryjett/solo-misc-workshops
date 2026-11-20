@@ -6,6 +6,12 @@
 
 **Area:** LLM · **Time:** 4 min
 
+## Framing
+
+- Individual users or teams can exhaust company budgets with unlimited requests.
+- Tracking usage accurately is hard when clients manipulate identity headers easily.
+- Next: a budget per user, and what happens when it runs out.
+
 **Proves:** A token budget per user, keyed on the verified identity, so changing a header can't reset it.
 
 - Each user has their own counter.

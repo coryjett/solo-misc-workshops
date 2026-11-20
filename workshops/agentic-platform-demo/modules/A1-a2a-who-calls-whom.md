@@ -6,6 +6,12 @@
 
 **Area:** A2A · **Time:** 8 min
 
+## Framing
+
+- Teams struggle to manage which agents can communicate with each other.
+- Hardcoding access rules inside each agent creates security risks and maintenance headaches.
+- Next: users reach one agent; specialists accept only that agent, enforced at the gateway.
+
 **Proves:** Users reach only the front agent; specialists accept only the front agent. Enforced at the gateway, not in the agents.
 
 **Needs:** [S0](S0-preflight.md).

@@ -6,6 +6,12 @@
 
 **Area:** MCP · **Time:** 3 min
 
+## Framing
+
+- Developers spend weeks building custom wrappers for existing internal APIs.
+- Connecting modern AI tools to legacy systems requires complex integration work.
+- Next: one endpoint serving MCP servers and a plain REST API as tools, with no code.
+
 **Proves:** One MCP endpoint over different kinds of systems: two MCP servers and a plain REST API.
 
 - The gateway turns the REST API into tools from its OpenAPI spec. No code, no MCP server to build.

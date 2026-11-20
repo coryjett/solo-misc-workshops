@@ -6,6 +6,12 @@
 
 **Area:** LLM · **Time:** 3 min
 
+## Framing
+
+- Malicious prompts can trick AI systems into leaking sensitive internal data.
+- Stopping these attacks requires filtering inputs before they reach the model.
+- Next: an injection attempt stopped at the gateway, before any model sees it.
+
 **Proves:** Prompts are checked before they reach the model: injections blocked, personal data masked.
 
 **Needs:** [S0](S0-preflight.md).

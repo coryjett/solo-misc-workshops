@@ -6,6 +6,12 @@
 
 **Area:** Platform · **Time:** 5 min
 
+## Framing
+
+- Debugging AI interactions is difficult when logs are scattered across systems.
+- Lacking a unified view makes it hard to trace request outcomes accurately.
+- Next: one view of tool, agent and model traffic: who called what, and the outcome.
+
 **Proves:** Every hop is logged and traced with the caller, the tool or agent, and the outcome.
 
 **Needs:** [S0](S0-preflight.md). Works anywhere in a chain: the first step sends its own traffic.
