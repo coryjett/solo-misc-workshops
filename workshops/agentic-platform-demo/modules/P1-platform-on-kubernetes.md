@@ -17,11 +17,16 @@ kubectl --context kind-agentic-demo -n agentgateway-system get pods          # c
 kubectl --context kind-agentic-demo get gateway,httproute -A                  # standard Gateway API objects
 kubectl --context kind-agentic-demo -n agentgateway-system get enterpriseagentgatewaybackends,enterpriseagentgatewaypolicies
 ```
-Open in the editor: `gateway/00-gateway.yaml` (the Gateway), `gateway/50-frontdoor-mcp.yaml` (backend, route, policies).
+Editor:
+- `gateway/00-gateway.yaml`: the Gateway.
+- `gateway/50-frontdoor-mcp.yaml`: a backend, its route and policies.
 
 ## In the UI
 
-Solo UI (http://localhost:8082): **Gateways** (`mcp-gateway`, its routes and destinations), **Routes** (every path you just listed with kubectl), **Policies** (the same policy objects, all Active). Same objects, two views: CLI for automation, UI for operators.
+- Solo UI http://localhost:8082 **Gateways**: `mcp-gateway`, its routes and destinations.
+- **Routes**: every path you just listed with kubectl.
+- **Policies**: the same objects, all Active.
+- Say: same objects, two views. CLI for automation, UI for operators.
 
 ## Expect
 

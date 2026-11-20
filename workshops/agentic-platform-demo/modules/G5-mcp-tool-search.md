@@ -6,7 +6,10 @@
 
 **Area:** MCP · **Time:** 5 min
 
-**Proves:** In Search mode the gateway shows an agent two meta-tools (get_tool, invoke_tool) instead of every tool schema, so large tool catalogs do not crowd the model's context; team authorization and data guardrails still apply to what it finds and calls. Adapted from the enterprise agentgateway workshop's [MCP tool mode lab](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/labs/mcp/mcp-tool-mode-search.md).
+**Proves:** Agents see two tools (`get_tool`, `invoke_tool`) instead of every schema, so big catalogs don't fill the context.
+
+- Team rules and guardrails still apply to what they find and call.
+- Adapted from the workshop's [MCP tool mode lab](https://github.com/solo-io/fe-enterprise-agentgateway-workshop/blob/main/labs/mcp/mcp-tool-mode-search.md).
 
 **Needs:** [S0](S0-preflight.md). Same three systems as [G1](G1-mcp-per-team-tools.md) at a separate path, localhost:8081/search/mcp.
 
@@ -22,15 +25,24 @@ MCP_URL=$GW_URL/mcp ./mcp.py eng-dev list               # the same user sees 6 t
 ./mcp.py eng-dev call invoke_tool '{"name":"records_delete_customer_record","arguments":{"customer_id":"C-1001"}}'   # blocked
 ./mcp.py sales-dev call invoke_tool '{"name":"records_lookup_customer","arguments":{"customer_id":"C-1001"}}'   # refused: not sales-dev's tool
 ```
-Editor: `gateway/44-tool-search.yaml` (toolMode: Search on the backend; the same team rules as G1 and the same guardrails as G3, with the delete rule also checking invoke_tool's name argument; and On-Behalf-Of as in G4, so the tool servers get a gateway-issued token for the user).
+Editor:
+- `gateway/44-tool-search.yaml`: `toolMode: Search` on the backend.
+- Same team rules as G1, same guardrails as G3, same on-behalf-of as G4.
 
 ## In the UI
 
-MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/search/mcp` shows two tools. Solo UI Tracing (5m): tools/call get_tool and invoke_tool rows. Policies: `tool-search-authz`, `tool-search-guardrails`.
+- MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/search/mcp`: two tools.
+- Solo UI **Tracing** (5m): `get_tool` and `invoke_tool` rows.
+- Solo UI **Policies**: `tool-search-authz`, `tool-search-guardrails`.
 
 ## Expect
 
-2 tools vs 6; get_tool returns name, description and args schema; the sales-dev miss returns status no_match with available_tools listing only inventory_ and opsapi_ tools; the invoke shows [DOB REDACTED] and [PHONE REDACTED]; delete returns "Blocked by policy: destructive tools are not available to AI clients"; sales-dev invoke returns HTTP 400 "unknown resource".
+- 2 tools vs 6.
+- `get_tool`: name, description and argument schema.
+- sales-dev miss: `no_match`, plus `available_tools` (inventory and ops only).
+- Invoke: `[DOB REDACTED]`, `[PHONE REDACTED]`.
+- Delete: "Blocked by policy".
+- sales-dev invoking records: HTTP 400 "unknown resource".
 
 ## Say
 

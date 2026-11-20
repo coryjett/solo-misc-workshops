@@ -8,13 +8,19 @@
 
 **Proves:** The approved artifact is the unit; where it runs is a choice.
 
-**Needs:** [S0](S0-preflight.md). kagent UI: `kubectl --context kind-agentic-demo -n kagent port-forward svc/kagent-ui 8083:8080 >/dev/null 2>&1 &` then http://localhost:8083
+**Needs:** [S0](S0-preflight.md). kagent UI on http://localhost:8083, started with:
+
+```bash
+kubectl --context kind-agentic-demo -n kagent port-forward svc/kagent-ui 8083:8080 >/dev/null 2>&1 &
+```
 
 **Changes state:** deploys everything-reference-mcp to kagent. Once per reset.
 
 ## Steps
 
-Registry UI (admin): **Runtimes** (`mcp-gateway` virtual, `onprem-k8s-kagent`). **Catalog** > **everything-reference-mcp** > **Deploy** (Kubernetes / `onprem-k8s-kagent`).
+Registry UI (admin):
+- **Runtimes**: `mcp-gateway` (virtual) and `onprem-k8s-kagent`.
+- **Catalog** > **everything-reference-mcp** > **Deploy**: Kubernetes, `onprem-k8s-kagent`.
 kagent UI: reload > **MCP & tools**, filter `everything`: 8 tools discovered.
 
 ## Expect

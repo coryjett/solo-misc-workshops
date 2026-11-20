@@ -27,7 +27,8 @@ virtualModel:
 
 ## In the UI
 
-Solo UI **Composable MCP** shows the no-code extension path for APIs; the callout and ext_proc hooks are config only.
+- Solo UI **Composable MCP**: the no-code path for APIs.
+- The callout and ext_proc hooks are config only: show the YAML.
 
 ## Expect
 

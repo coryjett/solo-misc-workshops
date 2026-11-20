@@ -19,7 +19,8 @@ export MCP_URL=$GW_URL/frontdoor/mcp
 
 ## In the UI
 
-MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`. Solo UI **Policies**: `frontdoor-mcp-obo`.
+- MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`.
+- Solo UI **Policies**: `frontdoor-mcp-obo`.
 
 ## Expect
 
@@ -27,7 +28,8 @@ MCP Inspector as sales-dev on `/frontdoor/mcp`: run `workiq_whoami`. Solo UI **P
 
 ## Say
 
-- Three hops: user signs in to the IdP (Keycloak here; Entra, Okta, Ping in production); the gateway validates and authorizes; the gateway exchanges (RFC 8693) and the backend gets a token for the same user.
+- Three hops: sign in to the IdP (Keycloak here; Entra, Okta or Ping in production), the gateway validates, then exchanges the token (RFC 8693).
+- The backend gets a token for the same user, never the original.
 
 ## Don't claim
 

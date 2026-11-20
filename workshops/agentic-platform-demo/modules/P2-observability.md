@@ -20,7 +20,11 @@ Terminal 2 (from S0) shows one line per hop: `protocol=a2a|mcp|llm`, method, out
 
 Solo UI http://localhost:8082:
 1. **Routes:** every agent and tool server is a governed route, with p95 latency.
-2. **Tracing** > time range **5m**: MCP rows (`initialize`, `tools/list`, `tools/call`), the LLM call (`POST /v1/chat/completions`), A2A hops (`POST /a2a/agent-a/*`). Open one row for payload and trace id.
+2. **Tracing** > time range **5m**:
+   - MCP rows: `initialize`, `tools/list`, `tools/call`.
+   - LLM: `POST /v1/chat/completions`.
+   - A2A: `POST /a2a/agent-a/*`.
+   - Open one row: payload and trace id.
 3. **Dashboard:** tool requests, token usage by model, totals.
 
 ## Expect

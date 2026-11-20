@@ -15,7 +15,11 @@
 ## Steps
 
 Terminal: `pbcopy < catalog/gateway/access-rule.txt`
-Registry UI (admin): **Catalog** > **customer-records-mcp** > **Deploy**: Runtime `mcp-gateway`, Deployment Name `customer-records-mcp`, Path Suffix `/records`, **+ Add Policy**: MCP Authorization, Allow, Match Expressions: paste. **Deploy MCP Server**.
+Registry UI (admin):
+- **Catalog** > **customer-records-mcp** > **Deploy**.
+- Runtime `mcp-gateway`, Deployment Name `customer-records-mcp`, Path Suffix `/records`.
+- **+ Add Policy**: MCP Authorization, Allow, Match Expressions: paste.
+- **Deploy MCP Server**.
 Solo UI: **Routes** (new `/registry/records` route), **Policies** (`registry-backends-platform` now Active).
 Then: `./inspector.sh eng-dev http://localhost:8081/registry/records` (3 tools, PII masked) and `sales-dev` (0 tools).
 

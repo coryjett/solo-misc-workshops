@@ -6,7 +6,7 @@
 
 **Area:** A2A · **Time:** 8 min
 
-**Proves:** A front agent delegates to specialist agents; users can only reach the front agent, and specialists only accept the front agent. Enforced at the gateway, not in the agents.
+**Proves:** Users reach only the front agent; specialists accept only the front agent. Enforced at the gateway, not in the agents.
 
 **Needs:** [S0](S0-preflight.md).
 
@@ -19,11 +19,14 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $UT" $GW_URL/
 MSG='{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","messageId":"m1","role":"user","parts":[{"kind":"text","text":"Check the status of order 4512"}]}}}'
 curl -s -H "Authorization: Bearer $UT" -H 'Content-Type: application/json' -d "$MSG" $GW_URL/a2a/agent-a/ | python3 -c 'import json,sys;print(json.load(sys.stdin)["result"]["parts"][0]["text"])'
 ```
-Editor: `gateway/60-a2a.yaml` (two short policies).
+Editor:
+- `gateway/60-a2a.yaml`: two short policies.
 
 ## In the UI
 
-Solo UI **Routes**: `a2a-agent-a/b/c`, Active, with p95 latency. Solo UI **Policies**: `a2a-users-reach-agent-a`, `a2a-only-agent-a-calls-specialists`. Solo UI **Tracing** (5m): the `POST /a2a/agent-*` hops.
+- Solo UI **Routes**: `a2a-agent-a/b/c`, Active, with p95 latency.
+- Solo UI **Policies**: `a2a-users-reach-agent-a`, `a2a-only-agent-a-calls-specialists`.
+- Solo UI **Tracing** (5m): the `POST /a2a/agent-*` hops.
 
 ## Expect
 

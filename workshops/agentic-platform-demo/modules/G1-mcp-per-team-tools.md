@@ -6,7 +6,10 @@
 
 **Area:** MCP · **Time:** 3 min
 
-**Proves:** One governed MCP endpoint federates different kinds of backends: two MCP servers and a plain REST API that the gateway turns into MCP tools from its OpenAPI spec, with no code and no MCP server to build. Who sees which system is decided at the gateway (G2 goes deeper on per-person scoping).
+**Proves:** One MCP endpoint over different kinds of systems: two MCP servers and a plain REST API.
+
+- The gateway turns the REST API into tools from its OpenAPI spec. No code, no MCP server to build.
+- Per-person scoping is G2.
 
 **Needs:** [S0](S0-preflight.md).
 
@@ -18,11 +21,15 @@ export MCP_URL=$GW_URL/mcp
 ./mcp.py eng-dev call opsapi_get_site_hours '{"path":{"site_id":"site-112"}}'   # a REST endpoint, called as an MCP tool
 ./mcp.py none list                                                      # 401: no token, no tools
 ```
-Editor: `gateway/11-mcp-federation.yaml` (three targets on one backend; `opsapi` is `protocol: OpenAPI` with the spec as a ConfigMap) and `gateway/21-tool-authz.yaml` (which team sees which system: three CEL lines on group and target).
+Editor:
+- `gateway/11-mcp-federation.yaml`: three targets on one backend; `opsapi` is `protocol: OpenAPI`.
+- `gateway/21-tool-authz.yaml`: which team sees which system (three CEL lines).
 
 ## In the UI
 
-Solo UI **Composable MCP**: the wizard that turns an OpenAPI spec into MCP tools, the UI version of the `opsapi` target (walk the Import step, don't deploy). MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/mcp` lists the same tools; open `opsapi_get_site_hours` to show the schema the gateway generated. Solo UI **Policies**: `mcp-tool-authz`.
+- Solo UI **Composable MCP**: walk the Import step (OpenAPI spec to tools). Don't deploy.
+- MCP Inspector: `./inspector.sh eng-dev http://localhost:8081/mcp`, open `opsapi_get_site_hours`: the generated schema.
+- Solo UI **Policies**: `mcp-tool-authz`.
 
 ## Expect
 

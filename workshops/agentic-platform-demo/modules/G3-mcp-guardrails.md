@@ -17,11 +17,14 @@ export MCP_URL=$GW_URL/mcp
 ./mcp.py eng-dev call records_lookup_customer '{"customer_id":"C-1001"}'         # DOB and phone masked
 ./mcp.py eng-dev call records_delete_customer_record '{"customer_id":"C-1001"}'  # blocked
 ```
-Editor: `gateway/22-guardrails.yaml`.
+Editor:
+- `gateway/22-guardrails.yaml`.
 
 ## In the UI
 
-MCP Inspector as eng-dev on `/mcp`: run `records_lookup_customer` with `C-1001` and show the masked fields. Solo UI **Policies**: `mcp-guardrails`.
+- MCP Inspector as eng-dev on `/mcp`: run `records_lookup_customer` with `C-1001`.
+- Point at the masked fields.
+- Solo UI **Policies**: `mcp-guardrails`.
 
 ## Expect
 

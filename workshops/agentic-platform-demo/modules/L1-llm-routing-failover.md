@@ -15,11 +15,14 @@
 ```bash
 ./chat.py eng-dev auto 'In one sentence, what is an API gateway?'      # "auto" answers from the self-hosted model (~5s)
 ```
-Editor: `gateway/40-models.yaml`: `auto` = failover priorities (self-hosted first, cloud second) + health eviction on 5xx/429.
+Editor:
+- `gateway/40-models.yaml`: `auto` = self-hosted first, cloud second.
+- Health eviction on 5xx and 429.
 
 ## In the UI
 
-Solo UI **Dashboard**: token usage by model. Solo UI **Tracing** (5m): the `POST /v1/chat/completions` row with the model that answered.
+- Solo UI **Dashboard**: token usage by model.
+- Solo UI **Tracing** (5m): the `POST /v1/chat/completions` row and the model that answered.
 
 ## Expect
 

@@ -16,11 +16,13 @@
 ./chat.py eng-dev gpt-4.1-mini 'hi'                                    # 403: not allowed
 ./chat.py admin gpt-4.1-mini 'In one sentence, what is MCP?'           # allowed
 ```
-Editor: `gateway/41-llm-identity.yaml`.
+Editor:
+- `gateway/41-llm-identity.yaml`.
 
 ## In the UI
 
-Solo UI **Dashboard**: token usage by model (admin's gpt-4.1-mini call appears; the refused call does not). Show the 403 in Terminal 2.
+- Solo UI **Dashboard**: admin's gpt-4.1-mini call shows; the refused one does not.
+- Show the 403 in Terminal 2.
 
 ## Expect
 

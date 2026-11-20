@@ -15,7 +15,10 @@
 ## Steps
 
 Registry UI (eng-dev): **Catalog** > **Administrative Requests**: `release-readiness-checker 2.0.0` pending, Withdraw only.
-Registry UI (admin): **Administrative Requests** > open it (diff of what changes) > **Approve**. Open 2.0.0 > **Agent Composition**: the new `data-masking-mcp` dependency.
+Registry UI (admin):
+- **Administrative Requests** > open it: the diff of what changes.
+- **Approve**.
+- Open 2.0.0 > **Agent Composition**: the new `data-masking-mcp` dependency.
 
 ## Expect
 

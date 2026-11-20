@@ -8,7 +8,10 @@
 
 **Proves:** Every decision and every call has a name on it.
 
-**Needs:** [S0](S0-preflight.md). Works anywhere in a chain: reset seeds the registry events, and the first step sends a fresh tool call. If [R3](R3-registry-approval.md) or [R4](R4-registry-publish-to-gateway.md) ran earlier, their approve and deploy rows show too.
+**Needs:** [S0](S0-preflight.md). Works anywhere in a chain.
+
+- Reset seeds the registry events; the first step sends a fresh tool call.
+- If [R3](R3-registry-approval.md) or [R4](R4-registry-publish-to-gateway.md) ran earlier, their rows show too.
 
 ## Steps
 
