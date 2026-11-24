@@ -14,3 +14,5 @@
 **Don't claim:** <limits relevant to them; copy from module cards>
 **Questions to ask:** <discovery gaps>
 **Owed from last call:** <promises to deliver or cover>
+
+**Standard flow:** the `create-demo` skill (`.claude/skills/create-demo/`) does account prep, picks the chain, fills this template and verifies the run.
