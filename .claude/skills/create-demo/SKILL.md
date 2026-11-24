@@ -50,7 +50,7 @@ Rules (the reader is presenting live):
 ## 4. Demo pages
 
 - **Diagram tour:** `https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs joined by ->` (generic, safe for any customer). Source: `workshops/agentic-platform-demo/environment-diagram.html`. A new or renamed module must be added to its `M` table and republished to the **same URL**.
-- **Deck (optional):** copy `workshops/kagent-enterprise-demo/deck.html` as the template (1920x1080 stage, arrow keys, N for notes). Keep it to about 8 slides, plain topic headings, generic content. A customer-specific deck stays in `$CUSTOMERS_DIR`, not the repo.
+- **Deck (optional):** copy `templates/deck.html` to `$CUSTOMERS_DIR/<Customer>/deck.html` (1920x1080 stage, arrow keys, N for notes; slide styles for cards, boxes, zones, beats). About 8 slides, plain topic headings. Decks are demo-specific, so they never go in this repo.
 
 ## 5. Verify end to end
 

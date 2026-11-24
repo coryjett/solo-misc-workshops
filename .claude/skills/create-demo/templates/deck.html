@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Solo Enterprise for kagent</title>
+<title>Deck title</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700&family=DM+Sans:wght@400;500&family=DM+Mono&display=swap">
 <style>
@@ -85,125 +85,39 @@ ul.list li{ font-size:32px; line-height:1.4; color:var(--fg-2); }
 <body>
 <div id="viewport"><div id="stage">
 <section id="cover" class="hero">
-<p class="eyebrow">Solo Enterprise for kagent</p>
-<h1>Solo Enterprise for kagent</h1>
-<p class="lead">Build, run and govern AI agents on Kubernetes, with identity, approvals, tracing and sandboxing built in.</p>
-<aside>Agenda: kagent basics, what Enterprise adds for platform and security teams, where Agent Substrate fits, then a live demo in the kagent UI.</aside>
+<p class="eyebrow">PRODUCT OR TOPIC</p>
+<h1>Deck title</h1>
+<p class="lead">One sentence on what the audience will see and why it matters to them.</p>
+<aside>Agenda and speaker notes go in an aside on each slide. Press N to show them.</aside>
 </section>
-<section id="fundamentals">
-<p class="eyebrow">kagent overview</p>
-<h2>kagent overview</h2>
+<section id="points">
+<p class="eyebrow">SECTION</p>
+<h2>Plain topic heading</h2>
 <div class="grid3">
-<div class="card"><p class="k">Agents</p><h3>Defined in YAML</h3><p>Agents are Kubernetes resources, managed with GitOps, the CLI or the UI.</p></div>
-<div class="card"><p class="k">Models</p><h3>Multiple providers</h3><p>OpenAI, Azure OpenAI, Anthropic, Gemini and Vertex, Bedrock and Ollama.</p></div>
-<div class="card"><p class="k">Tools</p><h3>MCP servers</h3><p>Shared tool servers, plus built-in tools for Kubernetes, Helm, Istio, Argo and Prometheus.</p></div>
-<div class="card"><p class="k">Harnesses</p><h3>Agent runtimes</h3><p>kagent's own runtime, Claude Code, Codex, or a custom agent over A2A.</p></div>
-<div class="card"><p class="k">A2A</p><h3>Standard endpoints</h3><p>Each agent serves an A2A endpoint and agent card for apps and other agents.</p></div>
-<div class="card"><p class="k">Editions</p><h3>Open source core</h3><p>A CNCF project. Solo Enterprise for kagent adds identity, access policies, tracing and support.</p></div>
+<div class="card"><p class="k">Label</p><h3>Short heading</h3><p>One fact per card.</p></div>
+<div class="card"><p class="k">Label</p><h3>Short heading</h3><p>One fact per card.</p></div>
+<div class="card"><p class="k">Label</p><h3>Short heading</h3><p>One fact per card.</p></div>
 </div>
-<aside>Everything is a Kubernetes resource. Models and tools are defined once and shared by many agents.</aside>
+<aside>Notes for this slide.</aside>
 </section>
-<section id="objects" class="alt">
-<p class="eyebrow">Core resources</p>
-<h2>How the pieces fit</h2>
-<div class="rel">
-<div class="pane">
-<p class="pt">AgentTemplate</p>
-<p class="pd">Instructions, model and tools</p>
-<div class="revs"><p class="rev">rev 1</p><p class="rev">rev 2</p><p class="rev cur">rev 3</p></div>
-</div>
-<div class="arrow right" style="width:56px; height:28px; background:#a46dff"></div>
-<div class="pane">
-<p class="pt">Agent</p>
-<p class="pd">The running agent, served over A2A</p>
-</div>
-<div class="arrow right" style="width:56px; height:28px; background:#a46dff"></div>
-<div class="pane">
-<p class="pt">Sessions</p>
-<div class="sess"><p class="rev">session A on rev 2</p><p class="rev cur">session B on rev 3</p></div>
-</div>
-</div>
-<div class="grid2">
-<div class="card"><p class="k">Harness</p><p>The runtime (kagent, Claude, Codex or custom) and the worker pool it runs on.</p></div>
-<div class="card"><p class="k">ModelConfig and RemoteMCPServer</p><p>Model provider and tool servers, shared across agents.</p></div>
-</div>
-<aside>Each template change creates a new immutable revision. New sessions use the latest; a running session keeps the revision it started on. kagent 1.0 API; moving from 0.10 is a migration.</aside>
-</section>
-<section id="controls" class="alt">
-<p class="eyebrow">Solo Enterprise for kagent</p>
-<h2>Controls for platform teams</h2>
-<div class="grid3">
-<div class="card"><p class="k">Enterprise</p><h3>Your identity provider</h3><p>Sign-in through Entra ID, Okta, Keycloak or any OIDC provider. Groups come from the token.</p></div>
-<div class="card"><p class="k">Enterprise</p><h3>Access policies by group</h3><p>Who may build agents, who may only use them, and who may read traces and prompts.</p></div>
-<div class="card"><p class="k">Core</p><h3>Approval before changes</h3><p>Chosen tools pause for approval in the UI. The decision is kept with the session.</p></div>
-<div class="card"><p class="k">Enterprise</p><h3>Tracing and analytics</h3><p>Model and tool calls per agent and user, with tokens and timing, stored in your cluster.</p></div>
-<div class="card"><p class="k">Core</p><h3>Sandbox and egress</h3><p>gVisor or microVM, no outbound access until a policy allows a host. Secrets injected at the proxy.</p></div>
-<div class="card"><p class="k">Enterprise</p><h3>One console</h3><p>Fleet dashboard, worker capacity, snapshots, schedules and evaluations, with supported builds.</p></div>
-</div>
-<aside>Core features are in open-source kagent 1.0; Enterprise ships them as supported, digest-pinned builds. Every card is shown live in the demo except the external IdP (the lab uses the bundled provider with three test roles) and evaluations.</aside>
-</section>
-<section id="substrate">
-<p class="eyebrow">Agent Substrate</p>
-<h2>How Agent Substrate runs agents</h2>
-<div class="diagram">
-<div class="pane">
-<p class="pt">Worker pool</p>
-<p class="pd">A few pods, each a gVisor sandbox</p>
-<div class="slots">
-<div class="slot on"><p>agent 4</p></div>
-<div class="slot on"><p>agent 11</p></div>
-<div class="slot"><p>free</p></div>
-</div>
-</div>
-<div class="flow">
-<p class="lbl">idle: suspend</p>
-<div class="arrow right" style="width:160px; height:56px; background:#a46dff"></div>
-<div class="arrow left" style="width:160px; height:56px; background:#20b7f3"></div>
-<p class="lbl">new message: resume</p>
-</div>
-<div class="pane">
-<p class="pt">Snapshot store</p>
-<p class="pd">Idle agents saved to object storage</p>
-<div class="chips">
-<div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
-<div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
-<div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
-</div>
-</div>
-</div>
-<div class="facts">
-<div class="fact"><p class="ft">Capacity tracks use</p><p>Pods run only the agents active right now.</p></div>
-<div class="fact"><p class="ft">Sandboxed</p><p>gVisor by default, with a microVM option.</p></div>
-<div class="fact"><p class="ft">Checkpoints</p><p>Save a session at any turn, resume or fork it.</p></div>
-</div>
-<aside>Two agents are active on workers; the rest are saved in the snapshot store and use no compute. When an agent goes idle it is suspended to storage and its slot is freed. The next message resumes it on any free worker. Do not name specific microVM technologies.</aside>
-</section>
-<section id="gateway">
-<p class="eyebrow">kagent with agentgateway</p>
-<h2>kagent with agentgateway</h2>
-<p class="lead">kagent can send model and tool calls through agentgateway, so agents follow the same policies as applications.</p>
-<div class="grid3">
-<div class="card"><p class="k">Identity</p><p>The user's token is passed through, so model and tool policies apply per user.</p></div>
-<div class="card"><p class="k">Cost</p><p>Token budgets and rate limits by user, team or model.</p></div>
-<div class="card"><p class="k">Safety and audit</p><p>Guardrails, data masking and a single log of every call.</p></div>
-</div>
-<aside>Per-user identity uses token passthrough today. A combined user and agent token is in progress.</aside>
-</section>
-<section id="arch" class="alt" style="gap:28px">
+<section id="arch" class="alt">
 <p class="eyebrow">Demo environment</p>
 <h2>Demo architecture</h2>
-<div style="display:grid; grid-template-columns:250px 56px 1fr 56px 290px; gap:0; align-items:center;">
-<div style="display:flex; flex-direction:column; gap:20px;">
-<div class="box"><p class="t">kagent UI</p><p class="d">build, chat, approve, traces</p></div>
-<div class="box"><p class="t">Identity provider</p><p class="d">Entra ID, Okta or OIDC; bundled in the demo</p></div>
+<div class="zone"><p class="zt">KUBERNETES CLUSTER</p>
+<div class="grid2"><div class="box purple"><p class="t">Component</p><p class="d">what it does</p></div><div class="box"><p class="t">Component</p><p class="d">what it does</p></div></div>
 </div>
-<div class="arrow right" style="width:44px; height:22px; background:#a46dff"></div>
-<div class="zone">
-<p class="zt">KUBERNETES CLUSTER (KIND)</p>
-<div class="grid2" style="gap:20px">
-<div class="zone" style="padding:20px; gap:12px"><p class="zt">SOLO ENTERPRISE FOR KAGENT</p>
-<div class="box purple"><p class="t">Controller and API</p><p class="d">agents, access policies, approvals</p></div>
-<div class="grid2" style="gap:12px"><div class="box"><p class="t">Postgres</p><p class="d">state</p></div><div class="box"><p class="t">ClickHouse</p><p class="d">traces</p></div></div>
+<aside>Describe the flow left to right.</aside>
+</section>
+<section id="demo">
+<p class="eyebrow">Demo</p>
+<h2>Demo</h2>
+<div style="display:flex; flex-direction:column; gap:22px;">
+<div class="beat"><p class="n">1</p><div><p>First beat, as an action.</p><p class="s">What the audience sees</p></div></div>
+<div class="beat"><p class="n">2</p><div><p>Second beat.</p><p class="s">What the audience sees</p></div></div>
+</div>
+<aside>Closing questions.</aside>
+</section>
+</div></div>
 </div>
 <div class="zone" style="padding:20px; gap:12px"><p class="zt">AGENT SUBSTRATE</p>
 <div class="box purple"><p class="t">Control plane</p><p class="d">scheduling, egress policy</p></div>
