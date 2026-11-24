@@ -14,7 +14,7 @@ html, body { margin: 0; height: 100%; background: #07090f; overflow: hidden; }
 #stage { width: 1920px; height: 1080px; position: relative; transform-origin: center center; flex: none; }
 #stage > section { position: absolute; inset: 0; width: 1920px; height: 1080px; display: none; }
 #stage > section.on { display: flex; }
-#stage > section aside { display: none; }
+#stage section aside { display: none; }   /* speaker notes never render on a slide */
 .arrow { flex: none; }
 .arrow.right { clip-path: polygon(0 30%,70% 30%,70% 0,100% 50%,70% 100%,70% 70%,0 70%); }
 .arrow.left { clip-path: polygon(100% 30%,30% 30%,30% 0,0 50%,30% 100%,30% 70%,100% 70%); }
@@ -116,37 +116,6 @@ ul.list li{ font-size:32px; line-height:1.4; color:var(--fg-2); }
 <div class="beat"><p class="n">2</p><div><p>Second beat.</p><p class="s">What the audience sees</p></div></div>
 </div>
 <aside>Closing questions.</aside>
-</section>
-</div></div>
-</div>
-<div class="zone" style="padding:20px; gap:12px"><p class="zt">AGENT SUBSTRATE</p>
-<div class="box purple"><p class="t">Control plane</p><p class="d">scheduling, egress policy</p></div>
-<div class="box"><p class="t">Snapshot store</p><p class="d">idle sessions</p></div>
-</div>
-</div>
-<div class="box purple"><p class="t">Worker pool with gVisor sandboxes</p><p class="d">sessions run here only during a turn</p></div>
-</div>
-<div class="arrow right" style="width:44px; height:22px; background:#a46dff"></div>
-<div style="display:flex; flex-direction:column; gap:20px;">
-<div class="box"><p class="t">Model and tools</p><p class="d">OpenAI; Kubernetes MCP tools</p></div>
-<div class="box"><p class="t">Allowed hosts</p><p class="d">only what an egress policy names</p></div>
-<div class="box purple"><p class="t">agentgateway</p><p class="d">tool calls as the signed-in user</p></div>
-</div>
-</div>
-<aside>Users sign in through the identity provider; access policies decide what each group can do. Each chat runs as a sandboxed session on the worker pool and is suspended between turns. Outbound traffic leaves only through the egress proxy.</aside>
-</section>
-<section id="demo">
-<p class="eyebrow">Demo</p>
-<h2>Demo</h2>
-<div style="display:flex; flex-direction:column; gap:22px;">
-<div class="beat"><p class="n">1</p><div><p>Build an agent in the UI.</p><p class="s">Template, tools, and one tool that needs approval</p></div></div>
-<div class="beat"><p class="n">2</p><div><p>Chat, then approve a change.</p><p class="s">The agent pauses before scaling a deployment</p></div></div>
-<div class="beat"><p class="n">3</p><div><p>Follow every call in tracing.</p><p class="s">Model and tool calls, tokens and timing per turn</p></div></div>
-<div class="beat"><p class="n">4</p><div><p>Switch roles.</p><p class="s">Readers cannot chat; the gateway gives each role different tools</p></div></div>
-<div class="beat"><p class="n">5</p><div><p>Contain the agent.</p><p class="s">gVisor sandbox, no egress until a policy allows a host</p></div></div>
-<div class="beat"><p class="n">6</p><div><p>See the runtime.</p><p class="s">Sessions suspended between turns, one worker busy at most</p></div></div>
-</div>
-<aside>About 30 minutes, following DEMO.md in kagent-substrate-demo/enterprise. Closing questions: what agents do first; which IdP groups build vs use agents; what the sandbox must stop; whether calls go through agentgateway.</aside>
 </section>
 </div></div>
 <div id="notes" hidden></div>
