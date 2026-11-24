@@ -6,8 +6,6 @@ The content is industry-neutral. A demo is a chain of bite-size modules (3 to 8 
 
 **Start here: [the module index](modules/)**: every module, suggested chains per audience, and the rules for chaining them.
 
-For a kagent-first conversation on its own small cluster, see [../kagent-enterprise-demo](../kagent-enterprise-demo): the same product, driven entirely from the kagent UI with built-in role switching.
-
 ## What's in the lab
 
 | Piece | What it shows |

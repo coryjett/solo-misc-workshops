@@ -6,8 +6,7 @@ description: >
   then a verified end-to-end run. TRIGGER when asked to prep for a customer
   call or demo, build a demo for an account, write a walkthrough, or "what's
   the agenda for <customer>". Reuses the generic modules in
-  workshops/agentic-platform-demo and the kagent kit in
-  workshops/kagent-enterprise-demo; never builds customer-specific code.
+  workshops/agentic-platform-demo; never builds customer-specific code.
 ---
 
 # Create a customer demo
@@ -33,7 +32,7 @@ If a source is unreachable (mail or calendar scope), say which and carry on with
 ## 2. Pick the chain
 
 - Open `workshops/agentic-platform-demo/modules/README.md`. Map each ask to a module: G (MCP), L (LLM), A (A2A), K (kagent behind the gateway), P/X (platform, extension), R (registry).
-- kagent-first conversation, own small cluster, role switching in the UI: use `workshops/kagent-enterprise-demo` (DEMO.md beats 0-6, `demo/start.sh` before the call) instead.
+- kagent-first conversation: chain the K modules (K1 overview, K7 build, K2-K6 identity, guardrails, approval, roles, sandbox, K8 tracing, K9 fleet).
 - Aim for about 40 minutes plus questions. Start with S0. End with P2 (observability) when the gateway is in play.
 - **Gap?** Build a generic module card (Framing, Proves, Needs, Steps, Say, Don't claim, Cleanup), add it to the module README table and the diagram's `M` table, add a rehearsal check, run it, commit. Then reference it. Never put customer logic in the repo.
 
@@ -52,7 +51,7 @@ Rules (the reader is presenting live):
 Decks and architecture diagrams are **demo-specific**: they live in `$CUSTOMERS_DIR/<Customer>/` and the walkthrough links them by **local path**. Not the repo, not GitHub Pages, not a Claude artifact link.
 
 - **Module-lab demo** (`agentic-platform-demo`): use the shared diagram's tour, `https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs joined by ->`. It is generic and safe for any customer. A new or renamed module goes into `workshops/agentic-platform-demo/environment-diagram.html` (`M` table) and is republished to the **same URL**.
-- **Any other demo** (the kagent kit, a custom chain): build `$CUSTOMERS_DIR/<Customer>/architecture.html` with the same engine as the lab diagram:
+- **Any other demo** (a lab outside the modules): build `$CUSTOMERS_DIR/<Customer>/architecture.html` with the same engine as the lab diagram:
   - Copy the `<style>` block and the `<script>` from `environment-diagram.html`.
   - Draw a new inline SVG: one `data-k` key per box, chip and edge; label every arrow.
   - Replace the `M` table with one entry per beat (`t` title, `a` beat, `k` keys to light, `p` what it proves, `s` what they will see), and the parent-box rules in `light()` with this diagram's prefixes.
@@ -64,9 +63,9 @@ Decks and architecture diagrams are **demo-specific**: they live in `$CUSTOMERS_
 
 Do not hand over a walkthrough that has not run.
 
-- **Lab:** `./verify.sh && ./verify-gateway.sh && ./reset.sh` in `agentic-platform-demo`, or `demo/start.sh` in the kagent kit. Run `start.sh` again after a rehearsal so the kit is reset for the call.
+- **Lab:** `./verify.sh && ./verify-gateway.sh && ./reset.sh` in `agentic-platform-demo`. Run `./reset.sh` again after a rehearsal so the lab is clean for the call.
 - **Command-line modules:** `./modules/run-module.sh <ID>` for each module in the chain. Check the output against the card's Expect lines, not just exit codes.
-- **UI modules:** `modules/rehearse/kagent.mjs` (K1-K9) or `kagent-enterprise-demo/demo/rehearse/rehearse.mjs` (kit). Never run `S0` or `reset.sh` while a rehearsal is running: reset deletes the agents under test.
+- **UI modules:** `modules/rehearse/kagent.mjs` (K1-K9). Never run `S0` or `reset.sh` while a rehearsal is running: reset deletes the agents under test.
 - Fix what fails in the module itself, rerun, commit, push.
 
 ## Gotchas (learned the hard way)
