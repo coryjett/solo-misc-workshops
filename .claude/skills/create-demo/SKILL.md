@@ -14,7 +14,7 @@ description: >
 A customer demo is a **walkthrough that chains generic modules**, not a new build. New capability goes into the repo as a generic module first; the customer only gets a one-page walkthrough.
 
 **Inputs:** customer name, call date and time. Ask only if the calendar and CRM cannot answer.
-**Outputs (outside this repo):** `$CUSTOMERS_DIR/<Customer>/call-prep-<date>.md`, `walkthrough-<date>.md`, and for non-module demos `architecture.html` and optionally `deck.html`. `CUSTOMERS_DIR` defaults to `~/Documents/Workspace/Customers`.
+**Outputs (outside this repo):** `$CUSTOMERS_DIR/<Customer>/call-prep-<date>.md`, `walkthrough-<date>.md`, `architecture.html` (always) and optionally `deck.html`. `CUSTOMERS_DIR` defaults to `~/Documents/Workspace/Customers`.
 **Outputs (inside this repo):** only generic modules, fixes and rehearsal checks. Never a customer, prospect or person name.
 
 ## 1. Account prep
@@ -48,9 +48,14 @@ Rules (the reader is presenting live):
 
 ## 4. Demo pages
 
-Decks and architecture diagrams are **demo-specific**: they live in `$CUSTOMERS_DIR/<Customer>/` and the walkthrough links them by **local path**. Not the repo, not GitHub Pages, not a Claude artifact link.
+Decks and architecture diagrams are **demo-specific**: they live in `$CUSTOMERS_DIR/<Customer>/` and the walkthrough links them by **local path only**. No repo links, GitHub Pages or Claude artifact links in a walkthrough.
 
-- **Module-lab demo** (`agentic-platform-demo`): use the shared diagram's tour, `https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs joined by ->`. It is generic and safe for any customer. A new or renamed module goes into `workshops/agentic-platform-demo/environment-diagram.html` (`M` table) and is republished to the **same URL**.
+- **Module-lab demo** (`agentic-platform-demo`): copy `workshops/agentic-platform-demo/environment-diagram.html` to `$CUSTOMERS_DIR/<Customer>/architecture.html` and make it open on this demo's chain (`open` drops `#tour-...` from file URLs, so bake the chain in):
+  ```python
+  o = 'const start = () => { const c = fromHash(); if (c) { chain = c; i = 0; mode(true); } else mode(false); };'
+  n = 'const start = () => { const c = fromHash() || ["P1","G1",...]; chain = c; i = 0; mode(true); };'
+  ```
+  Link only this local file in the walkthrough; no online diagram link. A new or renamed module still goes into the repo's `environment-diagram.html` (`M` table), and the shared artifact is republished to its same URL for anyone else using it.
 - **Any other demo** (a lab outside the modules): build `$CUSTOMERS_DIR/<Customer>/architecture.html` with the same engine as the lab diagram:
   - Copy the `<style>` block and the `<script>` from `environment-diagram.html`.
   - Draw a new inline SVG: one `data-k` key per box, chip and edge; label every arrow.

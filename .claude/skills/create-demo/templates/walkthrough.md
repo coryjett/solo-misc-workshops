@@ -2,8 +2,7 @@
 
 **Links**
 - Meeting: <link>
-- Diagram (module lab): https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs>
-- Architecture (other demos): `$CUSTOMERS_DIR/<Customer>/architecture.html` (open it, click **Walkthrough**, arrow keys)
+- Diagram: `$CUSTOMERS_DIR/<Customer>/architecture.html` (opens on this chain; arrow keys)
 - Deck (optional): `$CUSTOMERS_DIR/<Customer>/deck.html` (arrow keys, N for notes)
 - UI: <local URL>
 - Runbook or modules: `<path>`
