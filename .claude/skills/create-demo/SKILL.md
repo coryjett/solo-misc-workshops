@@ -15,7 +15,7 @@ description: >
 A customer demo is a **walkthrough that chains generic modules**, not a new build. New capability goes into the repo as a generic module first; the customer only gets a one-page walkthrough.
 
 **Inputs:** customer name, call date and time. Ask only if the calendar and CRM cannot answer.
-**Outputs (outside this repo):** `$CUSTOMERS_DIR/<Customer>/call-prep-<date>.md` and `walkthrough-<date>.md`. `CUSTOMERS_DIR` defaults to `~/Documents/Workspace/Customers`.
+**Outputs (outside this repo):** `$CUSTOMERS_DIR/<Customer>/call-prep-<date>.md`, `walkthrough-<date>.md`, and for non-module demos `architecture.html` and optionally `deck.html`. `CUSTOMERS_DIR` defaults to `~/Documents/Workspace/Customers`.
 **Outputs (inside this repo):** only generic modules, fixes and rehearsal checks. Never a customer, prospect or person name.
 
 ## 1. Account prep
@@ -33,7 +33,7 @@ If a source is unreachable (mail or calendar scope), say which and carry on with
 ## 2. Pick the chain
 
 - Open `workshops/agentic-platform-demo/modules/README.md`. Map each ask to a module: G (MCP), L (LLM), A (A2A), K (kagent behind the gateway), P/X (platform, extension), R (registry).
-- kagent-first conversation, own small cluster, role switching in the UI: use `workshops/kagent-enterprise-demo` (DEMO.md beats 0-6) instead.
+- kagent-first conversation, own small cluster, role switching in the UI: use `workshops/kagent-enterprise-demo` (DEMO.md beats 0-6, `demo/start.sh` before the call) instead.
 - Aim for about 40 minutes plus questions. Start with S0. End with P2 (observability) when the gateway is in play.
 - **Gap?** Build a generic module card (Framing, Proves, Needs, Steps, Say, Don't claim, Cleanup), add it to the module README table and the diagram's `M` table, add a rehearsal check, run it, commit. Then reference it. Never put customer logic in the repo.
 
@@ -49,14 +49,22 @@ Rules (the reader is presenting live):
 
 ## 4. Demo pages
 
-- **Diagram tour:** `https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs joined by ->` (generic, safe for any customer). Source: `workshops/agentic-platform-demo/environment-diagram.html`. A new or renamed module must be added to its `M` table and republished to the **same URL**.
-- **Deck (optional):** copy `templates/deck.html` to `$CUSTOMERS_DIR/<Customer>/deck.html` (1920x1080 stage, arrow keys, N for notes; slide styles for cards, boxes, zones, beats). About 8 slides, plain topic headings. Decks are demo-specific, so they never go in this repo.
+Decks and architecture diagrams are **demo-specific**: they live in `$CUSTOMERS_DIR/<Customer>/` and the walkthrough links them by **local path**. Not the repo, not GitHub Pages, not a Claude artifact link.
+
+- **Module-lab demo** (`agentic-platform-demo`): use the shared diagram's tour, `https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs joined by ->`. It is generic and safe for any customer. A new or renamed module goes into `workshops/agentic-platform-demo/environment-diagram.html` (`M` table) and is republished to the **same URL**.
+- **Any other demo** (the kagent kit, a custom chain): build `$CUSTOMERS_DIR/<Customer>/architecture.html` with the same engine as the lab diagram:
+  - Copy the `<style>` block and the `<script>` from `environment-diagram.html`.
+  - Draw a new inline SVG: one `data-k` key per box, chip and edge; label every arrow.
+  - Replace the `M` table with one entry per beat (`t` title, `a` beat, `k` keys to light, `p` what it proves, `s` what they will see), and the parent-box rules in `light()` with this diagram's prefixes.
+  - Environment view describes the components; Walkthrough view steps through the beats with arrow keys.
+- **Deck (optional):** copy `templates/deck.html` to `$CUSTOMERS_DIR/<Customer>/deck.html`. About 8 slides, plain topic headings, speaker notes in `<aside>` (N toggles them), the architecture as a slide (`id="arch"`).
+- **Check every page in a headless browser** before linking it: no script errors, nothing rendered outside the slide stage, no visible `<aside>` notes, each view screenshotted. Wait for transitions (0.2 s) before a screenshot, or lit elements look dim.
 
 ## 5. Verify end to end
 
 Do not hand over a walkthrough that has not run.
 
-- **Lab:** `./verify.sh && ./verify-gateway.sh && ./reset.sh` in `agentic-platform-demo` (or `demo/start.sh` in the kagent kit).
+- **Lab:** `./verify.sh && ./verify-gateway.sh && ./reset.sh` in `agentic-platform-demo`, or `demo/start.sh` in the kagent kit. Run `start.sh` again after a rehearsal so the kit is reset for the call.
 - **Command-line modules:** `./modules/run-module.sh <ID>` for each module in the chain. Check the output against the card's Expect lines, not just exit codes.
 - **UI modules:** `modules/rehearse/kagent.mjs` (K1-K9) or `kagent-enterprise-demo/demo/rehearse/rehearse.mjs` (kit). Never run `S0` or `reset.sh` while a rehearsal is running: reset deletes the agents under test.
 - Fix what fails in the module itself, rerun, commit, push.
@@ -69,8 +77,13 @@ Do not hand over a walkthrough that has not run.
 - **Enterprise kagent 1.x** lives in `solo-io/enterprise-kagent` (calendar versions). The `kagent-enterprise` 0.x repo is the old line; do not judge capability from it.
 - **Claims:** anything about product capability is checked against source, docs or release notes before it goes in the walkthrough.
 
+- **Opening local pages:** macOS `open` can drop a `#fragment` from a file URL. Tell the presenter to open the file and click **Walkthrough**, or use arrow keys, rather than relying on `#tour` in the path.
+- **GitHub Pages caches:** after removing a page, check the URL returns 404 (`curl -sI`) before saying it is gone; a browser may still show a cached copy.
+- **Template edits:** when deriving a template from a real deck, cut at the end of the slide stage, not the first closing tag. Leftover sections outside the stage render their speaker notes to the audience.
+
 ## Before committing to this repo
 
 - `git diff --cached -U0 | grep -iE '<customer>|<attendee names>'` must be empty.
+- No internal roadmap or product-status news (retirements, unreleased dates) in this repo; it is on GitHub.
 - Stage only your paths; other workshops may have uncommitted work.
 - Push to main is the norm for this repo; no PR needed.

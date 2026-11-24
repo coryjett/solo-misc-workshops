@@ -2,8 +2,11 @@
 
 **Links**
 - Meeting: <link>
-- Diagram: https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs>
-- Modules: `workshops/agentic-platform-demo/modules/`
+- Diagram (module lab): https://claude.ai/artifact/GioU2sMc25yq8szmCvGgFW#tour-<IDs>
+- Architecture (other demos): `$CUSTOMERS_DIR/<Customer>/architecture.html` (open it, click **Walkthrough**, arrow keys)
+- Deck (optional): `$CUSTOMERS_DIR/<Customer>/deck.html` (arrow keys, N for notes)
+- UI: <local URL>
+- Runbook or modules: `<path>`
 
 **Who**
 - <name>: <one line>
