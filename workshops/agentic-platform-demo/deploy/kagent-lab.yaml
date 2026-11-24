@@ -1,0 +1,89 @@
+# kagent agents that use the platform through agentgateway, as the signed-in user.
+# Model and tool calls go to the gateway's HTTPS listener with the user's Keycloak token, so the
+# gateway's per-user rules (tool access, prompt guards, budgets, logs) apply to agents too.
+# The token never enters the agent sandbox: the Substrate egress proxy swaps it in on the way out.
+apiVersion: api.kagent.dev/v1alpha3
+kind: ModelConfig
+metadata: { name: via-gateway, namespace: kagent }
+spec:
+  provider: OpenAI
+  model: auto                      # the gateway's virtual model: self-hosted first, cloud on failover
+  tokenPassthrough: true
+  openAI:
+    baseUrl: https://mcp-gateway.agentgateway-system.svc.cluster.local:8443/v1
+    apiFormat: chatCompletions
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata:
+  name: governed-tools
+  namespace: kagent
+  labels: { kagent.dev/discovery: disabled }   # discovery has no user token; the gateway lists tools per user at chat time
+spec:
+  description: Company systems (records, inventory, ops API) through the governed MCP endpoint
+  url: https://mcp-gateway.agentgateway-system.svc.cluster.local:8443/mcp
+  protocol: STREAMABLE_HTTP
+  tokenPassthrough: true
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: AgentTemplate
+metadata: { name: platform-assistant, namespace: kagent }
+spec:
+  description: Answers questions from company systems through the governed MCP endpoint
+  modelConfig: { name: via-gateway }
+  systemPrompt: |
+    You are the platform assistant. Answer briefly from your tools; never guess.
+    Your company system tools are the ones named records_*, inventory_* and opsapi_*.
+    If you have no tool for a question, say which system you cannot reach.
+    Never ask the user to confirm an action yourself: when a tool needs approval, the platform asks them.
+  # Tools are named here because discovery has no user token. Each user still sees only what the gateway
+  # allows them (eng-dev: records + opsapi, sales-dev: inventory + opsapi).
+  tools:
+  - mcp:
+      server: { kind: RemoteMCPServer, name: governed-tools }
+      tools: [records_lookup_customer, records_account_status, records_whoami, inventory_check_stock,
+              inventory_low_stock, opsapi_get_site_hours, opsapi_get_on_call_staff]
+  - mcp:
+      server: { kind: RemoteMCPServer, name: governed-tools }
+      tools: [records_delete_customer_record]
+      requireApproval: true       # a person approves every delete, in the chat
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata: { name: platform-assistant, namespace: kagent }
+spec:
+  harnessRef: { name: kagent-default }
+  template: { ref: { name: platform-assistant } }
+---
+# Who may do what in kagent, from the same Keycloak groups the gateway and registry use.
+apiVersion: kagent-enterprise.solo.io/v1alpha1
+kind: EnterpriseKagentRBACPolicy
+metadata: { name: platform-admins, namespace: kagent }
+spec:
+  principals: [ { all: [ { attribute: groups, values: [are-admins] } ] } ]
+  grants: [ { name: everything, resource: "kagent:*", accessLevel: manage } ]
+---
+apiVersion: kagent-enterprise.solo.io/v1alpha1
+kind: EnterpriseKagentRBACPolicy
+metadata: { name: agent-users, namespace: kagent }
+spec:
+  principals: [ { all: [ { attribute: groups, values: [are-writers] } ] } ]
+  grants:
+  - { name: see-agents, resource: "kagent:agents", accessLevel: view }
+  - { name: see-templates, resource: "kagent:agent-templates", accessLevel: view }
+  - { name: see-harnesses, resource: "kagent:harnesses", accessLevel: view }
+  - { name: see-models, resource: "kagent:model-configs", accessLevel: view }
+  - { name: see-tools, resource: "kagent:tool-servers", accessLevel: view }
+  - { name: chat, resource: "kagent:sessions", accessLevel: manage }
+  - { name: snapshots, resource: "kagent:checkpoints", accessLevel: manage }
+  - { name: traces, resource: "kagent:traces", accessLevel: view }
+---
+apiVersion: kagent-enterprise.solo.io/v1alpha1
+kind: EnterpriseKagentRBACPolicy
+metadata: { name: agent-viewers, namespace: kagent }
+spec:
+  principals: [ { all: [ { attribute: groups, values: [are-readers] } ] } ]
+  grants:
+  - { name: see-agents, resource: "kagent:agents", accessLevel: view }
+  - { name: see-templates, resource: "kagent:agent-templates", accessLevel: view }
+  - { name: traces, resource: "kagent:traces", accessLevel: view }

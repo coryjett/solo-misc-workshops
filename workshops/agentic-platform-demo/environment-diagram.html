@@ -121,16 +121,17 @@ svg.focus .on text.lab{fill:var(--accent)}
 <g data-k="reg-appr"><rect class="chip" x="396" y="152" width="136" height="30" rx="6"/><text x="464" y="172" text-anchor="middle">Approvals</text></g>
 <g data-k="reg-pol"><rect class="chip" x="256" y="190" width="136" height="30" rx="6"/><text x="324" y="210" text-anchor="middle">Access policies</text></g>
 <g data-k="reg-audit"><rect class="chip" x="396" y="190" width="136" height="30" rx="6"/><text x="464" y="210" text-anchor="middle">Audit trail</text></g>
-<g data-k="reg-virt"><rect class="chip" x="256" y="228" width="276" height="38" rx="6"/><text x="394" y="243" text-anchor="middle">Runtimes: publish to the gateway,</text><text x="394" y="259" text-anchor="middle">or deploy to kagent</text></g>
+<g data-k="reg-virt"><rect class="chip" x="256" y="228" width="276" height="38" rx="6"/><text x="394" y="252" text-anchor="middle">Runtime: publish to the gateway</text></g>
 
 <!-- kagent -->
 <g data-k="kagent"><rect class="cp" x="600" y="96" width="230" height="184" rx="10"/>
-<text x="616" y="121" class="t">kagent</text>
-<text x="616" y="139" class="m">agent runtime on Kubernetes</text>
-<rect class="chip" x="616" y="152" width="198" height="30" rx="6"/><text x="715" y="172" text-anchor="middle">Agent and MCP pods</text>
-<text x="616" y="206" class="m">Deployed by the registry.</text>
-<text x="616" y="222" class="m">Pods nobody registered are</text>
-<text x="616" y="238" class="m">discovered and shown.</text></g>
+<text x="616" y="121" class="t">Solo Enterprise for kagent</text>
+<text x="616" y="139" class="m">agents on Agent Substrate</text>
+<rect class="chip" x="616" y="152" width="198" height="30" rx="6"/><text x="715" y="172" text-anchor="middle">gVisor sandbox per chat</text>
+<text x="616" y="206" class="m">Model and tool calls go</text>
+<text x="616" y="222" class="m">through the gateway as the</text>
+<text x="616" y="238" class="m">signed-in user. Approvals,</text>
+<text x="616" y="254" class="m">egress policy, group RBAC.</text></g>
 
 <!-- IdP -->
 <g data-k="idp"><rect class="ext" x="860" y="96" width="344" height="104" rx="10"/>
@@ -151,9 +152,8 @@ svg.focus .on text.lab{fill:var(--accent)}
 <g data-k="e-trust1"><path class="trust" d="M1032,96 V80 H405 V94"/><text x="718" y="74" class="lab" text-anchor="middle">sign-in</text></g>
 
 <!-- registry and kagent to gateway -->
-<g data-k="e-deploy"><path class="a" d="M544,170 H598"/><text x="571" y="160" class="lab" text-anchor="middle">deploys</text></g>
 <g data-k="e-publish"><path class="a" d="M480,280 V328"/><text x="470" y="309" class="lab" text-anchor="end">publishes routes</text></g>
-<g data-k="e-kagent"><path class="a" d="M715,280 V328"/><text x="705" y="309" class="lab" text-anchor="end">agent tool calls</text></g>
+<g data-k="e-kagent"><path class="a" d="M715,280 V328"/><text x="705" y="309" class="lab" text-anchor="end">as the user: model + tools</text></g>
 
 <!-- gateway -->
 <g data-k="gw"><rect class="dp" x="240" y="330" width="590" height="340" rx="10"/>
@@ -230,7 +230,7 @@ svg.focus .on text.lab{fill:var(--accent)}
 <div class="envnote" id="envnote">
 <p><strong>Control plane.</strong> The registry holds every agent, MCP server and model with its owner and data class. Changes go through approval, and access policies decide what each team sees.</p>
 <p><strong>Data plane.</strong> agentgateway carries every tool, agent and model call. Identity, tool access, guardrails and token exchange are enforced per call, not per app.</p>
-<p><strong>Runtimes.</strong> kagent runs agents on Kubernetes. Approved MCP servers can also be published straight to the gateway, with no compute to manage.</p>
+<p><strong>Agents.</strong> Solo Enterprise for kagent runs agents in gVisor sandboxes on Agent Substrate. Their model and tool calls go through the gateway as the signed-in user, so the same policies apply to people and agents.</p>
 <p><strong>Identity.</strong> Keycloak keeps the demo self-contained. Pointing sign-in at your own IdP is configuration, not code.</p>
 </div>
 
@@ -267,6 +267,24 @@ svg.focus .on text.lab{fill:var(--accent)}
     A1: {t: "A2A: who can call whom", a: "A2A", k: "act-sales act-client e-client r-a2a p-jwt e-a2a ag-a ag-b ag-c log",
          p: "Users reach only the coordinator agent. It calls the specialists with its own identity; a specialist calling another is refused.",
          s: "Every hop logged with caller, method and outcome; agent-b to agent-c gets 403 at the gateway."},
+    K1: {t: "Agents on the platform", a: "Agents", k: "act-eng e-trust1 idp kagent e-kagent gw r-mcp r-llm",
+         p: "A kagent agent gets its model and its tools only through the gateway, as the signed-in user, with no keys of its own.",
+         s: "The agent's model and tools both point at the gateway, with token passthrough."},
+    K2: {t: "Same agent, different user", a: "Agents", k: "act-eng act-sales kagent e-kagent gw r-mcp p-jwt p-filter e-tools mcp-records mcp-inv mcp-ops log",
+         p: "One shared agent, and each user gets only their own tools, because the gateway checks the user behind every agent call.",
+         s: "eng-dev sees records tools, sales-dev sees inventory tools; the log names each person."},
+    K3: {t: "Gateway policy follows the agent", a: "Agents", k: "act-eng kagent e-kagent gw r-mcp r-llm p-guard m-route e-tools mcp-records log",
+         p: "The gateway's PII masking and prompt-injection guard apply to agent traffic with no agent code.",
+         s: "Masked DOB and phone in a tool result; an injection attempt refused with 403."},
+    K4: {t: "Approval before a change", a: "Agents", k: "act-eng kagent e-kagent gw r-mcp e-tools mcp-records",
+         p: "A destructive tool pauses the agent until a person approves or rejects it in the chat.",
+         s: "An approval box for the delete; a rejection with a reason goes back to the agent."},
+    K5: {t: "Who may build and use agents", a: "Agents", k: "act-admin act-eng act-aud e-trust1 idp kagent",
+         p: "The same IdP groups decide who manages agents, who may only chat, and who may only look.",
+         s: "The auditor cannot chat; a developer cannot change a template."},
+    K6: {t: "Sandbox and egress", a: "Agents", k: "act-admin kagent",
+         p: "Each chat runs in a gVisor sandbox with no outbound access until an egress policy names a host.",
+         s: "A gVisor kernel, a blocked download, then one allowed host."},
     L1: {t: "Model routing and failover", a: "LLM", k: "act-client e-client r-llm m-route e-models mdl-self mdl-hosted",
          p: "One virtual model: the self-hosted model first, a hosted model when it fails or is overloaded.",
          s: "An answer that names the model that served it."},
@@ -279,9 +297,9 @@ svg.focus .on text.lab{fill:var(--accent)}
     L4: {t: "Token budgets per user", a: "LLM", k: "act-eng act-sales act-client e-client r-llm m-route e-models mdl-self",
          p: "A per-user token budget keyed on the verified identity, so changing a header cannot reset it.",
          s: "A couple of answers, then 429; another user still has a budget."},
-    R1: {t: "Catalog and discovery", a: "Registry", k: "act-admin e-bus reg reg-cat kagent",
-         p: "What exists, who owns it and what data it touches, plus agents running that nobody registered.",
-         s: "The catalog, and the unregistered agents found in the runtime."},
+    R1: {t: "The catalog", a: "Registry", k: "act-admin e-bus reg reg-cat",
+         p: "What exists, who owns it, what data it touches and what depends on what.",
+         s: "The catalog with owners and data classes, and the dependency view."},
     R2: {t: "Who sees what in the catalog", a: "Registry", k: "act-eng act-sales e-bus reg reg-pol",
          p: "Each team sees and changes only its own entries.",
          s: "Two developers, two different catalogs."},
@@ -291,9 +309,6 @@ svg.focus .on text.lab{fill:var(--accent)}
     R4: {t: "Publish to the gateway", a: "Registry", k: "act-admin e-bus reg reg-virt e-publish gw r-reg",
          p: "An approved MCP server becomes a governed gateway route with no tickets and no compute.",
          s: "A new route under /registry, with its access rule already attached."},
-    R5: {t: "Deploy to an agent runtime", a: "Registry", k: "act-admin e-bus reg reg-virt e-deploy kagent e-kagent",
-         p: "The registry deploys what it approved to kagent; the agent then reaches tools through the same gateway.",
-         s: "The deployment appears in the runtime and in the catalog."},
     R6: {t: "Audit trail", a: "Registry", k: "act-aud e-bus reg reg-audit log ui e-traces",
          p: "Who submitted, approved and deployed what, next to every call the gateway carried.",
          s: "Registry events and gateway traces, from the auditor's read-only view."}

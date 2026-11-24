@@ -4,3 +4,4 @@ local.env
 *.log
 cloud/*.secret.env
 __pycache__/
+.bin/

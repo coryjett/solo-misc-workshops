@@ -18,6 +18,18 @@ spec:
         kinds:
           - { group: gateway.networking.k8s.io, kind: HTTPRoute }
           - { group: agentgateway.dev, kind: AgentgatewayModel }
+    # Same routes over TLS, for in-cluster callers that require HTTPS (kagent agents calling as the user).
+    - name: https
+      port: 8443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs: [ { kind: Secret, name: mcp-gateway-tls } ]
+      allowedRoutes:
+        namespaces: { from: All }
+        kinds:
+          - { group: gateway.networking.k8s.io, kind: HTTPRoute }
+          - { group: agentgateway.dev, kind: AgentgatewayModel }
 ---
 apiVersion: v1
 kind: Service

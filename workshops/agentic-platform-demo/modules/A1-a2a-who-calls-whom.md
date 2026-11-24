@@ -1,7 +1,7 @@
 # A1 · A2A: who can call whom
 
 <!-- nav:start -->
-[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G5](G5-mcp-tool-search.md) · Next: [L1](L1-llm-routing-failover.md)
+[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G5](G5-mcp-tool-search.md) · Next: [K1](K1-kagent-agents-on-the-platform.md)
 <!-- nav:end -->
 
 **Area:** A2A · **Time:** 8 min
@@ -113,5 +113,5 @@ kubectl --context kind-agentic-demo -n agentgateway-system delete enterpriseagen
 - Back to the baseline: agent-b to agent-c is denied again. `reset.sh` also removes it.
 
 <!-- nav:start -->
-[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G5](G5-mcp-tool-search.md) · Next: [L1](L1-llm-routing-failover.md)
+[All modules](README.md) · [A2A](README.md#a2a) · Previous: [G5](G5-mcp-tool-search.md) · Next: [K1](K1-kagent-agents-on-the-platform.md)
 <!-- nav:end -->

@@ -4,7 +4,9 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"; . "$DIR/env.sh"; K="kubectl --context $KCTX"
 docker build -q -t "$TOOLS_IMAGE" "$DIR/tools" >/dev/null
-kind load docker-image "$TOOLS_IMAGE" --name "$CLUSTER" >/dev/null
+# Import straight into the node's containerd: `kind load` (kind v0.31) cannot read the containerd 2.x
+# config (version 4) in the k8s 1.36 node image.
+docker save "$TOOLS_IMAGE" | docker exec -i "${CLUSTER}-control-plane" ctr -n k8s.io images import --all-platforms - >/dev/null
 $K create namespace "$TOOLS_NS" --dry-run=client -o yaml | $K apply -f - >/dev/null
 for svc in records-mcp:records.py inventory-mcp:inventory.py ops-api:ops_api.py workiq-mcp:workiq.py github-mcp:github_mock.py; do
   name="${svc%%:*}"; file="${svc#*:}"

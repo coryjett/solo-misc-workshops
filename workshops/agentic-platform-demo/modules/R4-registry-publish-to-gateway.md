@@ -1,7 +1,7 @@
 # R4 · Publish an MCP server to the gateway, self-service
 
 <!-- nav:start -->
-[All modules](README.md) · [Registry](README.md#registry) · Previous: [R3](R3-registry-approval.md) · Next: [R5](R5-registry-deploy-to-runtime.md)
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R3](R3-registry-approval.md) · Next: [R6](R6-audit-trail.md)
 <!-- nav:end -->
 
 **Area:** Registry · **Time:** 6 min
@@ -50,5 +50,5 @@ as_user admin; arctl delete deployment default/customer-records-mcp
 - Removes the route, backend and policy it created.
 
 <!-- nav:start -->
-[All modules](README.md) · [Registry](README.md#registry) · Previous: [R3](R3-registry-approval.md) · Next: [R5](R5-registry-deploy-to-runtime.md)
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R3](R3-registry-approval.md) · Next: [R6](R6-audit-trail.md)
 <!-- nav:end -->

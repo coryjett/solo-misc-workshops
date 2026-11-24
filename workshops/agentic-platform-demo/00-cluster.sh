@@ -7,7 +7,7 @@ ENV_QUIET=1 . "$(dirname "$0")/env.sh"
 NODE="${CLUSTER}-control-plane"
 
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
-  for p in "$KC_HOST_PORT" "$ARE_HOST_PORT" "$MCP_HOST_PORT" "$GW_HOST_PORT" "$UI_HOST_PORT"; do
+  for p in "$KC_HOST_PORT" "$ARE_HOST_PORT" "$MCP_HOST_PORT" "$GW_HOST_PORT" "$UI_HOST_PORT" "$KAGENT_HOST_PORT"; do
     if nc -z 127.0.0.1 "$p" 2>/dev/null; then echo "host port $p is in use; change it in env.sh" >&2; exit 1; fi
   done
   PREV_CTX="$(kubectl config current-context 2>/dev/null || true)"
@@ -22,10 +22,26 @@ nodes:
   - { containerPort: ${MCP_NODE_PORT}, hostPort: ${MCP_HOST_PORT}, listenAddress: "127.0.0.1" }
   - { containerPort: ${GW_NODE_PORT}, hostPort: ${GW_HOST_PORT}, listenAddress: "127.0.0.1" }
   - { containerPort: ${UI_NODE_PORT}, hostPort: ${UI_HOST_PORT}, listenAddress: "127.0.0.1" }
+  - { containerPort: ${KAGENT_NODE_PORT}, hostPort: ${KAGENT_HOST_PORT}, listenAddress: "127.0.0.1" }
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry]
     config_path = "/etc/containerd/certs.d"
+# Agent Substrate (kagent 1.x) projects pod identities and trust bundles into its workers. These
+# gates are off by default and k8s 1.36+ is required: on 1.35 kubeadm silently drops
+# PodCertificateRequest and Substrate's pod-certificate controller crash-loops.
+featureGates:
+  ClusterTrustBundle: true
+  ClusterTrustBundleProjection: true
+  PodCertificateRequest: true
+runtimeConfig:
+  "certificates.k8s.io/v1beta1": "true"
+# The kagent install pulls many images onto one node; serial pulls make the last ones miss deadlines.
+kubeadmConfigPatches:
+- |
+  kind: KubeletConfiguration
+  serializeImagePulls: false
+  maxParallelImagePulls: 4
 EOF
   # kind switches the default kubectl context; put the previous one back (scripts always pass --context).
   [ -n "$PREV_CTX" ] && kubectl config use-context "$PREV_CTX" >/dev/null

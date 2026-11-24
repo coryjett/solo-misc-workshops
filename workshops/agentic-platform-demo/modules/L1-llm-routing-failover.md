@@ -1,7 +1,7 @@
 # L1 · LLM routing and failover (virtual models)
 
 <!-- nav:start -->
-[All modules](README.md) · [LLM](README.md#llm) · Previous: [A1](A1-a2a-who-calls-whom.md) · Next: [L2](L2-llm-access-by-identity.md)
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [K6](K6-kagent-sandbox-and-egress.md) · Next: [L2](L2-llm-access-by-identity.md)
 <!-- nav:end -->
 
 **Area:** LLM · **Time:** 5 min
@@ -47,5 +47,5 @@ Editor:
 None: this module only reads or calls things; it leaves no state behind.
 
 <!-- nav:start -->
-[All modules](README.md) · [LLM](README.md#llm) · Previous: [A1](A1-a2a-who-calls-whom.md) · Next: [L2](L2-llm-access-by-identity.md)
+[All modules](README.md) · [LLM](README.md#llm) · Previous: [K6](K6-kagent-sandbox-and-egress.md) · Next: [L2](L2-llm-access-by-identity.md)
 <!-- nav:end -->

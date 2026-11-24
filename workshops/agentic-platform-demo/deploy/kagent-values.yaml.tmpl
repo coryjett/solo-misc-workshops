@@ -1,0 +1,33 @@
+# Lab settings layered on top of what `kagent install` sets (helm upgrade --reuse-values).
+# Rendered by deploy/install-kagent.sh; ${...} come from env.sh.
+enterprise:
+  oidc:
+    # The lab's Keycloak replaces the bundled sign-in: same users and groups as the gateway modules.
+    issuer: ${OIDC_ISSUER}
+    clientId: kagent-controller
+    secret: kagent-controller-demo-secret-not-for-prod
+    allowedAudiences: [kagent-enterprise-api]
+  ui:
+    frontend:
+      oidc:
+        clientId: kagent-ui
+  rbac:
+    groupsClaim: groups
+    userClaim: preferred_username
+  # The signed-in user's token goes to the gateway on model and MCP calls, but never enters the sandbox:
+  # the Substrate egress proxy swaps it in for a placeholder.
+  tokenPropagation:
+    enabled: true
+controller:
+  substrateClientCertificate:
+    enabled: true
+kagent-tools:
+  enabled: false
+examples:
+  enabled: false
+global:
+  telemetry:
+    captureContent: true
+ui:
+  service:
+    type: ClusterIP   # the fixed NodePort is the separate kagent-ui-nodeport Service

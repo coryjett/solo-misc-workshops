@@ -1,7 +1,7 @@
 # R6 · The audit trail
 
 <!-- nav:start -->
-[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md) · Next: [D1](D1-agentdesktop.md)
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R4](R4-registry-publish-to-gateway.md) · Next: [D1](D1-agentdesktop.md)
 <!-- nav:end -->
 
 **Area:** Registry · **Time:** 4 min
@@ -34,7 +34,7 @@
 are_audit 15
 ```
 - Rows for submit and approve, with who did it.
-- Deploy rows too if R4 or R5 ran.
+- Publish rows too if R4 ran.
 
 Solo UI: **Tracing** > 15m > search `lookup_customer` > open a `tools/call` row: end user, tool, route.
 
@@ -51,5 +51,5 @@ Solo UI: **Tracing** > 15m > search `lookup_customer` > open a `tools/call` row:
 None: this module only reads or calls things; it leaves no state behind.
 
 <!-- nav:start -->
-[All modules](README.md) · [Registry](README.md#registry) · Previous: [R5](R5-registry-deploy-to-runtime.md) · Next: [D1](D1-agentdesktop.md)
+[All modules](README.md) · [Registry](README.md#registry) · Previous: [R4](R4-registry-publish-to-gateway.md) · Next: [D1](D1-agentdesktop.md)
 <!-- nav:end -->

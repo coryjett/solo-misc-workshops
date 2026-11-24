@@ -1,0 +1,1 @@
+{ "name": "kagent-ui-rehearsal", "private": true, "type": "module", "dependencies": { "playwright-core": "^1" } }

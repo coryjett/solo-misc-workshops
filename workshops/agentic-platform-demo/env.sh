@@ -8,7 +8,7 @@ export DEMO_DIR="${DEMO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)}"
 [ -f "$DEMO_DIR/local.env" ] && . "$DEMO_DIR/local.env"
 export CLUSTER=agentic-demo
 export KCTX="kind-${CLUSTER}"
-export KIND_NODE_IMAGE="kindest/node:v1.33.1"
+export KIND_NODE_IMAGE="kindest/node:v1.36.1"   # 1.36+ for Agent Substrate (kagent 1.x)
 
 export ARE_VERSION=2026.9.0          # helm chart version (no leading v)
 export ARE_IMAGE_TAG=v2026.9.0       # server image tag
@@ -20,6 +20,7 @@ export ARE_HOST_PORT=12121    ARE_NODE_PORT=31212
 export MCP_HOST_PORT=31313    MCP_NODE_PORT=31313
 export GW_HOST_PORT=8081      GW_NODE_PORT=30081    # agentgateway proxy (MCP + LLM endpoint)
 export UI_HOST_PORT=8082      UI_NODE_PORT=30082    # Solo Enterprise UI
+export KAGENT_HOST_PORT=8084  KAGENT_NODE_PORT=30084 # Solo Enterprise for kagent UI
 export AGW_VERSION=v2026.11.1
 export TOOLS_NS=demo-tools
 export TOOLS_IMAGE=agw-demo-tools:1
@@ -164,4 +165,4 @@ load_openai_key() {
   export OPENAI_API_KEY
 }
 load_local_llm_key() { [ -n "${LOCAL_LLM_KEY:-}" ] || { [ -n "${LOCAL_LLM_KEYCHAIN_SERVICE:-}" ] && LOCAL_LLM_KEY="$(security find-generic-password -s "$LOCAL_LLM_KEYCHAIN_SERVICE" -w 2>/dev/null || true)"; }; export LOCAL_LLM_KEY; }
-render() { envsubst '${OIDC_ISSUER} ${KC_REALM} ${KC_HOST_PORT} ${TOOLS_NS} ${TOOLS_IMAGE} ${GW_NODE_PORT} ${UI_NODE_PORT} ${LOCAL_LLM_BASE_URL} ${LOCAL_LLM_MODEL}' < "$1"; }
+render() { envsubst '${OIDC_ISSUER} ${KC_REALM} ${KC_HOST_PORT} ${TOOLS_NS} ${TOOLS_IMAGE} ${GW_NODE_PORT} ${UI_NODE_PORT} ${LOCAL_LLM_BASE_URL} ${LOCAL_LLM_MODEL} ${KAGENT_NODE_PORT}' < "$1"; }

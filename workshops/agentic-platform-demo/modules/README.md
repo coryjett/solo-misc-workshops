@@ -11,6 +11,7 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
   - [MCP](#mcp)
   - [Identity](#identity)
   - [A2A](#a2a)
+  - [Agents](#agents)
   - [LLM](#llm)
   - [Registry](#registry)
   - [Ecosystem](#ecosystem)
@@ -39,16 +40,21 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 | [G4](G4-token-flow-obo.md) | Identity | Token flow: on-behalf-of, the backend never sees the user's token | 4 |
 | [G5](G5-mcp-tool-search.md) | MCP | Tool search: hundreds of tools without filling the context | 5 |
 | [A1](A1-a2a-who-calls-whom.md) | A2A | A2A: who can call whom | 8 |
+| [K1](K1-kagent-agents-on-the-platform.md) | Agents | Agents on the platform: kagent behind the gateway | 5 |
+| [K2](K2-kagent-same-agent-different-user.md) | Agents | Same agent, different user, different tools | 4 |
+| [K3](K3-kagent-gateway-policy-follows-the-agent.md) | Agents | Gateway policy follows the agent: PII masking and prompt guard | 4 |
+| [K4](K4-kagent-approval-before-change.md) | Agents | A person approves before the agent changes anything | 4 |
+| [K5](K5-kagent-who-may-build-and-use.md) | Agents | Who may build agents, who may only use them | 4 |
+| [K6](K6-kagent-sandbox-and-egress.md) | Agents | Sandboxed agents: no outbound access until a policy allows it | 5 |
 | [L1](L1-llm-routing-failover.md) | LLM | LLM routing and failover (virtual models) | 5 |
 | [L2](L2-llm-access-by-identity.md) | LLM | Model access by identity | 3 |
 | [L3](L3-llm-prompt-guard.md) | LLM | Prompt-injection guard and prompt masking | 3 |
 | [L4](L4-llm-token-budgets.md) | LLM | Token budgets per user | 4 |
 | [X1](X1-extension-points.md) | Platform | Extension points: plug your own logic into routing and policy | 5 |
-| [R1](R1-registry-catalog.md) | Registry | What exists: catalog and shadow-IT discovery | 6 |
+| [R1](R1-registry-catalog.md) | Registry | What exists: the catalog | 5 |
 | [R2](R2-registry-team-scoping.md) | Registry | Who sees what in the catalog | 3 |
 | [R3](R3-registry-approval.md) | Registry | A change request and its approval | 6 |
 | [R4](R4-registry-publish-to-gateway.md) | Registry | Publish an MCP server to the gateway, self-service | 6 |
-| [R5](R5-registry-deploy-to-runtime.md) | Registry | Deploy to an agent runtime (kagent) | 5 |
 | [R6](R6-audit-trail.md) | Registry | The audit trail | 4 |
 | [D1](D1-agentdesktop.md) | Ecosystem | agentdesktop: the AI tools on the developer's laptop, governed (draft) | 8 |
 | [D2](D2-agentshield.md) | Ecosystem | agentshield: who can reach what, beside the gateway (draft) | 6 |
@@ -75,6 +81,14 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 ### A2A
 - [A1 · A2A: who can call whom](A1-a2a-who-calls-whom.md) _(8 min)_
 
+### Agents
+- [K1 · Agents on the platform: kagent behind the gateway](K1-kagent-agents-on-the-platform.md) _(5 min)_
+- [K2 · Same agent, different user, different tools](K2-kagent-same-agent-different-user.md) _(4 min)_
+- [K3 · Gateway policy follows the agent: PII masking and prompt guard](K3-kagent-gateway-policy-follows-the-agent.md) _(4 min)_
+- [K4 · A person approves before the agent changes anything](K4-kagent-approval-before-change.md) _(4 min)_
+- [K5 · Who may build agents, who may only use them](K5-kagent-who-may-build-and-use.md) _(4 min)_
+- [K6 · Sandboxed agents: no outbound access until a policy allows it](K6-kagent-sandbox-and-egress.md) _(5 min)_
+
 ### LLM
 - [L1 · LLM routing and failover (virtual models)](L1-llm-routing-failover.md) _(5 min)_
 - [L2 · Model access by identity](L2-llm-access-by-identity.md) _(3 min)_
@@ -82,11 +96,10 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 - [L4 · Token budgets per user](L4-llm-token-budgets.md) _(4 min)_
 
 ### Registry
-- [R1 · What exists: catalog and shadow-IT discovery](R1-registry-catalog.md) _(6 min)_
+- [R1 · What exists: the catalog](R1-registry-catalog.md) _(5 min)_
 - [R2 · Who sees what in the catalog](R2-registry-team-scoping.md) _(3 min)_
 - [R3 · A change request and its approval](R3-registry-approval.md) _(6 min)_
 - [R4 · Publish an MCP server to the gateway, self-service](R4-registry-publish-to-gateway.md) _(6 min)_
-- [R5 · Deploy to an agent runtime (kagent)](R5-registry-deploy-to-runtime.md) _(5 min)_
 - [R6 · The audit trail](R6-audit-trail.md) _(4 min)_
 
 ### Ecosystem
@@ -100,7 +113,7 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 ```bash
 ./modules/run-module.sh G2            # runs the module's commands, shows output
 ./modules/run-module.sh A1 --step     # one command at a time (Enter to continue), useful live
-./modules/run-module.sh R4 --cleanup  # undo one module's changes (R3, R4, R5)
+./modules/run-module.sh R4 --cleanup  # undo one module's changes (R3, R4)
 ./modules/run-module.sh --all         # rehearsal: every module with commands; non-zero exit = something broke
 ```
 Lines whose comment says "refused", "403" or "blocked" are expected refusals.
@@ -108,7 +121,7 @@ Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 ## Chaining rules
 
 1. Start with **S0** (pre-flight). After that, modules can run in any order: each one sets up what it needs.
-2. **R3, R4 and R5 change state** (approve, publish, deploy). Each card's **Cleanup** undoes just that module; `./reset.sh` (about 40 seconds) undoes everything. All other modules leave no state behind.
+2. **R3, R4 and K6 change state** (approve, publish, allow egress). Each card's **Cleanup** undoes just that module; `./reset.sh` (about 40 seconds) undoes everything. All other modules leave no state behind.
 3. Keep a demo to about 40 minutes of modules; leave the rest for questions.
 4. Show refusals in Terminal 2 (the live log), not in the UI.
 5. Do it in the CLI, then show the same fact in the UI (each module ends with a **Same thing in the UI** beat).
@@ -121,8 +134,9 @@ Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 | [Security-led](tracks/security-led.md) | [S0](S0-preflight.md) > [G1](G1-mcp-per-team-tools.md) > [G3](G3-mcp-guardrails.md) > [G4](G4-token-flow-obo.md) > [A1](A1-a2a-who-calls-whom.md) > [L2](L2-llm-access-by-identity.md) > [L3](L3-llm-prompt-guard.md) > [P2](P2-observability.md) | 37 |
 | [Platform / Kubernetes team](tracks/platform-kubernetes-team.md) | [S0](S0-preflight.md) > [P1](P1-platform-on-kubernetes.md) > [G1](G1-mcp-per-team-tools.md) > [G2](G2-mcp-down-scoped-saas.md) > [X1](X1-extension-points.md) > [P2](P2-observability.md) | 32 |
 | [AI/agent developers](tracks/ai-agent-developers.md) | [S0](S0-preflight.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [L1](L1-llm-routing-failover.md) > [L2](L2-llm-access-by-identity.md) > [X1](X1-extension-points.md) > [P2](P2-observability.md) | 37 |
-| [Governance and catalog (registry)](tracks/governance-and-catalog-registry.md) | [S0](S0-preflight.md) > [R1](R1-registry-catalog.md) > [R2](R2-registry-team-scoping.md) > [R3](R3-registry-approval.md) > [R4](R4-registry-publish-to-gateway.md) > [R5](R5-registry-deploy-to-runtime.md) > [R6](R6-audit-trail.md) | 30 |
+| [Governance and catalog (registry)](tracks/governance-and-catalog-registry.md) | [S0](S0-preflight.md) > [R1](R1-registry-catalog.md) > [R2](R2-registry-team-scoping.md) > [R3](R3-registry-approval.md) > [R4](R4-registry-publish-to-gateway.md) > [R6](R6-audit-trail.md) | 24 |
 | [Full platform (gateway + registry)](tracks/full-platform-gateway-registry.md) | [S0](S0-preflight.md) > [R1](R1-registry-catalog.md) > [R3](R3-registry-approval.md) > [R4](R4-registry-publish-to-gateway.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [P2](P2-observability.md) > [R6](R6-audit-trail.md) | 41 |
+| [Agents on the platform (kagent)](tracks/agents-on-the-platform-kagent.md) | [S0](S0-preflight.md) > [K1](K1-kagent-agents-on-the-platform.md) > [K2](K2-kagent-same-agent-different-user.md) > [K3](K3-kagent-gateway-policy-follows-the-agent.md) > [K4](K4-kagent-approval-before-change.md) > [K5](K5-kagent-who-may-build-and-use.md) > [K6](K6-kagent-sandbox-and-egress.md) > [P2](P2-observability.md) | 31 |
 | [20-minute executive](tracks/20-minute-executive.md) | [S0](S0-preflight.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [P2](P2-observability.md) | 21 |
 
 ## Recovery

@@ -16,7 +16,7 @@
 
 **Needs:** Cluster running (`kind get clusters` shows `agentic-demo`). If Docker or the Mac restarted: `./down.sh && ./up.sh` first (about 15 min).
 
-**Windows:** Solo UI http://localhost:8082 · Registry http://localhost:12121/are/ (admin/admin; Incognito window for eng-dev/eng-dev)
+**Windows:** Solo UI http://localhost:8082 · Registry http://localhost:12121/are/ (admin/admin; Incognito window for eng-dev/eng-dev) · kagent http://localhost:8084 (Keycloak sign-in, same users)
 
 ## Steps
 

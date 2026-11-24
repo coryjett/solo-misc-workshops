@@ -1,4 +1,4 @@
-# R1 · What exists: catalog and shadow-IT discovery
+# R1 · What exists: the catalog
 
 <!-- nav:start -->
 [All modules](README.md) · [Registry](README.md#registry) · Previous: [X1](X1-extension-points.md) · Next: [R2](R2-registry-team-scoping.md)
@@ -9,10 +9,10 @@
 ## Framing
 
 - Companies lack visibility into all agents and tools running in their environment.
-- Unregistered shadow IT creates security blind spots that are hard to detect.
-- Next: the catalog with owners and data classes, plus agents nobody registered.
+- Owners and data classes are scattered across teams and spreadsheets.
+- Next: the catalog with owners, data classes and what depends on what.
 
-**Proves:** One place knows every agent, MCP server and model, who owns it and what data it touches, including ones nobody registered.
+**Proves:** One place knows every agent, MCP server and model, who owns it and what data it touches.
 
 **Needs:** [S0](S0-preflight.md). Registry tab as admin.
 
@@ -22,13 +22,12 @@ Registry UI (admin):
 1. **Catalog**: search `team:engineering`, then `data:restricted`.
 2. Open **incident-triage** > **Agent Composition**: prompt, skill pinned to a commit, MCP servers.
 3. Open **data-masking-mcp** > **Used by Agents**: the blast radius.
-4. **Instances** > clear the "Managed Resources" filter: agents and servers nobody registered.
 
-- Look for: engineering and restricted-data items, the dependency view, unregistered items.
+- Look for: engineering and restricted-data items, the dependency view.
 
 ## Say
 
-- Discovery finds agents already running in the cluster: shadow IT, found for you.
+- One catalog answers "who owns this, and what breaks if it changes".
 
 ## Cleanup
 

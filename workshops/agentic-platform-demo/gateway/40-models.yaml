@@ -7,7 +7,9 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayModel
 metadata: { name: local-model, namespace: agentgateway-system }
 spec:
-  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  parentRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http }
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: https }
   match: { model: local-model }
   visibility: Public
   provider: OpenAI
@@ -48,7 +50,9 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayModel
 metadata: { name: gpt-4-1-mini, namespace: agentgateway-system }
 spec:
-  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  parentRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http }
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: https }
   match: { model: gpt-4.1-mini }
   visibility: Public
   provider: OpenAI
@@ -83,7 +87,9 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayModel
 metadata: { name: cloud-fallback, namespace: agentgateway-system }
 spec:
-  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  parentRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http }
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: https }
   match: { model: cloud-fallback }
   visibility: Internal   # not requestable by name; only reachable as auto's failover target
   provider: OpenAI
@@ -116,7 +122,9 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayModel
 metadata: { name: auto, namespace: agentgateway-system }
 spec:
-  parentRefs: [ { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http } ]
+  parentRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: http }
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: mcp-gateway, sectionName: https }
   match: { model: auto }
   visibility: Public
   virtualModel:

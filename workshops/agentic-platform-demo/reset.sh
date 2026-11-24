@@ -7,7 +7,7 @@
 #   4. platform items as admin (no approval); team items submitted by eng-dev / sales-dev,
 #      approved by approver, so the approval records and audit trail show the real people
 #   5. re-submit the ONE pending item (release-readiness-checker 2.0.0) for the live approval
-#   6. register the kagent runtime + deployable MCP (if kagent is installed)
+#   6. kagent: demo agents back to their starting state (if kagent is installed)
 # Usage: ./reset.sh            (about 30 seconds)
 set -uo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"; cd "$DIR"
@@ -92,11 +92,9 @@ echo "== 5. the one pending item for the live demo"
 as_user eng-dev >/dev/null
 arctl apply -f catalog/pending/release-readiness-checker-2.0.0.yaml 2>&1 | q
 
-echo "== 6. kagent runtime + deployable MCP"
+echo "== 6. kagent (agents behind the gateway)"
 if kubectl --context "$KCTX" -n kagent get deploy kagent-controller >/dev/null 2>&1; then
-  ./deploy/setup-deploy.sh
-  # unregistered agents and MCP servers for the Instances page (registry discovers them within ~90 s)
-  kubectl --context "$KCTX" apply -f deploy/shadow-it.yaml >/dev/null && echo "  shadow-IT kagent resources applied"
+  ./deploy/kagent-lab.sh
 else
   echo "  kagent not installed (deploy/install-kagent.sh); skipping"
 fi

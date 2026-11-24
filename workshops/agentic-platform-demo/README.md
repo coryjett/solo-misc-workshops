@@ -1,6 +1,6 @@
 # Agentic Platform Demo
 
-A demo kit for showing someone around the Solo.io agentic platform: **agentgateway Enterprise**, **agentregistry Enterprise** and **kagent**, on one local Kubernetes cluster. It is built for live demos, not as a workshop.
+A demo kit for showing someone around the Solo.io agentic platform: **agentgateway Enterprise**, **agentregistry Enterprise** and **Solo Enterprise for kagent**, on one local Kubernetes cluster. It is built for live demos, not as a workshop.
 
 The content is industry-neutral. A demo is a chain of bite-size modules (3 to 8 minutes each) picked for the audience, so the same lab works for a security team, a platform team, AI developers or executives.
 
@@ -11,8 +11,8 @@ The content is industry-neutral. A demo is a chain of bite-size modules (3 to 8 
 | Piece | What it shows |
 |---|---|
 | agentgateway Enterprise | One gateway for MCP, A2A and LLM traffic: identity, per-tool authorization, guardrails, on-behalf-of tokens, model routing and failover, access logs and traces |
-| agentregistry Enterprise | A catalog of agents, MCP servers and models with owners and data classes, team-scoped access, approvals, publishing to the gateway, deployment to runtimes, audit |
-| kagent | An agent runtime the registry deploys to |
+| agentregistry Enterprise | A catalog of agents, MCP servers and models with owners and data classes, team-scoped access, approvals, publishing to the gateway, audit |
+| Solo Enterprise for kagent | Agents on Agent Substrate (gVisor sandboxes) that call models and tools through the gateway as the signed-in user; UI at http://localhost:8084 |
 | Solo Enterprise UI | Routes, policies, tracing and dashboards for everything the gateway carries |
 | Keycloak | The identity provider (stand-in for Entra ID, Okta or Ping) |
 | Stand-in services | MCP servers (customer records, inventory, a REST API exposed as tools, mail/files/meetings, code hosting) and three A2A agents |
@@ -26,8 +26,9 @@ The content is industry-neutral. A demo is a chain of bite-size modules (3 to 8 
 | Platform | P1 what it looks like on Kubernetes · P2 observability · X1 extension points |
 | MCP | G1 one endpoint for many systems · G2 down-scoped SaaS tools · G3 guardrails · G4 on-behalf-of token flow · G5 tool search for large catalogs |
 | A2A | A1 who can call whom |
+| Agents | K1 kagent behind the gateway · K2 same agent, different user · K3 gateway policy follows the agent · K4 approval before a change · K5 who may build and use agents · K6 sandbox and egress |
 | LLM | L1 routing and failover · L2 model access by identity · L3 prompt-injection guard · L4 token budgets per user |
-| Registry | R1 catalog and discovery · R2 team scoping · R3 approval · R4 publish to the gateway · R5 deploy to a runtime · R6 audit trail |
+| Registry | R1 catalog · R2 team scoping · R3 approval · R4 publish to the gateway · R6 audit trail |
 | Ecosystem (drafts) | D1 agentdesktop · D2 agentshield · D3 agentevals |
 
 Each module card opens with framing to say before showing anything, then what it proves, the commands, the same fact in the UI, what to say, and what not to claim.
@@ -65,6 +66,6 @@ Copy [`modules/WALKTHROUGH-TEMPLATE.md`](modules/WALKTHROUGH-TEMPLATE.md), pick 
 | `gateway/` | agentgateway configuration (Gateway, routes, backends, policies, models) |
 | `catalog/`, `policies/` | Registry catalog and team access policies |
 | `tools/` | Stand-in MCP servers, REST API and A2A agents (one image) |
-| `deploy/` | kagent install and unregistered "shadow" agents for discovery |
+| `deploy/` | Solo Enterprise for kagent install and the lab agent, wired to the gateway |
 | `00-*.sh` to `04-*.sh` | Build steps run by `up.sh` |
 | `env.sh` | Shared settings and helpers; reads `local.env` |

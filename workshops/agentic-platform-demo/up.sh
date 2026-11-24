@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One command to build or recover the whole agentic platform demo (safe to rerun after a Mac or Docker restart):
-# kind cluster, Keycloak (IdP stand-in), agentregistry Enterprise + arctl, OSS kagent runtime, the demo tool
+# kind cluster, Keycloak (IdP stand-in), agentregistry Enterprise + arctl, Solo Enterprise for kagent, the demo tool
 # servers, agentgateway Enterprise with the governance config, then the catalog seed (reset.sh).
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -14,6 +14,7 @@ cat <<EOF
 Ready.
   agentregistry UI   $ARE_UI_URL/are/          (admin / admin; others: approver, eng-dev, sales-dev, auditor, password = username)
   agentgateway UI    http://localhost:${UI_HOST_PORT}
+  kagent UI          http://localhost:${KAGENT_HOST_PORT}   (sign in with the same Keycloak users)
   Keycloak           $KC_URL                   (admin / admin, realm $KC_REALM)
   Gateway            $GW_URL/mcp (platform federated endpoint)   $GW_URL/registry/<server> (registry-published)
                      $GW_URL/v1/chat/completions (LLM)
