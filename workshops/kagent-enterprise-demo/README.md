@@ -11,7 +11,7 @@ Use this kit for a kagent-first conversation. For agentgateway-first demos, or k
 demo/start.sh       # before each demo: health check, reset, UI on http://localhost:8001
 ```
 
-Then follow [DEMO.md](DEMO.md).
+Then follow [DEMO.md](DEMO.md). The talk track is [deck.html](deck.html): 8 slides, open it in a browser (arrow keys, N for speaker notes).
 
 - `demo/start.sh stop` stops the UI port-forward. `./teardown.sh` deletes the cluster and keeps the kit.
 - Browser rehearsal of every beat: `cd demo/rehearse && npm i && node rehearse.mjs` (20 checks).

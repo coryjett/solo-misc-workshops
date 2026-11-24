@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solo Enterprise for kagent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700&family=DM+Sans:wght@400;500&family=DM+Mono&display=swap">
+<style>
+/* One deliberate dark look. Each slide is a 1920x1080 stage scaled to the window. */
+:root { color-scheme: dark; }
+html, body { margin: 0; height: 100%; background: #07090f; overflow: hidden; }
+#viewport { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+#stage { width: 1920px; height: 1080px; position: relative; transform-origin: center center; flex: none; }
+#stage > section { position: absolute; inset: 0; width: 1920px; height: 1080px; display: none; }
+#stage > section.on { display: flex; }
+#stage > section aside { display: none; }
+.arrow { flex: none; }
+.arrow.right { clip-path: polygon(0 30%,70% 30%,70% 0,100% 50%,70% 100%,70% 70%,0 70%); }
+.arrow.left { clip-path: polygon(100% 30%,30% 30%,30% 0,0 50%,30% 100%,30% 70%,100% 70%); }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex; gap: 12px; align-items: center; justify-content: space-between; font: 14px 'DM Sans', Arial, sans-serif; color: #8289a3; }
+#bar button { background: #1e2337; color: #f4f5fb; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+#notes { position: fixed; left: 16px; right: 16px; bottom: 56px; max-width: 900px; margin: 0 auto; background: #151927; color: #c8ccdb;
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 16px 20px; font: 16px/1.5 'DM Sans', Arial, sans-serif; }
+:root{
+  --bg-0:#0b0e18; --bg-1:#151927; --bg-2:#1e2337; --bg-3:#2a3044;
+  --fg-1:#f4f5fb; --fg-2:#c8ccdb; --fg-3:#8289a3;
+  --accent:#a46dff; --accent-deep:#4c1d95; --blue:#20b7f3; --line:rgba(255,255,255,0.14);
+}
+section{ padding:128px; background:var(--bg-1); color:var(--fg-2); font-family:'DM Sans', Arial, sans-serif; font-size:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:40px; }
+section.alt{ background:var(--bg-0); }
+section.hero{ background:linear-gradient(135deg, #1b0f2e, #4c1d95); justify-content:center; }
+h1{ font-family:'Figtree', Arial, sans-serif; font-weight:500; font-size:120px; line-height:1.05; letter-spacing:-0.02em; color:var(--fg-1); margin:0; }
+h2{ font-family:'Figtree', Arial, sans-serif; font-weight:500; font-size:72px; line-height:1.1; letter-spacing:-0.02em; color:var(--fg-1); margin:0; }
+h3{ font-family:'Figtree', Arial, sans-serif; font-weight:500; font-size:40px; line-height:1.2; color:var(--fg-1); margin:0; }
+p{ margin:0; font-size:32px; line-height:1.45; }
+.eyebrow{ font-family:'DM Mono', 'Courier New', monospace; font-size:24px; letter-spacing:0.06em; color:var(--accent); }
+.lead{ font-size:40px; line-height:1.4; color:var(--fg-2); max-width:1400px; }
+.small{ font-size:24px; color:var(--fg-3); }
+.mono{ font-family:'DM Mono', 'Courier New', monospace; }
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px; }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:32px; }
+.card{ background:var(--bg-2); border:1px solid var(--line); border-radius:14px; padding:40px; display:flex; flex-direction:column; gap:16px; }
+.card .k{ font-family:'DM Mono', 'Courier New', monospace; font-size:24px; letter-spacing:0.06em; color:var(--accent); }
+.card p{ font-size:28px; color:var(--fg-2); }
+.stat{ font-family:'Figtree', Arial, sans-serif; font-size:96px; color:var(--fg-1); line-height:1; }
+ul.list{ margin:0; padding-left:40px; display:flex; flex-direction:column; gap:20px; }
+ul.list li{ font-size:32px; line-height:1.4; color:var(--fg-2); }
+.box{ background:var(--bg-2); border:1px solid var(--line); border-radius:14px; padding:24px 28px; display:flex; flex-direction:column; gap:8px; }
+.box .t{ font-family:'Figtree', Arial, sans-serif; font-size:30px; color:var(--fg-1); }
+.box .d{ font-size:24px; color:var(--fg-3); line-height:1.35; }
+.box.purple{ border-color:var(--accent); }
+.box.ext{ background:transparent; border:1px dashed var(--line); }
+.zone{ border:1px dashed var(--line); border-radius:20px; padding:28px; display:flex; flex-direction:column; gap:20px; }
+.zone .zt{ font-family:'DM Mono', 'Courier New', monospace; font-size:24px; letter-spacing:0.06em; color:var(--fg-3); }
+.beat{ display:grid; grid-template-columns:72px 1fr; gap:24px; align-items:start; }
+.beat .n{ font-family:'Figtree', Arial, sans-serif; font-size:48px; color:var(--accent); line-height:1; }
+.beat p{ font-size:30px; }
+.beat .s{ font-size:24px; color:var(--fg-3); }
+.diagram{ display:grid; grid-template-columns:1fr 240px 1fr; gap:24px; align-items:center; }
+.pane{ background:var(--bg-2); border:1px solid var(--line); border-radius:20px; padding:32px; display:flex; flex-direction:column; gap:20px; }
+.pane .pt{ font-family:'Figtree', Arial, sans-serif; font-size:34px; color:var(--fg-1); }
+.pane .pd{ font-size:24px; color:var(--fg-3); }
+.slots{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+.slot{ border:2px dashed var(--line); border-radius:14px; height:120px; display:flex; align-items:center; justify-content:center; }
+.slot.on{ border:2px solid var(--accent); background:rgba(164,109,255,0.16); }
+.slot p{ font-family:'DM Mono', 'Courier New', monospace; font-size:24px; color:var(--fg-1); }
+.chips{ display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; }
+.chip{ height:44px; border-radius:10px; background:var(--bg-3); border:1px solid var(--line); }
+.flow{ display:flex; flex-direction:column; gap:40px; align-items:center; }
+.flow .lbl{ font-family:'DM Mono', 'Courier New', monospace; font-size:24px; color:var(--fg-2); text-align:center; }
+.facts{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px; }
+.fact{ border-top:2px solid var(--accent); padding-top:20px; display:flex; flex-direction:column; gap:8px; }
+.fact .ft{ font-family:'Figtree', Arial, sans-serif; font-size:32px; color:var(--fg-1); }
+.fact p{ font-size:26px; color:var(--fg-2); }
+.rel{ display:grid; grid-template-columns:1fr 64px 1fr 64px 1fr; gap:16px; align-items:center; }
+.revs{ display:flex; gap:12px; }
+.rev{ border:1px solid var(--line); border-radius:10px; padding:8px 16px; font-family:'DM Mono', 'Courier New', monospace; font-size:24px; color:var(--fg-2); }
+.rev.cur{ border-color:var(--accent); color:var(--fg-1); }
+.sess{ display:flex; flex-direction:column; gap:12px; }
+
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage">
+<section id="cover" class="hero">
+<p class="eyebrow">Solo Enterprise for kagent</p>
+<h1>Solo Enterprise for kagent</h1>
+<p class="lead">Build, run and govern AI agents on Kubernetes, with identity, approvals, tracing and sandboxing built in.</p>
+<aside>Agenda: kagent basics, what Enterprise adds for platform and security teams, where Agent Substrate fits, then a live demo in the kagent UI.</aside>
+</section>
+<section id="fundamentals">
+<p class="eyebrow">kagent overview</p>
+<h2>kagent overview</h2>
+<div class="grid3">
+<div class="card"><p class="k">Agents</p><h3>Defined in YAML</h3><p>Agents are Kubernetes resources, managed with GitOps, the CLI or the UI.</p></div>
+<div class="card"><p class="k">Models</p><h3>Multiple providers</h3><p>OpenAI, Azure OpenAI, Anthropic, Gemini and Vertex, Bedrock and Ollama.</p></div>
+<div class="card"><p class="k">Tools</p><h3>MCP servers</h3><p>Shared tool servers, plus built-in tools for Kubernetes, Helm, Istio, Argo and Prometheus.</p></div>
+<div class="card"><p class="k">Harnesses</p><h3>Agent runtimes</h3><p>kagent's own runtime, Claude Code, Codex, or a custom agent over A2A.</p></div>
+<div class="card"><p class="k">A2A</p><h3>Standard endpoints</h3><p>Each agent serves an A2A endpoint and agent card for apps and other agents.</p></div>
+<div class="card"><p class="k">Editions</p><h3>Open source core</h3><p>A CNCF project. Solo Enterprise for kagent adds identity, access policies, tracing and support.</p></div>
+</div>
+<aside>Everything is a Kubernetes resource. Models and tools are defined once and shared by many agents.</aside>
+</section>
+<section id="objects" class="alt">
+<p class="eyebrow">Core resources</p>
+<h2>How the pieces fit</h2>
+<div class="rel">
+<div class="pane">
+<p class="pt">AgentTemplate</p>
+<p class="pd">Instructions, model and tools</p>
+<div class="revs"><p class="rev">rev 1</p><p class="rev">rev 2</p><p class="rev cur">rev 3</p></div>
+</div>
+<div class="arrow right" style="width:56px; height:28px; background:#a46dff"></div>
+<div class="pane">
+<p class="pt">Agent</p>
+<p class="pd">The running agent, served over A2A</p>
+</div>
+<div class="arrow right" style="width:56px; height:28px; background:#a46dff"></div>
+<div class="pane">
+<p class="pt">Sessions</p>
+<div class="sess"><p class="rev">session A on rev 2</p><p class="rev cur">session B on rev 3</p></div>
+</div>
+</div>
+<div class="grid2">
+<div class="card"><p class="k">Harness</p><p>The runtime (kagent, Claude, Codex or custom) and the worker pool it runs on.</p></div>
+<div class="card"><p class="k">ModelConfig and RemoteMCPServer</p><p>Model provider and tool servers, shared across agents.</p></div>
+</div>
+<aside>Each template change creates a new immutable revision. New sessions use the latest; a running session keeps the revision it started on. kagent 1.0 API; moving from 0.10 is a migration.</aside>
+</section>
+<section id="controls" class="alt">
+<p class="eyebrow">Solo Enterprise for kagent</p>
+<h2>Controls for platform teams</h2>
+<div class="grid3">
+<div class="card"><p class="k">Enterprise</p><h3>Your identity provider</h3><p>Sign-in through Entra ID, Okta, Keycloak or any OIDC provider. Groups come from the token.</p></div>
+<div class="card"><p class="k">Enterprise</p><h3>Access policies by group</h3><p>Who may build agents, who may only use them, and who may read traces and prompts.</p></div>
+<div class="card"><p class="k">Core</p><h3>Approval before changes</h3><p>Chosen tools pause for approval in the UI. The decision is kept with the session.</p></div>
+<div class="card"><p class="k">Enterprise</p><h3>Tracing and analytics</h3><p>Model and tool calls per agent and user, with tokens and timing, stored in your cluster.</p></div>
+<div class="card"><p class="k">Core</p><h3>Sandbox and egress</h3><p>gVisor or microVM, no outbound access until a policy allows a host. Secrets injected at the proxy.</p></div>
+<div class="card"><p class="k">Enterprise</p><h3>One console</h3><p>Fleet dashboard, worker capacity, snapshots, schedules and evaluations, with supported builds.</p></div>
+</div>
+<aside>Core features are in open-source kagent 1.0; Enterprise ships them as supported, digest-pinned builds. Every card is shown live in the demo except the external IdP (the lab uses the bundled provider with three test roles) and evaluations.</aside>
+</section>
+<section id="substrate">
+<p class="eyebrow">Agent Substrate</p>
+<h2>How Agent Substrate runs agents</h2>
+<div class="diagram">
+<div class="pane">
+<p class="pt">Worker pool</p>
+<p class="pd">A few pods, each a gVisor sandbox</p>
+<div class="slots">
+<div class="slot on"><p>agent 4</p></div>
+<div class="slot on"><p>agent 11</p></div>
+<div class="slot"><p>free</p></div>
+</div>
+</div>
+<div class="flow">
+<p class="lbl">idle: suspend</p>
+<div class="arrow right" style="width:160px; height:56px; background:#a46dff"></div>
+<div class="arrow left" style="width:160px; height:56px; background:#20b7f3"></div>
+<p class="lbl">new message: resume</p>
+</div>
+<div class="pane">
+<p class="pt">Snapshot store</p>
+<p class="pd">Idle agents saved to object storage</p>
+<div class="chips">
+<div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
+<div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
+<div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
+</div>
+</div>
+</div>
+<div class="facts">
+<div class="fact"><p class="ft">Capacity tracks use</p><p>Pods run only the agents active right now.</p></div>
+<div class="fact"><p class="ft">Sandboxed</p><p>gVisor by default, with a microVM option.</p></div>
+<div class="fact"><p class="ft">Checkpoints</p><p>Save a session at any turn, resume or fork it.</p></div>
+</div>
+<aside>Two agents are active on workers; the rest are saved in the snapshot store and use no compute. When an agent goes idle it is suspended to storage and its slot is freed. The next message resumes it on any free worker. Do not name specific microVM technologies.</aside>
+</section>
+<section id="gateway">
+<p class="eyebrow">kagent with agentgateway</p>
+<h2>kagent with agentgateway</h2>
+<p class="lead">kagent can send model and tool calls through agentgateway, so agents follow the same policies as applications.</p>
+<div class="grid3">
+<div class="card"><p class="k">Identity</p><p>The user's token is passed through, so model and tool policies apply per user.</p></div>
+<div class="card"><p class="k">Cost</p><p>Token budgets and rate limits by user, team or model.</p></div>
+<div class="card"><p class="k">Safety and audit</p><p>Guardrails, data masking and a single log of every call.</p></div>
+</div>
+<aside>Per-user identity uses token passthrough today. A combined user and agent token is in progress.</aside>
+</section>
+<section id="arch" class="alt" style="gap:28px">
+<p class="eyebrow">Demo environment</p>
+<h2>Demo architecture</h2>
+<div style="display:grid; grid-template-columns:250px 56px 1fr 56px 290px; gap:0; align-items:center;">
+<div style="display:flex; flex-direction:column; gap:20px;">
+<div class="box"><p class="t">kagent UI</p><p class="d">build, chat, approve, traces</p></div>
+<div class="box"><p class="t">Identity provider</p><p class="d">Entra ID, Okta or OIDC; bundled in the demo</p></div>
+</div>
+<div class="arrow right" style="width:44px; height:22px; background:#a46dff"></div>
+<div class="zone">
+<p class="zt">KUBERNETES CLUSTER (KIND)</p>
+<div class="grid2" style="gap:20px">
+<div class="zone" style="padding:20px; gap:12px"><p class="zt">SOLO ENTERPRISE FOR KAGENT</p>
+<div class="box purple"><p class="t">Controller and API</p><p class="d">agents, access policies, approvals</p></div>
+<div class="grid2" style="gap:12px"><div class="box"><p class="t">Postgres</p><p class="d">state</p></div><div class="box"><p class="t">ClickHouse</p><p class="d">traces</p></div></div>
+</div>
+<div class="zone" style="padding:20px; gap:12px"><p class="zt">AGENT SUBSTRATE</p>
+<div class="box purple"><p class="t">Control plane</p><p class="d">scheduling, egress policy</p></div>
+<div class="box"><p class="t">Snapshot store</p><p class="d">idle sessions</p></div>
+</div>
+</div>
+<div class="box purple"><p class="t">Worker pool with gVisor sandboxes</p><p class="d">sessions run here only during a turn</p></div>
+</div>
+<div class="arrow right" style="width:44px; height:22px; background:#a46dff"></div>
+<div style="display:flex; flex-direction:column; gap:20px;">
+<div class="box"><p class="t">Model and tools</p><p class="d">OpenAI; Kubernetes MCP tools</p></div>
+<div class="box"><p class="t">Allowed hosts</p><p class="d">only what an egress policy names</p></div>
+<div class="box purple"><p class="t">agentgateway</p><p class="d">tool calls as the signed-in user</p></div>
+</div>
+</div>
+<aside>Users sign in through the identity provider; access policies decide what each group can do. Each chat runs as a sandboxed session on the worker pool and is suspended between turns. Outbound traffic leaves only through the egress proxy.</aside>
+</section>
+<section id="demo">
+<p class="eyebrow">Demo</p>
+<h2>Demo</h2>
+<div style="display:flex; flex-direction:column; gap:22px;">
+<div class="beat"><p class="n">1</p><div><p>Build an agent in the UI.</p><p class="s">Template, tools, and one tool that needs approval</p></div></div>
+<div class="beat"><p class="n">2</p><div><p>Chat, then approve a change.</p><p class="s">The agent pauses before scaling a deployment</p></div></div>
+<div class="beat"><p class="n">3</p><div><p>Follow every call in tracing.</p><p class="s">Model and tool calls, tokens and timing per turn</p></div></div>
+<div class="beat"><p class="n">4</p><div><p>Switch roles.</p><p class="s">Readers cannot chat; the gateway gives each role different tools</p></div></div>
+<div class="beat"><p class="n">5</p><div><p>Contain the agent.</p><p class="s">gVisor sandbox, no egress until a policy allows a host</p></div></div>
+<div class="beat"><p class="n">6</p><div><p>See the runtime.</p><p class="s">Sessions suspended between turns, one worker busy at most</p></div></div>
+</div>
+<aside>About 30 minutes, following DEMO.md in kagent-substrate-demo/enterprise. Closing questions: what agents do first; which IdP groups build vs use agents; what the sandbox must stop; whether calls go through agentgateway.</aside>
+</section>
+</div></div>
+<div id="notes" hidden></div>
+<div id="bar">
+  <span id="count"></span>
+  <span>Arrow keys or click to move · N for notes</span>
+  <span><button id="prev" aria-label="Previous slide">Prev</button> <button id="next" aria-label="Next slide">Next</button> <button id="nb">Notes</button></span>
+</div>
+<script>
+const s = [...document.querySelectorAll('#stage > section')], stage = document.getElementById('stage');
+const notes = document.getElementById('notes'), count = document.getElementById('count');
+let i = Math.max(0, s.findIndex(x => '#' + x.id === location.hash));
+function fit() { const k = Math.min(innerWidth / 1920, (innerHeight - 48) / 1080); stage.style.transform = 'scale(' + k + ')'; }
+function show(n) {
+  i = Math.min(s.length - 1, Math.max(0, n));
+  s.forEach((x, j) => x.classList.toggle('on', j === i));
+  count.textContent = (i + 1) + ' / ' + s.length;
+  const a = s[i].querySelector('aside'); notes.textContent = a ? a.textContent : 'No notes for this slide.';
+  history.replaceState(null, '', '#' + s[i].id);
+}
+addEventListener('keydown', e => {
+  if (['ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); show(i + 1); }
+  else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); show(i - 1); }
+  else if (e.key === 'Home') show(0); else if (e.key === 'End') show(s.length - 1);
+  else if (e.key === 'n' || e.key === 'N') notes.hidden = !notes.hidden;
+});
+document.getElementById('viewport').addEventListener('click', e => show(i + (e.clientX > innerWidth / 3 ? 1 : -1)));
+document.getElementById('prev').onclick = () => show(i - 1);
+document.getElementById('next').onclick = () => show(i + 1);
+document.getElementById('nb').onclick = () => notes.hidden = !notes.hidden;
+addEventListener('resize', fit); fit(); show(i < 0 ? 0 : i);
+</script>
+</body>
+</html>
