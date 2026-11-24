@@ -1,6 +1,0 @@
-kubeconfig
-bin/
-demo/.task-*
-demo/.last.json
-demo/.ui-forward.pid
-.secrets/
