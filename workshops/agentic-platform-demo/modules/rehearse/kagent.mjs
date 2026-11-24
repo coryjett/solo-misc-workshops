@@ -1,4 +1,4 @@
-// Browser rehearsal of K1-K6 against the lab kagent UI (http://localhost:8084), signing in through Keycloak
+// Browser rehearsal of K1-K9 against the lab kagent UI (http://localhost:8084), signing in through Keycloak
 // as the lab users. Uses the installed Google Chrome. Run after ./reset.sh:
 //   cd modules/rehearse && npm i && node kagent.mjs        screenshots in shots/
 // Makes about 12 model calls. Leaves an egress policy behind (K6); ./reset.sh removes it.
@@ -27,15 +27,16 @@ async function as(user) {
   p.done = () => ctx.close();
   return p;
 }
-const TOOLS = 'Which company system tools do you have? List their names only.';
 
-// K1, K2: same agent, different tools per user
+// K1, K2: same agent, different tools per user (task questions; the AI guard can refuse questions about the agent itself)
 let eng = await as('eng-dev');
-let t = await eng.chat(TOOLS); await eng.screenshot({ path: 'shots/k2-eng.png', fullPage: true });
-check('K2 eng-dev gets records tools', /records_lookup_customer/.test(t) && !/inventory_check_stock/.test(t));
+let t = await eng.chat('Look up customer C-1001.'); await eng.screenshot({ path: 'shots/k2-eng.png', fullPage: true });
+check('K2 eng-dev reaches records', /Jordan Rivera/.test(t));
 const sales = await as('sales-dev');
-t = await sales.chat(TOOLS); await sales.screenshot({ path: 'shots/k2-sales.png', fullPage: true });
-check('K2 sales-dev gets inventory tools', /inventory_check_stock/.test(t) && !/records_lookup_customer/.test(t));
+t = await sales.chat('Look up customer C-1001.'); await sales.screenshot({ path: 'shots/k2-sales-records.png', fullPage: true });
+check('K2 sales-dev cannot reach records', !/Jordan Rivera/.test(t) && !/403/.test(t));
+t = await sales.chat('How many units of SKU-4471 are at site-112?'); await sales.screenshot({ path: 'shots/k2-sales-stock.png', fullPage: true });
+check('K2 sales-dev reaches inventory', /38/.test(t));
 await sales.done();
 // K3: masking and prompt guard
 t = await eng.chat('Look up customer C-1001.'); await eng.screenshot({ path: 'shots/k3-mask.png', fullPage: true });
@@ -82,6 +83,36 @@ execSync(`kubectl --context ${CTX} -n kagent wait agent/platform-assistant --for
 t = await adm.chat(NET);
 check('K6 allowed host reachable', /example\.com reachable/.test(t)); check('K6 other host still blocked', /google\.com unreachable/.test(t));
 await adm.screenshot({ path: 'shots/k6-allowed.png', fullPage: true }); await adm.done();
+
+// K7: build an agent in the UI, K8: tracing, K9: fleet view (as admin)
+const a7 = await as('admin');
+await a7.go('/agent-templates/new');
+await a7.getByPlaceholder('incident-responder').fill('my-assistant');
+await pick(a7, 1, 'via-gateway');
+await a7.locator('textarea').first().fill('Answer questions about company systems briefly, using your tools. Never guess.');
+await a7.getByRole('button', { name: 'Add an MCP server' }).click(); await a7.waitForTimeout(600);
+await pick(a7, 4, 'governed-tools');
+await a7.screenshot({ path: 'shots/k7-template.png', fullPage: true });
+await a7.getByRole('button', { name: 'Create template' }).click(); await a7.waitForTimeout(3000);
+await a7.go('/agents/new');
+await a7.getByPlaceholder('my-agent').fill('my-assistant');
+const l7 = await a7.$$eval('.ant-select', e => e.map(x => x.textContent.trim()));
+await pick(a7, l7.findIndex(l => /Choose a template/.test(l)), 'my-assistant');
+await a7.getByRole('button', { name: 'Create agent' }).click(); await a7.waitForTimeout(3000);
+execSync(`kubectl --context ${CTX} -n kagent wait agent/my-assistant --for=condition=Ready --timeout=180s`);
+check('K7 agent built in the UI is Ready', true);
+const Q7 = 'Look up customer C-1001 and check stock of SKU-4471 at site-112.';
+await a7.go('/agents/kagent/my-assistant/new'); await a7.getByPlaceholder('Ask the agent something…').fill(Q7);
+await a7.getByRole('button', { name: 'Send', exact: true }).click(); await a7.settle();
+t = await a7.answer(Q7); await a7.screenshot({ path: 'shots/k7-chat.png', fullPage: true });
+check('K7 admin reaches records and inventory', /Jordan Rivera/.test(t) && /38/.test(t));
+await a7.go('/tracing'); await a7.screenshot({ path: 'shots/k8-traces.png', fullPage: true });
+check('K8 traces listed', /platform-assistant|my-assistant/.test(await a7.main()));
+await a7.locator('main tbody tr:not(.ant-table-measure-row)').first().click(); await a7.waitForTimeout(4000);
+check('K8 trace shows model and tool spans', /generate_content/.test(await a7.main())); await a7.screenshot({ path: 'shots/k8-detail.png', fullPage: true });
+await a7.go('/'); check('K9 dashboard', /Total Agent Runs/.test(await a7.main())); await a7.screenshot({ path: 'shots/k9-dashboard.png', fullPage: true });
+await a7.go('/substrate'); check('K9 substrate view', /Actors running/.test(await a7.main())); await a7.screenshot({ path: 'shots/k9-substrate.png', fullPage: true });
+await a7.done();
 
 await browser.close();
 console.log(results.join('\n'));

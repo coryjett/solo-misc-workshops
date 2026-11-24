@@ -18,16 +18,17 @@
 
 ## Steps
 
-**1. eng-dev asks for its tools**
+**1. eng-dev looks up a customer**
 
-- Sign in as `eng-dev`. **platform-assistant**, **New chat**:
-  - `Which company system tools do you have? List their names only.`
-- **Expect:** `records_lookup_customer`, `records_account_status`, `records_whoami`, `records_delete_customer_record`, `opsapi_get_site_hours`, `opsapi_get_on_call_staff`.
+- Sign in as `eng-dev`. **platform-assistant**, **New chat:** `Look up customer C-1001.`
+- **Expect:** a `records_lookup_customer` call, `Jordan Rivera`, personal details masked.
 
 **2. sales-dev asks the same agent**
 
-- New private window, sign in as `sales-dev`, same message.
-- **Expect:** `inventory_check_stock`, `inventory_low_stock`, `opsapi_...`. No `records_` tools.
+- New private window, sign in as `sales-dev`. **New chat:** `Look up customer C-1001.`
+- **Expect:** the agent says it cannot reach the records system. For sales-dev that tool does not exist.
+- **New chat:** `How many units of SKU-4471 are at site-112?`
+- **Expect:** an `inventory_check_stock` call, `38 units`.
 
 **3. Show who the gateway saw**
 

@@ -1,7 +1,7 @@
 # K6 · Sandboxed agents: no outbound access until a policy allows it
 
 <!-- nav:start -->
-[All modules](README.md) · [Agents](README.md#agents) · Previous: [K5](K5-kagent-who-may-build-and-use.md) · Next: [L1](L1-llm-routing-failover.md)
+[All modules](README.md) · [Agents](README.md#agents) · Previous: [K5](K5-kagent-who-may-build-and-use.md) · Next: [K7](K7-kagent-build-an-agent.md)
 <!-- nav:end -->
 
 **Area:** Agents · **Time:** 5 min
@@ -50,5 +50,5 @@
 `./reset.sh` removes the egress policy.
 
 <!-- nav:start -->
-[All modules](README.md) · [Agents](README.md#agents) · Previous: [K5](K5-kagent-who-may-build-and-use.md) · Next: [L1](L1-llm-routing-failover.md)
+[All modules](README.md) · [Agents](README.md#agents) · Previous: [K5](K5-kagent-who-may-build-and-use.md) · Next: [K7](K7-kagent-build-an-agent.md)
 <!-- nav:end -->

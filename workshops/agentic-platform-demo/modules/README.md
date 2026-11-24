@@ -46,6 +46,9 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 | [K4](K4-kagent-approval-before-change.md) | Agents | A person approves before the agent changes anything | 4 |
 | [K5](K5-kagent-who-may-build-and-use.md) | Agents | Who may build agents, who may only use them | 4 |
 | [K6](K6-kagent-sandbox-and-egress.md) | Agents | Sandboxed agents: no outbound access until a policy allows it | 5 |
+| [K7](K7-kagent-build-an-agent.md) | Agents | Build an agent in the UI | 5 |
+| [K8](K8-kagent-tracing.md) | Agents | Follow an agent's work: tracing and analytics | 3 |
+| [K9](K9-kagent-fleet-view.md) | Agents | The agent fleet: dashboard and Substrate | 3 |
 | [L1](L1-llm-routing-failover.md) | LLM | LLM routing and failover (virtual models) | 5 |
 | [L2](L2-llm-access-by-identity.md) | LLM | Model access by identity | 3 |
 | [L3](L3-llm-prompt-guard.md) | LLM | Prompt-injection guard and prompt masking | 3 |
@@ -88,6 +91,9 @@ Bite-size, industry-neutral modules on one lab (agentregistry Enterprise, agentg
 - [K4 · A person approves before the agent changes anything](K4-kagent-approval-before-change.md) _(4 min)_
 - [K5 · Who may build agents, who may only use them](K5-kagent-who-may-build-and-use.md) _(4 min)_
 - [K6 · Sandboxed agents: no outbound access until a policy allows it](K6-kagent-sandbox-and-egress.md) _(5 min)_
+- [K7 · Build an agent in the UI](K7-kagent-build-an-agent.md) _(5 min)_
+- [K8 · Follow an agent's work: tracing and analytics](K8-kagent-tracing.md) _(3 min)_
+- [K9 · The agent fleet: dashboard and Substrate](K9-kagent-fleet-view.md) _(3 min)_
 
 ### LLM
 - [L1 · LLM routing and failover (virtual models)](L1-llm-routing-failover.md) _(5 min)_
@@ -136,7 +142,7 @@ Lines whose comment says "refused", "403" or "blocked" are expected refusals.
 | [AI/agent developers](tracks/ai-agent-developers.md) | [S0](S0-preflight.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [L1](L1-llm-routing-failover.md) > [L2](L2-llm-access-by-identity.md) > [X1](X1-extension-points.md) > [P2](P2-observability.md) | 37 |
 | [Governance and catalog (registry)](tracks/governance-and-catalog-registry.md) | [S0](S0-preflight.md) > [R1](R1-registry-catalog.md) > [R2](R2-registry-team-scoping.md) > [R3](R3-registry-approval.md) > [R4](R4-registry-publish-to-gateway.md) > [R6](R6-audit-trail.md) | 24 |
 | [Full platform (gateway + registry)](tracks/full-platform-gateway-registry.md) | [S0](S0-preflight.md) > [R1](R1-registry-catalog.md) > [R3](R3-registry-approval.md) > [R4](R4-registry-publish-to-gateway.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [P2](P2-observability.md) > [R6](R6-audit-trail.md) | 41 |
-| [Agents on the platform (kagent)](tracks/agents-on-the-platform-kagent.md) | [S0](S0-preflight.md) > [K1](K1-kagent-agents-on-the-platform.md) > [K2](K2-kagent-same-agent-different-user.md) > [K3](K3-kagent-gateway-policy-follows-the-agent.md) > [K4](K4-kagent-approval-before-change.md) > [K5](K5-kagent-who-may-build-and-use.md) > [K6](K6-kagent-sandbox-and-egress.md) > [P2](P2-observability.md) | 31 |
+| [Agents on the platform (kagent)](tracks/agents-on-the-platform-kagent.md) | [S0](S0-preflight.md) > [K1](K1-kagent-agents-on-the-platform.md) > [K7](K7-kagent-build-an-agent.md) > [K2](K2-kagent-same-agent-different-user.md) > [K3](K3-kagent-gateway-policy-follows-the-agent.md) > [K4](K4-kagent-approval-before-change.md) > [K5](K5-kagent-who-may-build-and-use.md) > [K6](K6-kagent-sandbox-and-egress.md) > [K8](K8-kagent-tracing.md) > [K9](K9-kagent-fleet-view.md) | 38 |
 | [20-minute executive](tracks/20-minute-executive.md) | [S0](S0-preflight.md) > [G2](G2-mcp-down-scoped-saas.md) > [A1](A1-a2a-who-calls-whom.md) > [P2](P2-observability.md) | 21 |
 
 ## Recovery

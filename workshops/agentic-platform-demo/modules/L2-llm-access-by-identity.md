@@ -28,7 +28,7 @@
 **2. Same model as admin**
 
 ```bash
-./chat.py admin gpt-4.1-mini 'In one sentence, what is MCP?'
+./chat.py admin gpt-4.1-mini 'In one sentence, what is the Model Context Protocol (MCP)?'
 ```
 - An answer: the admin's group allows it.
 
