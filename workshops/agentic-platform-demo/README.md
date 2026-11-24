@@ -23,17 +23,83 @@ For a kagent-first conversation on its own small cluster, see [../kagent-enterpr
 
 ## Modules at a glance
 
-| Area | Modules |
-|---|---|
-| Platform | P1 what it looks like on Kubernetes · P2 observability · X1 extension points |
-| MCP | G1 one endpoint for many systems · G2 down-scoped SaaS tools · G3 guardrails · G4 on-behalf-of token flow · G5 tool search for large catalogs |
-| A2A | A1 who can call whom |
-| Agents | K1 kagent behind the gateway · K2 same agent, different user · K3 gateway policy follows the agent · K4 approval before a change · K5 who may build and use agents · K6 sandbox and egress · K7 build an agent in the UI · K8 tracing · K9 fleet view |
-| LLM | L1 routing and failover · L2 model access by identity · L3 prompt-injection guard · L4 token budgets per user |
-| Registry | R1 catalog · R2 team scoping · R3 approval · R4 publish to the gateway · R6 audit trail |
-| Ecosystem (drafts) | D1 agentdesktop · D2 agentshield · D3 agentevals |
+Each module is 3 to 8 minutes and stands on its own after [S0](modules/S0-preflight.md). Full index, suggested chains and chaining rules: [modules/](modules/).
 
-Each module card opens with framing to say before showing anything, then what it proves, the commands, the same fact in the UI, what to say, and what not to claim.
+### Setup
+
+Get the lab ready and confirm it works before every demo.
+
+- [S0 · Pre-flight (do before every demo)](modules/S0-preflight.md)
+
+### Platform
+
+How the platform runs on Kubernetes, how to see everything it carries, and where your own logic plugs in.
+
+- [P1 · What it looks like on Kubernetes (containers, control plane, data plane)](modules/P1-platform-on-kubernetes.md) _(5 min)_
+- [P2 · Observability: one view of MCP, A2A and LLM traffic](modules/P2-observability.md) _(5 min)_
+- [X1 · Extension points: plug your own logic into routing and policy](modules/X1-extension-points.md) _(5 min)_
+
+### MCP
+
+One governed front door for tools: federation, per-user tool access, guardrails and large catalogs.
+
+- [G1 · One MCP endpoint for many systems, including a REST API as tools](modules/G1-mcp-per-team-tools.md) _(3 min)_
+- [G2 · Down-scoped SaaS tools (mail and code-hosting stand-ins)](modules/G2-mcp-down-scoped-saas.md) _(8 min)_
+- [G3 · Guardrails on tool calls: block destructive tools, mask PII](modules/G3-mcp-guardrails.md) _(4 min)_
+- [G5 · Tool search: hundreds of tools without filling the context](modules/G5-mcp-tool-search.md) _(5 min)_
+
+### Identity
+
+How the user's identity flows to backends without handing them the user's token.
+
+- [G4 · Token flow: on-behalf-of, the backend never sees the user's token](modules/G4-token-flow-obo.md) _(4 min)_
+
+### A2A
+
+Agent-to-agent calls through the gateway, with each agent's identity checked on every hop.
+
+- [A1 · A2A: who can call whom](modules/A1-a2a-who-calls-whom.md) _(8 min)_
+
+### Agents
+
+Solo Enterprise for kagent: agents that use models and tools through the gateway as the signed-in user, in sandboxes, with approvals and access by group.
+
+- [K1 · Agents on the platform: kagent behind the gateway](modules/K1-kagent-agents-on-the-platform.md) _(5 min)_
+- [K2 · Same agent, different user, different tools](modules/K2-kagent-same-agent-different-user.md) _(4 min)_
+- [K3 · Gateway policy follows the agent: PII masking and prompt guard](modules/K3-kagent-gateway-policy-follows-the-agent.md) _(4 min)_
+- [K4 · A person approves before the agent changes anything](modules/K4-kagent-approval-before-change.md) _(4 min)_
+- [K5 · Who may build agents, who may only use them](modules/K5-kagent-who-may-build-and-use.md) _(4 min)_
+- [K6 · Sandboxed agents: no outbound access until a policy allows it](modules/K6-kagent-sandbox-and-egress.md) _(5 min)_
+- [K7 · Build an agent in the UI](modules/K7-kagent-build-an-agent.md) _(5 min)_
+- [K8 · Follow an agent's work: tracing and analytics](modules/K8-kagent-tracing.md) _(3 min)_
+- [K9 · The agent fleet: dashboard and Substrate](modules/K9-kagent-fleet-view.md) _(3 min)_
+
+### LLM
+
+One endpoint for models: routing and failover, access by identity, prompt guards and per-user token budgets.
+
+- [L1 · LLM routing and failover (virtual models)](modules/L1-llm-routing-failover.md) _(5 min)_
+- [L2 · Model access by identity](modules/L2-llm-access-by-identity.md) _(3 min)_
+- [L3 · Prompt-injection guard and prompt masking](modules/L3-llm-prompt-guard.md) _(3 min)_
+- [L4 · Token budgets per user](modules/L4-llm-token-budgets.md) _(4 min)_
+
+### Registry
+
+The catalog of agents, MCP servers and models: ownership, team scoping, approvals, publishing and audit.
+
+- [R1 · What exists: the catalog](modules/R1-registry-catalog.md) _(5 min)_
+- [R2 · Who sees what in the catalog](modules/R2-registry-team-scoping.md) _(3 min)_
+- [R3 · A change request and its approval](modules/R3-registry-approval.md) _(6 min)_
+- [R4 · Publish an MCP server to the gateway, self-service](modules/R4-registry-publish-to-gateway.md) _(6 min)_
+- [R6 · The audit trail](modules/R6-audit-trail.md) _(4 min)_
+
+### Ecosystem
+
+Open-source tools beside the platform. Drafts, not rehearsed.
+
+- [D1 · agentdesktop: the AI tools on the developer's laptop, governed (draft)](modules/D1-agentdesktop.md) _(8 min)_
+- [D2 · agentshield: who can reach what, beside the gateway (draft)](modules/D2-agentshield.md) _(6 min)_
+- [D3 · agentevals: score agents from their OpenTelemetry traces (draft)](modules/D3-agentevals.md) _(5 min)_
 
 ## Quick start
 
