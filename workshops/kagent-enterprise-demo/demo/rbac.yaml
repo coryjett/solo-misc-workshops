@@ -1,0 +1,52 @@
+# Beat 4: access control. The first policy ends open access for everyone, so admins get an explicit grant.
+apiVersion: kagent-enterprise.solo.io/v1alpha1
+kind: EnterpriseKagentRBACPolicy
+metadata:
+  name: platform-admins
+  namespace: kagent
+spec:
+  principals:
+  - all:
+    - attribute: groups
+      values: [admins]
+  grants:
+  - name: everything
+    resource: kagent:*
+    accessLevel: manage
+---
+# Writers use agents: chat, approve tools, see traces. They cannot change agents or templates.
+apiVersion: kagent-enterprise.solo.io/v1alpha1
+kind: EnterpriseKagentRBACPolicy
+metadata:
+  name: agent-users
+  namespace: kagent
+spec:
+  principals:
+  - all:
+    - attribute: groups
+      values: [writers]
+  grants:
+  - {name: see-agents, resource: kagent:agents, accessLevel: view}
+  - {name: see-templates, resource: kagent:agent-templates, accessLevel: view}
+  - {name: see-harnesses, resource: kagent:harnesses, accessLevel: view}
+  - {name: see-models, resource: kagent:model-configs, accessLevel: view}
+  - {name: see-tools, resource: kagent:tool-servers, accessLevel: view}
+  - {name: chat, resource: kagent:sessions, accessLevel: manage}
+  - {name: snapshots, resource: kagent:checkpoints, accessLevel: manage}
+  - {name: traces, resource: kagent:traces, accessLevel: view}
+---
+# Readers can see which agents exist and their traces, but cannot chat or read prompt payloads.
+apiVersion: kagent-enterprise.solo.io/v1alpha1
+kind: EnterpriseKagentRBACPolicy
+metadata:
+  name: agent-viewers
+  namespace: kagent
+spec:
+  principals:
+  - all:
+    - attribute: groups
+      values: [readers]
+  grants:
+  - {name: see-agents, resource: kagent:agents, accessLevel: view}
+  - {name: see-templates, resource: kagent:agent-templates, accessLevel: view}
+  - {name: traces, resource: kagent:traces, accessLevel: view}
