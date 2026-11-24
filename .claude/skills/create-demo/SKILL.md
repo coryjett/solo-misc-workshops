@@ -32,7 +32,7 @@ If a source is unreachable (mail or calendar scope), say which and carry on with
 
 ## 2. Pick the chain
 
-- Open `workshops/agentic-platform-demo/modules/README.md`. Map each ask to a module: G (MCP), L (LLM), A (A2A), K (kagent behind the gateway), P/X (platform, extension), R (registry, being retired).
+- Open `workshops/agentic-platform-demo/modules/README.md`. Map each ask to a module: G (MCP), L (LLM), A (A2A), K (kagent behind the gateway), P/X (platform, extension), R (registry).
 - kagent-first conversation, own small cluster, role switching in the UI: use `workshops/kagent-enterprise-demo` (DEMO.md beats 0-6) instead.
 - Aim for about 40 minutes plus questions. Start with S0. End with P2 (observability) when the gateway is in play.
 - **Gap?** Build a generic module card (Framing, Proves, Needs, Steps, Say, Don't claim, Cleanup), add it to the module README table and the diagram's `M` table, add a rehearsal check, run it, commit. Then reference it. Never put customer logic in the repo.
